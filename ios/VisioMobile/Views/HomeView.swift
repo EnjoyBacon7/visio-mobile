@@ -115,7 +115,7 @@ struct HomeView: View {
         .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar(content: {
+        .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showSettings = true
@@ -124,7 +124,7 @@ struct HomeView: View {
                         .foregroundStyle(VisioColors.secondaryText(dark: isDark))
                 }
             }
-        })
+        }
         .navigationDestination(isPresented: $navigateToCall) {
             CallView(
                 roomURL: roomURL.trimmingCharacters(in: .whitespacesAndNewlines),

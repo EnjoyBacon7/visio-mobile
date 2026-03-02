@@ -512,12 +512,12 @@ struct AudioDeviceSheet: View {
             .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
             .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar(content: {
+            .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(Strings.t("audio.done", lang: lang)) { dismiss() }
                         .foregroundStyle(VisioColors.primary500)
                 }
-            })
+            }
         }
         .onAppear { loadDevices() }
     }

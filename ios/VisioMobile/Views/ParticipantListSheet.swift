@@ -27,7 +27,7 @@ struct ParticipantListSheet: View {
             .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
             .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar(content: {
+            .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         dismiss()
@@ -36,7 +36,7 @@ struct ParticipantListSheet: View {
                             .foregroundStyle(VisioColors.onSurface(dark: isDark))
                     }
                 }
-            })
+            }
         }
     }
 

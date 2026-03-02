@@ -80,7 +80,7 @@ struct ChatView: View {
         .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar(content: {
+        .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     dismiss()
@@ -89,7 +89,7 @@ struct ChatView: View {
                         .foregroundStyle(VisioColors.secondaryText(dark: isDark))
                 }
             }
-        })
+        }
     }
 
     private func send() {

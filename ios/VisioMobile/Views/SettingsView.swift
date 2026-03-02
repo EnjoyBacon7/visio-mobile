@@ -92,7 +92,7 @@ struct SettingsView: View {
             .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
             .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar(content: {
+            .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(Strings.t("settings.save", lang: lang)) {
                         save()
@@ -106,7 +106,7 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(VisioColors.secondaryText(dark: isDark))
                 }
-            })
+            }
         }
         .onAppear { load() }
     }
