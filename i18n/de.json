@@ -94,5 +94,9 @@
   "lang.de": "Deutsch",
   "lang.es": "Español",
   "lang.it": "Italiano",
-  "lang.nl": "Nederlands"
+  "lang.nl": "Nederlands",
+  "settings.meetInstances": "Meet-Instanzen",
+  "settings.addInstance": "Instanz hinzufügen",
+  "settings.instancePlaceholder": "meet.example.com",
+  "deepLink.unknownInstance": "Unbekannte Instanz: {host}"
 }
