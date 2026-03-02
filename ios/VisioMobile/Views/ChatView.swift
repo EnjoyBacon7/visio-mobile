@@ -80,7 +80,7 @@ struct ChatView: View {
         .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
         .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
+        .appToolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     dismiss()
