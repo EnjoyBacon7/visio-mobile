@@ -1,6 +1,7 @@
 package io.visio.mobile
 
 import android.content.Context
+import android.media.AudioManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -141,6 +142,9 @@ object VisioManager : VisioEventListener {
      */
     fun startAudioPlayout() {
         if (audioPlayout != null) return
+        // Set AudioManager to VoIP mode for low-latency audio routing
+        val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
         audioPlayout = AudioPlayout().also { it.start() }
     }
 
@@ -150,6 +154,9 @@ object VisioManager : VisioEventListener {
     fun stopAudioPlayout() {
         audioPlayout?.stop()
         audioPlayout = null
+        // Restore normal audio mode
+        val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.mode = AudioManager.MODE_NORMAL
     }
 
     fun refreshParticipantsPublic() = refreshParticipants()

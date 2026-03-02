@@ -32,14 +32,13 @@ class AudioPlayout {
         if (running) return
         running = true
 
-        val bufferSize = maxOf(
-            AudioTrack.getMinBufferSize(
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            ),
-            SAMPLES_PER_FRAME * 2 // 2 bytes per i16 sample
+        val minBuf = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
         )
+        // Use at least 4x min buffer to avoid underruns on slower devices
+        val bufferSize = maxOf(minBuf * 4, SAMPLES_PER_FRAME * 2 * 4)
 
         val track = AudioTrack.Builder()
             .setAudioAttributes(
@@ -64,12 +63,13 @@ class AudioPlayout {
         Log.i(TAG, "Audio playout started: ${SAMPLE_RATE}Hz mono, ${FRAME_SIZE_MS}ms frames")
 
         playThread = Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             val buffer = ShortArray(SAMPLES_PER_FRAME)
 
             while (running) {
                 val pulled = NativeVideo.nativePullAudioPlayback(buffer)
                 if (pulled > 0) {
-                    track.write(buffer, 0, buffer.size)
+                    track.write(buffer, 0, pulled)
                 } else {
                     // No data available — sleep briefly to avoid busy-spin
                     Thread.sleep(5)

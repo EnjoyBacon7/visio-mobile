@@ -61,6 +61,8 @@ class AudioCapture {
             buffer.order(ByteOrder.nativeOrder())
             val shortBuffer = buffer.asShortBuffer()
 
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+
             recorder.startRecording()
             Log.i(TAG, "Audio capture started: ${SAMPLE_RATE}Hz mono, ${FRAME_SIZE_MS}ms frames")
 
