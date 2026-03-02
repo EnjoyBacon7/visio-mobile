@@ -286,7 +286,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/release";
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/aarch64-apple-ios/release";
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
 					"-lvisio_ffi",
