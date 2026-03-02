@@ -127,6 +127,50 @@ i18n/
 - **Android** — Gradle `copyI18nAssets` task copies JSON to `assets/i18n/` before build, loaded via `Strings.init(context)` in `VisioApplication`
 - **iOS** — Xcode "Copy i18n JSON" build phase copies JSON into the app bundle, loaded via `Strings.initialize()` in `VisioMobileApp.init()`
 
+## Deep Links
+
+The app registers the `visio://` URL scheme on all platforms. Tapping a `visio://` link opens the app with the room pre-filled on the home screen.
+
+**Format:** `visio://host/slug` — for example: `visio://meet.numerique.gouv.fr/abc-defg-hij`
+
+The host must match one of the configured Meet instances (managed in Settings). By default, `meet.numerique.gouv.fr` is pre-configured. Unknown hosts are rejected with an error message.
+
+**Testing deep links:**
+- **Android:** `adb shell am start -a android.intent.action.VIEW -d "visio://meet.numerique.gouv.fr/abc-defg-hij"`
+- **iOS:** `xcrun simctl openurl booted "visio://meet.numerique.gouv.fr/abc-defg-hij"`
+- **Desktop:** `open "visio://meet.numerique.gouv.fr/abc-defg-hij"` (macOS)
+
+### Universal Links / App Links (optional, server-side)
+
+For HTTPS links (e.g., `https://meet.numerique.gouv.fr/slug`) to open the app directly instead of the browser, the Meet server admin must host verification files:
+
+**Android App Links** — create `https://meet.example.com/.well-known/assetlinks.json`:
+```json
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.visio.mobile",
+    "sha256_cert_fingerprints": ["<YOUR_APP_SHA256>"]
+  }
+}]
+```
+
+**iOS Universal Links** — create `https://meet.example.com/.well-known/apple-app-site-association`:
+```json
+{
+  "applinks": {
+    "apps": [],
+    "details": [{
+      "appID": "<TEAM_ID>.io.visio.mobile",
+      "paths": ["/*"]
+    }]
+  }
+}
+```
+
+These are not required for the `visio://` scheme to work — they enable the additional HTTPS link interception.
+
 ## Running tests
 
 ```bash
@@ -160,6 +204,8 @@ docs/plans/         Design docs and implementation plans
 - Participant list with connection quality indicators
 - Hand raise with Meet interop (uses `handRaisedAt` attribute, auto-lower after 3s speaking)
 - Persistent settings (display name, language, theme, mic/camera on join)
+- Deep links: `visio://host/slug` opens the app with room pre-filled (all platforms)
+- Configurable Meet instances list in Settings
 - i18n: 6 languages (EN, FR, DE, ES, IT, NL) with shared JSON files
 
 **Desktop UX (Meet-inspired):**
