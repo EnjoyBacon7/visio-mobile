@@ -1,0 +1,28 @@
+#ifndef visio_native_h
+#define visio_native_h
+
+#include <stdint.h>
+
+// Audio playout — pull decoded remote audio samples (i16 PCM, 48kHz mono).
+// Returns the number of samples actually written (rest is silence).
+int32_t visio_pull_audio_playback(int16_t *buffer, uint32_t capacity);
+
+// Video callback registration — receives I420 frame planes from Rust.
+typedef void (*VisioIosFrameCallback)(
+    uint32_t width, uint32_t height,
+    const uint8_t *y_ptr, uint32_t y_stride,
+    const uint8_t *u_ptr, uint32_t u_stride,
+    const uint8_t *v_ptr, uint32_t v_stride,
+    const char *track_sid, void *user_data
+);
+void visio_video_set_ios_callback(VisioIosFrameCallback callback, void *user_data);
+
+// Camera capture — push I420 frame from AVCaptureSession into LiveKit
+void visio_push_ios_camera_frame(
+    const uint8_t *y_ptr, uint32_t y_stride,
+    const uint8_t *u_ptr, uint32_t u_stride,
+    const uint8_t *v_ptr, uint32_t v_stride,
+    uint32_t width, uint32_t height
+);
+
+#endif /* visio_native_h */
