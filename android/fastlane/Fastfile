@@ -1,0 +1,18 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build release APK and distribute via Firebase App Distribution"
+  lane :distribute do
+    gradle(
+      task: "assembleRelease",
+      project_dir: "."
+    )
+
+    firebase_app_distribution(
+      app: ENV["FIREBASE_APP_ID"],
+      service_credentials_file: ENV["GOOGLE_APPLICATION_CREDENTIALS"],
+      groups: "testers",
+      release_notes: "Build #{ENV['GITHUB_RUN_NUMBER'] || 'local'} — #{`git log -1 --pretty=%s`.strip}"
+    )
+  end
+end

@@ -1,0 +1,2 @@
+json_key_file("") # Not used — Firebase uses service account
+package_name("io.visio.mobile")
