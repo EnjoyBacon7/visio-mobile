@@ -14,10 +14,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,11 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
@@ -286,74 +282,62 @@ fun CallScreen(
                 val focusedP = focusedParticipantSid?.let { sid -> participants.find { it.sid == sid } }
 
                 if (focusedP != null) {
-                    // Focus mode
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Main focused participant
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                        ) {
-                            ParticipantTile(
-                                participant = focusedP,
-                                isActiveSpeaker = activeSpeakers.contains(focusedP.sid),
-                                handRaisePosition = handRaisedMap[focusedP.sid] ?: 0,
-                                onClick = { focusedParticipantSid = null }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Bottom strip of other participants
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.height(100.dp)
-                        ) {
-                            val others = participants.filter { it.sid != focusedP.sid }
-                            items(others, key = { it.sid }) { p ->
-                                Box(
-                                    modifier = Modifier
-                                        .width(140.dp)
-                                        .height(100.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                ) {
-                                    ParticipantTile(
-                                        participant = p,
-                                        isActiveSpeaker = activeSpeakers.contains(p.sid),
-                                        handRaisePosition = handRaisedMap[p.sid] ?: 0,
-                                        onClick = { focusedParticipantSid = p.sid }
-                                    )
-                                }
-                            }
-                        }
+                    // Focus mode — full-screen focused participant
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                    ) {
+                        ParticipantTile(
+                            participant = focusedP,
+                            isActiveSpeaker = activeSpeakers.contains(focusedP.sid),
+                            handRaisePosition = handRaisedMap[focusedP.sid] ?: 0,
+                            onClick = { focusedParticipantSid = null }
+                        )
                     }
                 } else {
-                    // Grid mode
-                    val columns = when {
-                        participants.size <= 1 -> 1
-                        participants.size <= 4 -> 2
-                        else -> 2
-                    }
+                    // Grid mode — space-filling tiles
+                    val count = participants.size
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val isLandscape = maxWidth > maxHeight
+                        val columnCount = when {
+                            count == 1 -> 1
+                            isLandscape -> minOf(count, 3)
+                            count <= 2 -> 1
+                            else -> 2
+                        }
+                        val rowCount = (count + columnCount - 1) / columnCount
+                        val tileHeight = (maxHeight - 8.dp * (rowCount - 1)) / rowCount
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(participants, key = { it.sid }) { p ->
-                            Box(
-                                modifier = Modifier
-                                    .aspectRatio(16f / 9f)
-                                    .clip(RoundedCornerShape(8.dp))
-                            ) {
-                                ParticipantTile(
-                                    participant = p,
-                                    isActiveSpeaker = activeSpeakers.contains(p.sid),
-                                    handRaisePosition = handRaisedMap[p.sid] ?: 0,
-                                    onClick = { focusedParticipantSid = p.sid }
-                                )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            for (rowStart in 0 until count step columnCount) {
+                                val rowEnd = minOf(rowStart + columnCount, count)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(tileHeight)
+                                ) {
+                                    for (idx in rowStart until rowEnd) {
+                                        val p = participants[idx]
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(8.dp))
+                                        ) {
+                                            ParticipantTile(
+                                                participant = p,
+                                                isActiveSpeaker = activeSpeakers.contains(p.sid),
+                                                handRaisePosition = handRaisedMap[p.sid] ?: 0,
+                                                onClick = { focusedParticipantSid = p.sid }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
