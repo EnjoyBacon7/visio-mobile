@@ -172,18 +172,28 @@ fun CallScreen(
                 VisioManager.client.connect(roomUrl, user)
                 VisioManager.startAudioPlayout()
 
-                // Apply mic-on-join setting
+                // Apply mic-on-join setting (only if permission already granted)
                 if (settings.micEnabledOnJoin) {
-                    VisioManager.client.setMicrophoneEnabled(true)
-                    VisioManager.startAudioCapture()
+                    val hasMicPerm = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasMicPerm) {
+                        VisioManager.client.setMicrophoneEnabled(true)
+                        VisioManager.startAudioCapture()
+                    }
                 }
                 micEnabled = VisioManager.client.isMicrophoneEnabled()
 
-                // Apply camera-on-join setting
+                // Apply camera-on-join setting (only if permission already granted)
                 if (settings.cameraEnabledOnJoin) {
-                    VisioManager.client.setCameraEnabled(true)
-                    VisioManager.startCameraCapture()
-                    VisioManager.refreshParticipantsPublic()
+                    val hasCamPerm = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasCamPerm) {
+                        VisioManager.client.setCameraEnabled(true)
+                        VisioManager.startCameraCapture()
+                        VisioManager.refreshParticipantsPublic()
+                    }
                 }
                 cameraEnabled = VisioManager.client.isCameraEnabled()
             } catch (e: Exception) {
