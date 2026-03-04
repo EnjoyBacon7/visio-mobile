@@ -795,6 +795,12 @@ internal open class UniffiVTableCallbackInterfaceVisioEventListener(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -857,6 +863,12 @@ fun uniffi_visio_ffi_checksum_method_visioclient_set_meet_instances(
 fun uniffi_visio_ffi_checksum_method_visioclient_set_mic_enabled_on_join(
 ): Short
 fun uniffi_visio_ffi_checksum_method_visioclient_set_microphone_enabled(
+): Short
+fun uniffi_visio_ffi_checksum_method_visioclient_set_notification_hand_raised(
+): Short
+fun uniffi_visio_ffi_checksum_method_visioclient_set_notification_message_received(
+): Short
+fun uniffi_visio_ffi_checksum_method_visioclient_set_notification_participant_join(
 ): Short
 fun uniffi_visio_ffi_checksum_method_visioclient_set_theme(
 ): Short
@@ -973,6 +985,12 @@ fun uniffi_visio_ffi_fn_method_visioclient_set_meet_instances(`ptr`: Pointer,`in
 fun uniffi_visio_ffi_fn_method_visioclient_set_mic_enabled_on_join(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_visio_ffi_fn_method_visioclient_set_microphone_enabled(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_visio_ffi_fn_method_visioclient_set_notification_hand_raised(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_visio_ffi_fn_method_visioclient_set_notification_message_received(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_visio_ffi_fn_method_visioclient_set_notification_participant_join(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_visio_ffi_fn_method_visioclient_set_theme(`ptr`: Pointer,`theme`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1184,6 +1202,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_visio_ffi_checksum_method_visioclient_set_microphone_enabled() != 607.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_visio_ffi_checksum_method_visioclient_set_notification_hand_raised() != 14515.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_visio_ffi_checksum_method_visioclient_set_notification_message_received() != 21707.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_visio_ffi_checksum_method_visioclient_set_notification_participant_join() != 47125.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_visio_ffi_checksum_method_visioclient_set_theme() != 58689.toShort()) {
@@ -1654,6 +1681,12 @@ public interface VisioClientInterface {
     
     fun `setMicrophoneEnabled`(`enabled`: kotlin.Boolean)
     
+    fun `setNotificationHandRaised`(`enabled`: kotlin.Boolean)
+    
+    fun `setNotificationMessageReceived`(`enabled`: kotlin.Boolean)
+    
+    fun `setNotificationParticipantJoin`(`enabled`: kotlin.Boolean)
+    
     fun `setTheme`(`theme`: kotlin.String)
     
     fun `startVideoRenderer`(`trackSid`: kotlin.String)
@@ -2025,6 +2058,39 @@ open class VisioClient: Disposable, AutoCloseable, VisioClientInterface
     
     
 
+    override fun `setNotificationHandRaised`(`enabled`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_visio_ffi_fn_method_visioclient_set_notification_hand_raised(
+        it, FfiConverterBoolean.lower(`enabled`),_status)
+}
+    }
+    
+    
+
+    override fun `setNotificationMessageReceived`(`enabled`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_visio_ffi_fn_method_visioclient_set_notification_message_received(
+        it, FfiConverterBoolean.lower(`enabled`),_status)
+}
+    }
+    
+    
+
+    override fun `setNotificationParticipantJoin`(`enabled`: kotlin.Boolean)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_visio_ffi_fn_method_visioclient_set_notification_participant_join(
+        it, FfiConverterBoolean.lower(`enabled`),_status)
+}
+    }
+    
+    
+
     override fun `setTheme`(`theme`: kotlin.String)
         = 
     callWithPointer {
@@ -2222,7 +2288,10 @@ data class Settings (
     var `micEnabledOnJoin`: kotlin.Boolean, 
     var `cameraEnabledOnJoin`: kotlin.Boolean, 
     var `theme`: kotlin.String, 
-    var `meetInstances`: List<kotlin.String>
+    var `meetInstances`: List<kotlin.String>, 
+    var `notificationParticipantJoin`: kotlin.Boolean, 
+    var `notificationHandRaised`: kotlin.Boolean, 
+    var `notificationMessageReceived`: kotlin.Boolean
 ) {
     
     companion object
@@ -2240,6 +2309,9 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -2249,7 +2321,10 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterBoolean.allocationSize(value.`micEnabledOnJoin`) +
             FfiConverterBoolean.allocationSize(value.`cameraEnabledOnJoin`) +
             FfiConverterString.allocationSize(value.`theme`) +
-            FfiConverterSequenceString.allocationSize(value.`meetInstances`)
+            FfiConverterSequenceString.allocationSize(value.`meetInstances`) +
+            FfiConverterBoolean.allocationSize(value.`notificationParticipantJoin`) +
+            FfiConverterBoolean.allocationSize(value.`notificationHandRaised`) +
+            FfiConverterBoolean.allocationSize(value.`notificationMessageReceived`)
     )
 
     override fun write(value: Settings, buf: ByteBuffer) {
@@ -2259,6 +2334,9 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterBoolean.write(value.`cameraEnabledOnJoin`, buf)
             FfiConverterString.write(value.`theme`, buf)
             FfiConverterSequenceString.write(value.`meetInstances`, buf)
+            FfiConverterBoolean.write(value.`notificationParticipantJoin`, buf)
+            FfiConverterBoolean.write(value.`notificationHandRaised`, buf)
+            FfiConverterBoolean.write(value.`notificationMessageReceived`, buf)
     }
 }
 
