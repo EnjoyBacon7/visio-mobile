@@ -252,7 +252,11 @@ fun CallScreen(
             onSelectAudioOutput = { device ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    audioManager.setCommunicationDevice(device)
+                    try {
+                        audioManager.setCommunicationDevice(device)
+                    } catch (e: Exception) {
+                        android.util.Log.e("CallScreen", "Failed to set communication device", e)
+                    }
                 }
             },
             onSwitchCamera = { useFront ->

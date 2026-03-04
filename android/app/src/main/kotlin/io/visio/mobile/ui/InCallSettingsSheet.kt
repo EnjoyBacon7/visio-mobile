@@ -1,8 +1,12 @@
 package io.visio.mobile.ui
 
 import android.content.Context
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +31,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -201,36 +206,43 @@ private fun MicroTab(
 ) {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    val inputDevices = remember {
-        audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).filter {
-            it.type in listOf(
-                AudioDeviceInfo.TYPE_BUILTIN_MIC,
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-                AudioDeviceInfo.TYPE_USB_HEADSET,
-                AudioDeviceInfo.TYPE_WIRED_HEADSET
-            )
-        }
+    var inputDevices by remember { mutableStateOf(getFilteredInputDevices(audioManager)) }
+    var outputDevices by remember { mutableStateOf(getFilteredOutputDevices(audioManager)) }
+
+    // Track active communication device (API 31+)
+    var activeDeviceId by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.communicationDevice?.id
+            } else null
+        )
     }
 
-    val outputDevices = remember {
-        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter {
-            it.type in listOf(
-                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
-                AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
-                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-                AudioDeviceInfo.TYPE_WIRED_HEADSET,
-                AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-                AudioDeviceInfo.TYPE_USB_HEADSET
-            )
+    // React to device connect/disconnect events
+    DisposableEffect(audioManager) {
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+                inputDevices = getFilteredInputDevices(audioManager)
+                outputDevices = getFilteredOutputDevices(audioManager)
+            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+                inputDevices = getFilteredInputDevices(audioManager)
+                outputDevices = getFilteredOutputDevices(audioManager)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    activeDeviceId = audioManager.communicationDevice?.id
+                }
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
+        onDispose {
+            audioManager.unregisterAudioDeviceCallback(callback)
         }
     }
 
     // Audio Input section
     SectionHeader(Strings.t("settings.incall.audioInput", lang))
     inputDevices.forEach { device ->
-        val label = device.productName?.toString()?.ifBlank { null }
-            ?: audioDeviceTypeName(device.type, lang)
+        val label = audioDeviceLabel(device, lang)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -251,15 +263,29 @@ private fun MicroTab(
     // Audio Output section
     SectionHeader(Strings.t("settings.incall.audioOutput", lang))
     outputDevices.forEach { device ->
-        val label = device.productName?.toString()?.ifBlank { null }
-            ?: audioDeviceTypeName(device.type, lang)
+        val label = audioDeviceLabel(device, lang)
+        val isActive = activeDeviceId == device.id
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onSelectAudioOutput(device) }
+                .clickable {
+                    onSelectAudioOutput(device)
+                    activeDeviceId = device.id
+                }
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            RadioButton(
+                selected = isActive,
+                onClick = {
+                    onSelectAudioOutput(device)
+                    activeDeviceId = device.id
+                },
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = VisioColors.Primary500,
+                    unselectedColor = VisioColors.White
+                )
+            )
             Text(
                 text = label,
                 color = VisioColors.White,
@@ -404,6 +430,56 @@ private fun SectionHeader(title: String) {
         color = VisioColors.White,
         modifier = Modifier.padding(bottom = 8.dp)
     )
+}
+
+private val BUILTIN_TYPES = setOf(
+    AudioDeviceInfo.TYPE_BUILTIN_MIC,
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+)
+
+private val INPUT_TYPES = listOf(
+    AudioDeviceInfo.TYPE_BUILTIN_MIC,
+    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+    AudioDeviceInfo.TYPE_USB_HEADSET,
+    AudioDeviceInfo.TYPE_WIRED_HEADSET
+)
+
+private val OUTPUT_TYPES = listOf(
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+    AudioDeviceInfo.TYPE_WIRED_HEADSET,
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+    AudioDeviceInfo.TYPE_USB_HEADSET
+)
+
+private fun getFilteredInputDevices(audioManager: AudioManager): List<AudioDeviceInfo> {
+    val seenBuiltinTypes = mutableSetOf<Int>()
+    return audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+        .filter { it.type in INPUT_TYPES }
+        .filter { device ->
+            if (device.type in BUILTIN_TYPES) seenBuiltinTypes.add(device.type) else true
+        }
+}
+
+private fun getFilteredOutputDevices(audioManager: AudioManager): List<AudioDeviceInfo> {
+    val seenBuiltinTypes = mutableSetOf<Int>()
+    return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        .filter { it.type in OUTPUT_TYPES }
+        .filter { device ->
+            if (device.type in BUILTIN_TYPES) seenBuiltinTypes.add(device.type) else true
+        }
+}
+
+private fun audioDeviceLabel(device: AudioDeviceInfo, lang: String): String {
+    return if (device.type in BUILTIN_TYPES) {
+        audioDeviceTypeName(device.type, lang)
+    } else {
+        device.productName?.toString()?.ifBlank { null }
+            ?: audioDeviceTypeName(device.type, lang)
+    }
 }
 
 private fun audioDeviceTypeName(type: Int, lang: String): String = when (type) {
