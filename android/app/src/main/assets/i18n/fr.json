@@ -100,5 +100,17 @@
   "settings.meetInstances": "Instances Meet",
   "settings.addInstance": "Ajouter une instance",
   "settings.instancePlaceholder": "meet.example.com",
-  "deepLink.unknownInstance": "Instance inconnue : {host}"
+  "deepLink.unknownInstance": "Instance inconnue : {host}",
+  "settings.incall": "Paramètres",
+  "settings.incall.micro": "Micro",
+  "settings.incall.camera": "Caméra",
+  "settings.incall.notifications": "Notifications sonores",
+  "settings.incall.audioInput": "Entrée audio",
+  "settings.incall.audioOutput": "Sortie audio",
+  "settings.incall.cameraSelect": "Sélectionner la caméra",
+  "settings.incall.cameraFront": "Caméra frontale",
+  "settings.incall.cameraBack": "Caméra arrière",
+  "settings.incall.notifParticipant": "Un nouveau participant",
+  "settings.incall.notifHandRaised": "Une main levée",
+  "settings.incall.notifMessage": "Un message reçu"
 }
