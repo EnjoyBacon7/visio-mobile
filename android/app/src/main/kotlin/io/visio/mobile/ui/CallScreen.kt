@@ -249,7 +249,7 @@ fun CallScreen(
         InCallSettingsSheet(
             initialTab = inCallSettingsTab,
             onDismiss = { showInCallSettings = false },
-            onSelectAudioOutput = { device ->
+            onSelectAudioDevice = { device ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     try {

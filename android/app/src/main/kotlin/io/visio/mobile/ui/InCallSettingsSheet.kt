@@ -55,7 +55,7 @@ import io.visio.mobile.ui.theme.VisioColors
 fun InCallSettingsSheet(
     initialTab: Int = 0,
     onDismiss: () -> Unit,
-    onSelectAudioOutput: (AudioDeviceInfo) -> Unit,
+    onSelectAudioDevice: (AudioDeviceInfo) -> Unit,
     onSwitchCamera: (Boolean) -> Unit,
     isFrontCamera: Boolean
 ) {
@@ -122,7 +122,7 @@ fun InCallSettingsSheet(
                     .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
             ) {
                 when (selectedTab) {
-                    0 -> MicroTab(context, lang, onSelectAudioOutput)
+                    0 -> MicroTab(context, lang, onSelectAudioDevice)
                     1 -> CameraTab(lang, isFrontCamera, onSwitchCamera)
                     2 -> NotificationsTab(
                         lang = lang,
@@ -202,14 +202,16 @@ private fun TabIcon(
 private fun MicroTab(
     context: Context,
     lang: String,
-    onSelectAudioOutput: (AudioDeviceInfo) -> Unit
+    onSelectAudioDevice: (AudioDeviceInfo) -> Unit
 ) {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     var inputDevices by remember { mutableStateOf(getFilteredInputDevices(audioManager)) }
     var outputDevices by remember { mutableStateOf(getFilteredOutputDevices(audioManager)) }
 
-    // Track active communication device (API 31+)
+    // Track active communication device (API 31+).
+    // setCommunicationDevice controls both input and output routing,
+    // so we track a single active device across both sections.
     var activeDeviceId by remember {
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -239,16 +241,45 @@ private fun MicroTab(
         }
     }
 
+    // Resolve which input is active: match by device ID, or for built-in mic
+    // check if the communication device is also built-in (speaker/earpiece).
+    fun isInputActive(device: AudioDeviceInfo): Boolean {
+        val commDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.communicationDevice
+        } else return false
+        if (commDevice == null) return device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC
+        if (commDevice.id == device.id) return true
+        // Built-in mic is active when communication device is any built-in device
+        if (device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC && commDevice.type in BUILTIN_TYPES) return true
+        return false
+    }
+
     // Audio Input section
     SectionHeader(Strings.t("settings.incall.audioInput", lang))
     inputDevices.forEach { device ->
         val label = audioDeviceLabel(device, lang)
+        val isActive = isInputActive(device)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable {
+                    onSelectAudioDevice(device)
+                    activeDeviceId = device.id
+                }
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            RadioButton(
+                selected = isActive,
+                onClick = {
+                    onSelectAudioDevice(device)
+                    activeDeviceId = device.id
+                },
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = VisioColors.Primary500,
+                    unselectedColor = VisioColors.White
+                )
+            )
             Text(
                 text = label,
                 color = VisioColors.White,
@@ -269,7 +300,7 @@ private fun MicroTab(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    onSelectAudioOutput(device)
+                    onSelectAudioDevice(device)
                     activeDeviceId = device.id
                 }
                 .padding(vertical = 6.dp),
@@ -278,7 +309,7 @@ private fun MicroTab(
             RadioButton(
                 selected = isActive,
                 onClick = {
-                    onSelectAudioOutput(device)
+                    onSelectAudioDevice(device)
                     activeDeviceId = device.id
                 },
                 colors = RadioButtonDefaults.colors(
@@ -438,6 +469,11 @@ private val BUILTIN_TYPES = setOf(
     AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
 )
 
+private val BLUETOOTH_TYPES = setOf(
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+    AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+)
+
 private val INPUT_TYPES = listOf(
     AudioDeviceInfo.TYPE_BUILTIN_MIC,
     AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
@@ -466,10 +502,26 @@ private fun getFilteredInputDevices(audioManager: AudioManager): List<AudioDevic
 
 private fun getFilteredOutputDevices(audioManager: AudioManager): List<AudioDeviceInfo> {
     val seenBuiltinTypes = mutableSetOf<Int>()
+    val seenBtNames = mutableSetOf<String>()
     return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
         .filter { it.type in OUTPUT_TYPES }
+        // Dedup built-in devices (multiple mics/speakers reported by system)
         .filter { device ->
             if (device.type in BUILTIN_TYPES) seenBuiltinTypes.add(device.type) else true
+        }
+        // Dedup Bluetooth: A2DP and SCO often report the same headset.
+        // Keep SCO (communication profile) and drop A2DP duplicates.
+        .filter { device ->
+            if (device.type in BLUETOOTH_TYPES) {
+                val name = device.productName?.toString() ?: ""
+                // SCO always passes; A2DP only if no SCO with same name was seen
+                if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                    seenBtNames.add(name)
+                    true
+                } else {
+                    seenBtNames.add(name) // returns false if already present
+                }
+            } else true
         }
 }
 

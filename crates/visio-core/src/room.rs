@@ -34,6 +34,10 @@ pub struct RoomManager {
     messages: MessageStore,
     playout_buffer: Arc<AudioPlayoutBuffer>,
     hand_raise: Arc<Mutex<Option<HandRaiseManager>>>,
+    /// Shared with MeetingControls so local_participant_info() reads the
+    /// authoritative camera state without depending on LiveKit publication
+    /// mute-state timing.
+    camera_enabled: Arc<Mutex<bool>>,
 }
 
 impl RoomManager {
@@ -47,6 +51,7 @@ impl RoomManager {
             messages: Arc::new(Mutex::new(Vec::new())),
             playout_buffer: Arc::new(AudioPlayoutBuffer::new()),
             hand_raise: Arc::new(Mutex::new(None)),
+            camera_enabled: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -65,7 +70,11 @@ impl RoomManager {
 
     /// Create MeetingControls bound to this room.
     pub fn controls(&self) -> crate::controls::MeetingControls {
-        crate::controls::MeetingControls::new(self.room.clone(), self.emitter.clone())
+        crate::controls::MeetingControls::new(
+            self.room.clone(),
+            self.emitter.clone(),
+            self.camera_enabled.clone(),
+        )
     }
 
     /// Create a ChatService bound to this room.
@@ -97,12 +106,17 @@ impl RoomManager {
             let n = local.name().to_string();
             if n.is_empty() { None } else { Some(n) }
         };
-        let has_video = local.track_publications().values().any(|pub_| {
-            pub_.kind() == LkTrackKind::Video
-        });
+        // Use the authoritative camera_enabled flag rather than checking
+        // publication mute state, which may lag behind the actual user intent
+        // (pub_.mute() is async and needs server ACK before is_muted() updates).
+        let has_video = *self.camera_enabled.lock().await;
         let is_muted = local.track_publications().values().any(|pub_| {
             pub_.kind() == LkTrackKind::Audio && pub_.is_muted()
         });
+        // "local-camera" is a sentinel SID recognised by the JNI layer:
+        // attachSurface stores the ANativeWindow in LOCAL_PREVIEW_SURFACE
+        // and nativePushCameraFrame renders I420 frames directly to it,
+        // bypassing the NativeVideoStream path used for remote tracks.
         Some(ParticipantInfo {
             sid: local.sid().to_string(),
             identity: local.identity().to_string(),
@@ -455,12 +469,18 @@ impl RoomManager {
                     let psid = participant.sid().to_string();
                     let source = Self::lk_source_to_visio(publication.source());
 
-                    if source == TrackSource::Microphone {
-                        let mut pm = participants.lock().await;
-                        if let Some(p) = pm.participant_mut(&psid) {
-                            p.is_muted = true;
+                    let mut pm = participants.lock().await;
+                    if let Some(p) = pm.participant_mut(&psid) {
+                        match source {
+                            TrackSource::Microphone => p.is_muted = true,
+                            TrackSource::Camera => {
+                                p.has_video = false;
+                                p.video_track_sid = None;
+                            }
+                            _ => {}
                         }
                     }
+                    drop(pm);
 
                     emitter.emit(VisioEvent::TrackMuted { participant_sid: psid, source });
                 }
@@ -468,13 +488,20 @@ impl RoomManager {
                 RoomEvent::TrackUnmuted { participant, publication } => {
                     let psid = participant.sid().to_string();
                     let source = Self::lk_source_to_visio(publication.source());
+                    let track_sid = publication.sid().to_string();
 
-                    if source == TrackSource::Microphone {
-                        let mut pm = participants.lock().await;
-                        if let Some(p) = pm.participant_mut(&psid) {
-                            p.is_muted = false;
+                    let mut pm = participants.lock().await;
+                    if let Some(p) = pm.participant_mut(&psid) {
+                        match source {
+                            TrackSource::Microphone => p.is_muted = false,
+                            TrackSource::Camera => {
+                                p.has_video = true;
+                                p.video_track_sid = Some(track_sid);
+                            }
+                            _ => {}
                         }
                     }
+                    drop(pm);
 
                     emitter.emit(VisioEvent::TrackUnmuted { participant_sid: psid, source });
                 }

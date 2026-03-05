@@ -34,12 +34,16 @@ pub struct MeetingControls {
 }
 
 impl MeetingControls {
-    pub fn new(room: Arc<Mutex<Option<Arc<Room>>>>, emitter: EventEmitter) -> Self {
+    pub fn new(
+        room: Arc<Mutex<Option<Arc<Room>>>>,
+        emitter: EventEmitter,
+        camera_enabled: Arc<Mutex<bool>>,
+    ) -> Self {
         Self {
             room,
             emitter,
             mic_enabled: Arc::new(Mutex::new(false)),
-            camera_enabled: Arc::new(Mutex::new(false)),
+            camera_enabled,
             audio_source: Arc::new(Mutex::new(None)),
             video_source: Arc::new(Mutex::new(None)),
         }
