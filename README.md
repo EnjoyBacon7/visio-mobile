@@ -71,27 +71,30 @@ Native video conferencing client for [La Suite Meet](https://meet.numerique.gouv
 ## Prerequisites
 
 - **Rust** nightly (edition 2024) — `rustup default nightly`
-- **Android**: NDK 27+, SDK 26+, `cargo-ndk`, `rustup target add aarch64-linux-android`
-- **iOS**: Xcode 16+, `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
-- **Desktop**: Node.js 18+, Tauri CLI (`cargo install tauri-cli`)
+- Platform-specific requirements are listed in each build section below
 
 ## Building
 
 ### Desktop (macOS / Linux / Windows)
 
+**Prerequisites:** Node.js 18+, Tauri CLI (`cargo install tauri-cli@^2`)
+
 ```bash
-# Dev mode — start Vite and Tauri separately:
-cd crates/visio-desktop/frontend && npm install && npm run dev &
+# Install frontend dependencies (first time only)
+cd crates/visio-desktop/frontend && npm install
+
+# Dev mode (Tauri auto-starts Vite via beforeDevCommand)
 cd crates/visio-desktop && cargo tauri dev
 
 # Production build
-cd crates/visio-desktop/frontend && npm run build
 cd crates/visio-desktop && cargo tauri build
 ```
 
-The frontend dev server (Vite) must be running on `http://localhost:5173` **before** `cargo tauri dev` — Tauri's `devUrl` points to it. If Vite is not running, the window will be blank. Make sure no other Vite instance (e.g. from a git worktree) is occupying port 5173.
+Tauri automatically runs `npm run dev` (dev mode) or `npm run build` (production) via its `beforeDevCommand`/`beforeBuildCommand` config. Make sure no other Vite instance (e.g. from a git worktree) is occupying port 5173.
 
 ### Android
+
+**Prerequisites:** NDK 27+, SDK 26+, `cargo-ndk` (`cargo install cargo-ndk`), `rustup target add aarch64-linux-android`
 
 ```bash
 # 1. Build Rust libraries for arm64
@@ -107,6 +110,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 The Gradle `copyI18nAssets` task runs automatically before build, copying `i18n/*.json` into `src/main/assets/i18n/`.
 
 ### iOS
+
+**Prerequisites:** Xcode 16+, `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 
 ```bash
 # 1. Build Rust libraries
@@ -206,7 +211,6 @@ crates/
 android/            Kotlin/Compose app
 ios/                SwiftUI app
 scripts/            Build scripts (Android NDK, iOS fat libs)
-docs/plans/         Design docs and implementation plans
 ```
 
 ## What works
