@@ -19,7 +19,7 @@ Native video conferencing client for [La Suite Meet](https://meet.numerique.gouv
   <img src="docs/screenshots/ios_home.png" alt="iOS — Home screen" width="300" />
 </p>
 <p align="center">
-  <em>Left: Android — Active video call &nbsp;|&nbsp; Right: iOS — Home screen with new La Suite Meet icon</em>
+  <em>Left: Android — Active video call &nbsp;|&nbsp; Right: iOS — Home screen</em>
 </p>
 
 ## Platforms
