@@ -1,6 +1,7 @@
 package io.visio.mobile
 
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
@@ -82,6 +83,10 @@ class AudioPlayout {
                 track.release()
                 Log.i(TAG, "Audio playout stopped")
             }, "AudioPlayout").also { it.start() }
+    }
+
+    fun setPreferredDevice(device: AudioDeviceInfo?) {
+        audioTrack?.setPreferredDevice(device)
     }
 
     fun stop() {

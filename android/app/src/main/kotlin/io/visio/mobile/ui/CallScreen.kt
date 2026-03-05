@@ -4,8 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -156,6 +156,22 @@ fun CallScreen(
         }
     }
 
+    // Keep screen on while connected or reconnecting
+    val keepScreenOn =
+        connectionState is ConnectionState.Connected ||
+            connectionState is ConnectionState.Reconnecting
+    DisposableEffect(keepScreenOn) {
+        val window = context.findActivity()?.window
+        if (keepScreenOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // Connect on first composition
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -256,16 +272,8 @@ fun CallScreen(
         InCallSettingsSheet(
             initialTab = inCallSettingsTab,
             onDismiss = { showInCallSettings = false },
-            onSelectAudioDevice = { device ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    try {
-                        audioManager.setCommunicationDevice(device)
-                    } catch (e: Exception) {
-                        android.util.Log.e("CallScreen", "Failed to set communication device", e)
-                    }
-                }
-            },
+            onSelectAudioInput = { device -> VisioManager.setAudioInputDevice(device) },
+            onSelectAudioOutput = { device -> VisioManager.setAudioOutputDevice(device) },
             onSwitchCamera = { useFront ->
                 VisioManager.switchCamera(useFront)
             },

@@ -1,6 +1,7 @@
 package io.visio.mobile
 
 import android.annotation.SuppressLint
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -26,40 +27,43 @@ class AudioCapture {
     @Volatile
     private var running = false
     private var recordThread: Thread? = null
+    private var recorder: AudioRecord? = null
 
     @SuppressLint("MissingPermission") // Caller must check RECORD_AUDIO permission
     fun start() {
         if (running) return
         running = true
 
+        val bufferSize =
+            maxOf(
+                AudioRecord.getMinBufferSize(
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                ),
+                // 2 bytes per i16 sample
+                SAMPLES_PER_FRAME * 2,
+            )
+
+        val rec =
+            AudioRecord(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize,
+            )
+
+        if (rec.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord failed to initialize")
+            running = false
+            return
+        }
+
+        recorder = rec
+
         recordThread =
             Thread({
-                val bufferSize =
-                    maxOf(
-                        AudioRecord.getMinBufferSize(
-                            SAMPLE_RATE,
-                            AudioFormat.CHANNEL_IN_MONO,
-                            AudioFormat.ENCODING_PCM_16BIT,
-                        ),
-                        // 2 bytes per i16 sample
-                        SAMPLES_PER_FRAME * 2,
-                    )
-
-                val recorder =
-                    AudioRecord(
-                        MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                        SAMPLE_RATE,
-                        AudioFormat.CHANNEL_IN_MONO,
-                        AudioFormat.ENCODING_PCM_16BIT,
-                        bufferSize,
-                    )
-
-                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                    Log.e(TAG, "AudioRecord failed to initialize")
-                    running = false
-                    return@Thread
-                }
-
                 // Direct ByteBuffer for JNI zero-copy
                 val buffer = ByteBuffer.allocateDirect(SAMPLES_PER_FRAME * 2)
                 buffer.order(ByteOrder.nativeOrder())
@@ -67,13 +71,13 @@ class AudioCapture {
 
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
 
-                recorder.startRecording()
+                rec.startRecording()
                 Log.i(TAG, "Audio capture started: ${SAMPLE_RATE}Hz mono, ${FRAME_SIZE_MS}ms frames")
 
                 val tempArray = ShortArray(SAMPLES_PER_FRAME)
 
                 while (running) {
-                    val read = recorder.read(tempArray, 0, SAMPLES_PER_FRAME)
+                    val read = rec.read(tempArray, 0, SAMPLES_PER_FRAME)
                     if (read > 0) {
                         buffer.clear()
                         shortBuffer.clear()
@@ -87,10 +91,14 @@ class AudioCapture {
                     }
                 }
 
-                recorder.stop()
-                recorder.release()
+                rec.stop()
+                rec.release()
                 Log.i(TAG, "Audio capture stopped")
             }, "AudioCapture").also { it.start() }
+    }
+
+    fun setPreferredDevice(device: AudioDeviceInfo?) {
+        recorder?.setPreferredDevice(device)
     }
 
     fun stop() {
@@ -98,6 +106,7 @@ class AudioCapture {
         running = false
         recordThread?.join(1000)
         recordThread = null
+        recorder = null
         NativeVideo.nativeStopAudioCapture()
     }
 }

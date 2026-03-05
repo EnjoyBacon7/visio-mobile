@@ -1,7 +1,10 @@
 package io.visio.mobile
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +39,7 @@ object VisioManager : VisioEventListener {
 
     // Audio playout (Rust playout buffer -> JNI -> AudioTrack)
     private var audioPlayout: AudioPlayout? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var appContext: Context
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -147,12 +151,19 @@ object VisioManager : VisioEventListener {
 
     /**
      * Start audio playout for remote participants. Call after connecting to room.
+     * Acquires a partial wake lock so audio continues when screen is off.
      */
     fun startAudioPlayout() {
         if (audioPlayout != null) return
         // Set AudioManager to VoIP mode for low-latency audio routing
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         am.mode = AudioManager.MODE_IN_COMMUNICATION
+        // Acquire partial wake lock to keep CPU active when screen is off
+        val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock =
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VisioMobile::AudioPlayout").apply {
+                acquire()
+            }
         audioPlayout = AudioPlayout().also { it.start() }
     }
 
@@ -162,9 +173,34 @@ object VisioManager : VisioEventListener {
     fun stopAudioPlayout() {
         audioPlayout?.stop()
         audioPlayout = null
+        // Release wake lock
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         // Restore normal audio mode
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         am.mode = AudioManager.MODE_NORMAL
+    }
+
+    /**
+     * Route audio input to a specific device.
+     */
+    fun setAudioInputDevice(device: AudioDeviceInfo) {
+        audioCapture?.setPreferredDevice(device)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.setCommunicationDevice(device)
+        }
+    }
+
+    /**
+     * Route audio output to a specific device.
+     */
+    fun setAudioOutputDevice(device: AudioDeviceInfo) {
+        audioPlayout?.setPreferredDevice(device)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.setCommunicationDevice(device)
+        }
     }
 
     fun refreshParticipantsPublic() = refreshParticipants()

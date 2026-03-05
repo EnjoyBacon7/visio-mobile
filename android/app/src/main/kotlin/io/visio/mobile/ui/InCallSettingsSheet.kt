@@ -55,7 +55,8 @@ import io.visio.mobile.ui.theme.VisioColors
 fun InCallSettingsSheet(
     initialTab: Int = 0,
     onDismiss: () -> Unit,
-    onSelectAudioDevice: (AudioDeviceInfo) -> Unit,
+    onSelectAudioInput: (AudioDeviceInfo) -> Unit,
+    onSelectAudioOutput: (AudioDeviceInfo) -> Unit,
     onSwitchCamera: (Boolean) -> Unit,
     isFrontCamera: Boolean,
 ) {
@@ -125,7 +126,7 @@ fun InCallSettingsSheet(
                         .padding(start = 8.dp, end = 8.dp, bottom = 32.dp),
             ) {
                 when (selectedTab) {
-                    0 -> MicroTab(context, lang, onSelectAudioDevice)
+                    0 -> MicroTab(context, lang, onSelectAudioInput, onSelectAudioOutput)
                     1 -> CameraTab(lang, isFrontCamera, onSwitchCamera)
                     2 ->
                         NotificationsTab(
@@ -208,17 +209,25 @@ private fun TabIcon(
 private fun MicroTab(
     context: Context,
     lang: String,
-    onSelectAudioDevice: (AudioDeviceInfo) -> Unit,
+    onSelectAudioInput: (AudioDeviceInfo) -> Unit,
+    onSelectAudioOutput: (AudioDeviceInfo) -> Unit,
 ) {
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     var inputDevices by remember { mutableStateOf(getFilteredInputDevices(audioManager)) }
     var outputDevices by remember { mutableStateOf(getFilteredOutputDevices(audioManager)) }
 
-    // Track active communication device (API 31+).
-    // setCommunicationDevice controls both input and output routing,
-    // so we track a single active device across both sections.
-    var activeDeviceId by remember {
+    // Track active input and output devices independently
+    var activeInputDeviceId by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.communicationDevice?.id
+            } else {
+                null
+            },
+        )
+    }
+    var activeOutputDeviceId by remember {
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 audioManager.communicationDevice?.id
@@ -241,7 +250,9 @@ private fun MicroTab(
                     inputDevices = getFilteredInputDevices(audioManager)
                     outputDevices = getFilteredOutputDevices(audioManager)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        activeDeviceId = audioManager.communicationDevice?.id
+                        val commId = audioManager.communicationDevice?.id
+                        activeInputDeviceId = commId
+                        activeOutputDeviceId = commId
                     }
                 }
             }
@@ -254,6 +265,15 @@ private fun MicroTab(
     // Resolve which input is active: match by device ID, or for built-in mic
     // check if the communication device is also built-in (speaker/earpiece).
     fun isInputActive(device: AudioDeviceInfo): Boolean {
+        if (activeInputDeviceId != null) {
+            if (activeInputDeviceId == device.id) return true
+            // Built-in mic is active when selected input is also built-in
+            if (device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC) {
+                val selectedInput = inputDevices.find { it.id == activeInputDeviceId }
+                if (selectedInput == null || selectedInput.type in BUILTIN_TYPES) return true
+            }
+            return false
+        }
         val commDevice =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 audioManager.communicationDevice
@@ -262,7 +282,6 @@ private fun MicroTab(
             }
         if (commDevice == null) return device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC
         if (commDevice.id == device.id) return true
-        // Built-in mic is active when communication device is any built-in device
         if (device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC && commDevice.type in BUILTIN_TYPES) return true
         return false
     }
@@ -277,8 +296,8 @@ private fun MicroTab(
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        onSelectAudioDevice(device)
-                        activeDeviceId = device.id
+                        onSelectAudioInput(device)
+                        activeInputDeviceId = device.id
                     }
                     .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -286,8 +305,8 @@ private fun MicroTab(
             RadioButton(
                 selected = isActive,
                 onClick = {
-                    onSelectAudioDevice(device)
-                    activeDeviceId = device.id
+                    onSelectAudioInput(device)
+                    activeInputDeviceId = device.id
                 },
                 colors =
                     RadioButtonDefaults.colors(
@@ -310,14 +329,14 @@ private fun MicroTab(
     SectionHeader(Strings.t("settings.incall.audioOutput", lang))
     outputDevices.forEach { device ->
         val label = audioDeviceLabel(device, lang)
-        val isActive = activeDeviceId == device.id
+        val isActive = activeOutputDeviceId == device.id
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .clickable {
-                        onSelectAudioDevice(device)
-                        activeDeviceId = device.id
+                        onSelectAudioOutput(device)
+                        activeOutputDeviceId = device.id
                     }
                     .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -325,8 +344,8 @@ private fun MicroTab(
             RadioButton(
                 selected = isActive,
                 onClick = {
-                    onSelectAudioDevice(device)
-                    activeDeviceId = device.id
+                    onSelectAudioOutput(device)
+                    activeOutputDeviceId = device.id
                 },
                 colors =
                     RadioButtonDefaults.colors(
