@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "Visio Mobile",
+  "productName": "visio-mobile",
   "version": "0.2.0",
   "identifier": "io.visio.desktop",
   "build": {
