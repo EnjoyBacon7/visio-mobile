@@ -63,7 +63,8 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         try {
             meetInstances = VisioManager.client.getMeetInstances()
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     // Resolve full URL: if input is just a slug, prefix with first configured server

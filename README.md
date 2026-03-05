@@ -79,6 +79,15 @@ Native video conferencing client for [La Suite Meet](https://meet.numerique.gouv
 
 **Prerequisites:** Node.js 18+, Tauri CLI (`cargo install tauri-cli@^2`)
 
+**Linux only:** Install system dependencies:
+```bash
+# Debian/Ubuntu
+sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libasound2-dev
+
+# Fedora
+sudo dnf install gtk3-devel webkit2gtk4.1-devel librsvg2-devel alsa-lib-devel
+```
+
 ```bash
 # Install frontend dependencies (first time only)
 cd crates/visio-desktop/frontend && npm install

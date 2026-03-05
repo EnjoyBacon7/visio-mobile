@@ -279,11 +279,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             onClick = {
                 // Auto-add pending instance text before saving
                 val trimmed = newInstance.trim()
-                val instancesToSave = if (trimmed.isNotEmpty() && trimmed !in meetInstances) {
-                    meetInstances + trimmed
-                } else {
-                    meetInstances
-                }
+                val instancesToSave =
+                    if (trimmed.isNotEmpty() && trimmed !in meetInstances) {
+                        meetInstances + trimmed
+                    } else {
+                        meetInstances
+                    }
                 coroutineScope.launch(Dispatchers.IO) {
                     try {
                         VisioManager.client.setDisplayName(displayName.ifBlank { null })
