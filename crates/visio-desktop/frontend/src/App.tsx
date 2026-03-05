@@ -268,6 +268,19 @@ function HomeView({
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomStatus, setRoomStatus] = useState<"idle" | "checking" | "valid" | "not_found" | "error">("idle");
+  const [meetInstances, setMeetInstances] = useState<string[]>([]);
+
+  useEffect(() => {
+    invoke<string[]>("get_meet_instances").then(setMeetInstances).catch(() => {});
+  }, []);
+
+  function resolveUrl(input: string): string {
+    const trimmed = input.trim();
+    if (SLUG_REGEX.test(trimmed) && meetInstances.length > 0) {
+      return `https://${meetInstances[0]}/${trimmed}`;
+    }
+    return trimmed;
+  }
 
   useEffect(() => {
     if (deepLinkUrl) {
@@ -277,7 +290,8 @@ function HomeView({
   }, [deepLinkUrl]);
 
   useEffect(() => {
-    const slug = extractSlug(meetUrl);
+    const resolved = resolveUrl(meetUrl);
+    const slug = extractSlug(resolved);
     if (!slug) {
       setRoomStatus("idle");
       return;
@@ -287,7 +301,7 @@ function HomeView({
     const timer = setTimeout(async () => {
       try {
         const result = await invoke<{ status: string; livekit_url?: string; token?: string }>(
-          "validate_room", { url: meetUrl.trim(), username: displayName.trim() || null }
+          "validate_room", { url: resolved, username: displayName.trim() || null }
         );
         if (controller.signal.aborted) return;
         if (result.status === "valid") setRoomStatus("valid");
@@ -301,7 +315,7 @@ function HomeView({
   }, [meetUrl]);
 
   const handleJoin = async () => {
-    const url = meetUrl.trim();
+    const url = resolveUrl(meetUrl);
     if (!url) {
       setError(t("home.error.noUrl"));
       return;
@@ -337,7 +351,7 @@ function HomeView({
           <input
             id="meetUrl"
             type="text"
-            placeholder="https://meet.example.com/abc-defg-hij"
+            placeholder="abc-defg-hij"
             autoComplete="off"
             value={meetUrl}
             onChange={(e) => setMeetUrl(e.target.value)}

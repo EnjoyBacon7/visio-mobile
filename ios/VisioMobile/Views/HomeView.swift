@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var navigateToCall: Bool = false
     @State private var showSettings: Bool = false
     @State private var roomStatus: String = "idle"
+    @State private var meetInstances: [String] = []
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -21,6 +22,15 @@ struct HomeView: View {
             ? String(trimmed.split(separator: "/").last ?? "")
             : trimmed
         return candidate.wholeMatch(of: Self.slugPattern) != nil ? candidate : nil
+    }
+
+    /// If input is just a slug, prefix with first configured server
+    private func resolveRoomURL(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.wholeMatch(of: Self.slugPattern) != nil, let server = meetInstances.first {
+            return "https://\(server)/\(trimmed)"
+        }
+        return trimmed
     }
 
     var body: some View {
@@ -71,7 +81,8 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 32)
                 .task(id: roomURL) {
-                    guard let _ = extractSlug(roomURL) else {
+                    let resolved = resolveRoomURL(roomURL)
+                    guard let _ = extractSlug(resolved) else {
                         roomStatus = "idle"
                         return
                     }
@@ -79,7 +90,7 @@ struct HomeView: View {
                     try? await Task.sleep(for: .milliseconds(500))
                     guard !Task.isCancelled else { return }
                     let result = manager.client.validateRoom(
-                        url: roomURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                        url: resolved,
                         username: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             ? nil : displayName.trimmingCharacters(in: .whitespacesAndNewlines)
                     )
@@ -127,7 +138,7 @@ struct HomeView: View {
         }
         .navigationDestination(isPresented: $navigateToCall) {
             CallView(
-                roomURL: roomURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                roomURL: resolveRoomURL(roomURL),
                 displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
@@ -141,6 +152,8 @@ struct HomeView: View {
             if !name.isEmpty && displayName.isEmpty {
                 displayName = name
             }
+            // Load meet instances
+            meetInstances = manager.client.getMeetInstances()
         }
         .onChange(of: manager.pendingDeepLink) { newValue in
             if let link = newValue {

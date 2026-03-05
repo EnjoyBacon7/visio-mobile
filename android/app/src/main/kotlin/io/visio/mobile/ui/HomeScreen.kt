@@ -57,6 +57,24 @@ fun HomeScreen(
     val isDark = VisioManager.currentTheme == "dark"
     var roomStatus by remember { mutableStateOf("idle") }
     val slugRegex = remember { Regex("^[a-z]{3}-[a-z]{4}-[a-z]{3}$") }
+    var meetInstances by remember { mutableStateOf(listOf<String>()) }
+
+    // Load meet instances from settings
+    LaunchedEffect(Unit) {
+        try {
+            meetInstances = VisioManager.client.getMeetInstances()
+        } catch (_: Exception) {}
+    }
+
+    // Resolve full URL: if input is just a slug, prefix with first configured server
+    fun resolveRoomUrl(input: String): String {
+        val trimmed = input.trim()
+        return if (slugRegex.matches(trimmed) && meetInstances.isNotEmpty()) {
+            "https://${meetInstances.first()}/$trimmed"
+        } else {
+            trimmed
+        }
+    }
 
     LaunchedEffect(VisioManager.pendingDeepLink) {
         val link = VisioManager.pendingDeepLink
@@ -67,7 +85,8 @@ fun HomeScreen(
     }
 
     LaunchedEffect(roomUrl) {
-        val trimmed = roomUrl.trim().trimEnd('/')
+        val resolved = resolveRoomUrl(roomUrl)
+        val trimmed = resolved.trimEnd('/')
         val candidate = if ('/' in trimmed) trimmed.substringAfterLast('/') else trimmed
         if (!slugRegex.matches(candidate)) {
             roomStatus = "idle"
@@ -78,7 +97,7 @@ fun HomeScreen(
         try {
             val result =
                 withContext(Dispatchers.IO) {
-                    VisioManager.client.validateRoom(roomUrl.trim(), username.trim().ifEmpty { null })
+                    VisioManager.client.validateRoom(resolved, username.trim().ifEmpty { null })
                 }
             roomStatus =
                 when (result) {
@@ -164,7 +183,7 @@ fun HomeScreen(
             onValueChange = { roomUrl = it },
             placeholder = {
                 Text(
-                    "https://meet.example.com/abc-defg-hij",
+                    "abc-defg-hij",
                     color = if (isDark) VisioColors.Greyscale400 else VisioColors.LightTextSecondary,
                 )
             },
@@ -249,7 +268,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { onJoin(roomUrl.trim(), username.trim()) },
+            onClick = { onJoin(resolveRoomUrl(roomUrl), username.trim()) },
             enabled = roomStatus == "valid",
             modifier = Modifier.fillMaxWidth(),
             colors =

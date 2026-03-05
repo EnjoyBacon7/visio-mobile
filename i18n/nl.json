@@ -2,7 +2,7 @@
   "app.title": "Visio Mobile",
   "home.subtitle": "Voer een vergader-URL en uw naam in",
   "home.meetUrl": "Vergader-URL",
-  "home.meetUrl.placeholder": "meet.example.com/mijn-ruimte",
+  "home.meetUrl.placeholder": "abc-defg-hij",
   "home.displayName": "Weergavenaam (optioneel)",
   "home.displayName.placeholder": "Uw naam",
   "home.join": "Deelnemen",
