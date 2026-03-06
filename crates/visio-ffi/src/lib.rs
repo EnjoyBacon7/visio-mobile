@@ -464,6 +464,9 @@ impl VisioClient {
         #[cfg(target_os = "android")]
         {
             *CLIENT_FOR_VIDEO.lock().unwrap() = 0;
+            // Release the local preview surface (detachSurface is a no-op for
+            // local-camera to avoid a recomposition race, so we clean up here).
+            LOCAL_PREVIEW_SURFACE.lock().unwrap().take();
         }
         self.rt.block_on(self.room_manager.disconnect());
     }
@@ -1329,13 +1332,14 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_detachSurface(
 
     visio_log(&format!("VISIO JNI: detachSurface track={track_sid}"));
 
-    // Local camera self-view: release the stored ANativeWindow via RAII drop.
+    // Local camera self-view: do NOT clear the surface here.
+    // On Android, Compose may destroy the old TextureView AFTER creating a new
+    // one when recomposing (e.g. returning from chat).  Clearing here would
+    // remove the freshly-attached surface, freezing the local video.
+    // The old ANativeWindow is released automatically by the RAII wrapper when
+    // attachSurface replaces it.  Final cleanup happens in disconnect().
     if track_sid == "local-camera" {
-        let prev = LOCAL_PREVIEW_SURFACE.lock().unwrap().take();
-        if prev.is_some() {
-            visio_log("VISIO JNI: releasing local preview surface");
-            // NativeWindowHandle::drop calls ANativeWindow_release automatically
-        }
+        visio_log("VISIO JNI: detachSurface(local-camera) — skipped (surface replaced on next attach)");
         return;
     }
 
