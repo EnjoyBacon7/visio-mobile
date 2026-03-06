@@ -2,7 +2,7 @@
   "app.title": "Visio Mobile",
   "home.subtitle": "Inserisci l'URL della riunione e il tuo nome",
   "home.meetUrl": "URL della riunione",
-  "home.meetUrl.placeholder": "meet.example.com/la-mia-sala",
+  "home.meetUrl.placeholder": "abc-defg-hij",
   "home.displayName": "Nome visualizzato (opzionale)",
   "home.displayName.placeholder": "Il tuo nome",
   "home.join": "Partecipa",
