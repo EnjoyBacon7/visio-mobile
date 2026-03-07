@@ -369,6 +369,11 @@ private struct CreateRoomSheet: View {
     @State private var createdUrl: String? = nil
     @State private var copiedHttp: Bool = false
     @State private var copiedDeep: Bool = false
+    @State private var searchQuery: String = ""
+    @State private var searchResults: [UserSearchResult] = []
+    @State private var invitedUsers: [UserSearchResult] = []
+    @State private var createdRoomId: String? = nil
+    @State private var searchTask: Task<Void, Never>? = nil
 
     private var deepLink: String {
         guard let url = createdUrl else { return "" }
@@ -384,6 +389,7 @@ private struct CreateRoomSheet: View {
                         Picker(Strings.t("home.createRoom.access", lang: lang), selection: $accessLevel) {
                             Text(Strings.t("home.createRoom.public", lang: lang)).tag("public")
                             Text(Strings.t("home.createRoom.trusted", lang: lang)).tag("trusted")
+                            Text(Strings.t("home.createRoom.restricted", lang: lang)).tag("restricted")
                         }
                         .pickerStyle(.inline)
                         .labelsHidden()
@@ -392,13 +398,79 @@ private struct CreateRoomSheet: View {
                             Text(Strings.t("home.createRoom.publicDesc", lang: lang))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else {
+                        } else if accessLevel == "trusted" {
                             Text(Strings.t("home.createRoom.trustedDesc", lang: lang))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(Strings.t("home.createRoom.restrictedDesc", lang: lang))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     } header: {
                         Text(Strings.t("home.createRoom.access", lang: lang))
+                    }
+
+                    if accessLevel == "restricted" {
+                        Section(header: Text(Strings.t("restricted.invite", lang: lang))) {
+                            TextField(Strings.t("restricted.searchUsers", lang: lang), text: $searchQuery)
+                                .onChange(of: searchQuery) { newValue in
+                                    searchTask?.cancel()
+                                    guard newValue.count >= 3 else {
+                                        searchResults = []
+                                        return
+                                    }
+                                    searchTask = Task {
+                                        try? await Task.sleep(nanoseconds: 300_000_000)
+                                        guard !Task.isCancelled else { return }
+                                        let query = newValue
+                                        DispatchQueue.global(qos: .userInitiated).async {
+                                            do {
+                                                let results = try manager.client.searchUsers(query: query)
+                                                DispatchQueue.main.async {
+                                                    searchResults = results.filter { user in
+                                                        !invitedUsers.contains(where: { $0.id == user.id })
+                                                    }
+                                                }
+                                            } catch {
+                                                DispatchQueue.main.async { searchResults = [] }
+                                            }
+                                        }
+                                    }
+                                }
+
+                            ForEach(searchResults, id: \.id) { user in
+                                Button {
+                                    invitedUsers.append(user)
+                                    searchQuery = ""
+                                    searchResults = []
+                                } label: {
+                                    VStack(alignment: .leading) {
+                                        Text(user.fullName ?? user.email)
+                                        Text(user.email)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        if !invitedUsers.isEmpty {
+                            Section(header: Text(Strings.t("restricted.members", lang: lang))) {
+                                ForEach(invitedUsers, id: \.id) { user in
+                                    HStack {
+                                        Text(user.fullName ?? user.email)
+                                        Spacer()
+                                        Button {
+                                            invitedUsers.removeAll { $0.id == user.id }
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     if let error {
@@ -422,7 +494,14 @@ private struct CreateRoomSheet: View {
                                         name: "",
                                         accessLevel: accessLevel
                                     )
+                                    // Add accesses for invited users
+                                    if accessLevel == "restricted" {
+                                        for user in invitedUsers {
+                                            _ = try? manager.client.addAccess(userId: user.id, roomId: result.id)
+                                        }
+                                    }
                                     DispatchQueue.main.async {
+                                        createdRoomId = result.id
                                         createdUrl = "https://\(meetInstance)/\(result.slug)"
                                         creating = false
                                     }

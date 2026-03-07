@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import visioFFI
 
 struct InCallSettingsSheet: View {
     @EnvironmentObject private var manager: VisioManager
@@ -20,6 +21,9 @@ struct InCallSettingsSheet: View {
                     tabButton(icon: "mic.fill", tab: 1, label: Strings.t("settings.incall.micro", lang: lang))
                     tabButton(icon: "video.fill", tab: 2, label: Strings.t("settings.incall.camera", lang: lang))
                     tabButton(icon: "bell.fill", tab: 3, label: Strings.t("settings.incall.notifications", lang: lang))
+                    if manager.currentAccessLevel == "restricted" {
+                        tabButton(icon: "person.2.fill", tab: 4, label: Strings.t("restricted.members", lang: lang))
+                    }
                     Spacer()
                 }
                 .padding(.vertical, 12)
@@ -35,6 +39,7 @@ struct InCallSettingsSheet: View {
                     case 1: microTab
                     case 2: cameraTab
                     case 3: notificationsTab
+                    case 4: membersTab
                     default: roomInfoTab
                     }
                 }
@@ -124,6 +129,13 @@ struct InCallSettingsSheet: View {
 
     private var notificationsTab: some View {
         NotificationsTabContent()
+            .environmentObject(manager)
+    }
+
+    // MARK: - Members Tab
+
+    private var membersTab: some View {
+        MembersTabContent()
             .environmentObject(manager)
     }
 
@@ -390,5 +402,105 @@ private struct NotificationsTabContent: View {
             notifHandRaised = settings.notificationHandRaised
             notifMessage = settings.notificationMessageReceived
         }
+    }
+}
+
+// MARK: - Members Tab Content
+
+private struct MembersTabContent: View {
+    @EnvironmentObject private var manager: VisioManager
+    @State private var searchQuery: String = ""
+    @State private var searchResults: [UserSearchResult] = []
+    @State private var searchTask: Task<Void, Never>? = nil
+
+    private var lang: String { manager.currentLang }
+    private var isDark: Bool { manager.currentTheme == "dark" }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // Search field
+                TextField(Strings.t("restricted.searchUsers", lang: lang), text: $searchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal)
+                    .onChange(of: searchQuery) { newValue in
+                        searchTask?.cancel()
+                        guard newValue.count >= 3 else {
+                            searchResults = []
+                            return
+                        }
+                        searchTask = Task {
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            guard !Task.isCancelled else { return }
+                            let query = newValue
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                do {
+                                    let results = try manager.client.searchUsers(query: query)
+                                    DispatchQueue.main.async {
+                                        searchResults = results.filter { user in
+                                            !manager.roomAccesses.contains(where: { $0.user.id == user.id })
+                                        }
+                                    }
+                                } catch {
+                                    DispatchQueue.main.async { searchResults = [] }
+                                }
+                            }
+                        }
+                    }
+
+                // Search results
+                ForEach(searchResults, id: \.id) { user in
+                    Button {
+                        manager.addAccessMember(userId: user.id)
+                        searchQuery = ""
+                        searchResults = []
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(user.fullName ?? user.email)
+                                .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                            Text(user.email)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                Divider()
+
+                // Section header
+                Text(Strings.t("restricted.members", lang: lang))
+                    .font(.headline)
+                    .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                    .padding(.horizontal)
+
+                // Current members
+                ForEach(manager.roomAccesses, id: \.id) { access in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(access.user.fullName ?? access.user.email)
+                                .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                            Text(Strings.t("restricted.\(access.role)", lang: lang))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if access.role == "member" {
+                            Button {
+                                manager.removeAccessMember(accessId: access.id)
+                            } label: {
+                                Text(Strings.t("restricted.remove", lang: lang))
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            .padding(.vertical)
+        }
+        .background(VisioColors.background(dark: isDark))
+        .onAppear { manager.refreshAccesses() }
     }
 }

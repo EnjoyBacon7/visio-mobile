@@ -31,6 +31,9 @@ class VisioManager: ObservableObject {
     @Published var isFrontCamera: Bool = true
     @Published var waitingParticipants: [WaitingParticipant] = []
     @Published var lobbyDenied: Bool = false
+    @Published var roomAccesses: [RoomAccess] = []
+    var currentRoomId: String?
+    var currentAccessLevel: String = ""
     @Published var isAuthenticated: Bool = false
     @Published var authenticatedDisplayName: String = ""
     @Published var authenticatedEmail: String = ""
@@ -361,6 +364,44 @@ class VisioManager: ObservableObject {
                 self.authenticatedEmail = ""
                 self.authenticatedMeetInstance = ""
             }
+        }
+    }
+
+    // MARK: - Access Management
+
+    func setCurrentRoom(roomId: String?, accessLevel: String) {
+        currentRoomId = roomId
+        currentAccessLevel = accessLevel
+    }
+
+    func refreshAccesses() {
+        guard let roomId = currentRoomId else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let accesses = try self?.client.listAccesses(roomId: roomId) ?? []
+                DispatchQueue.main.async {
+                    self?.roomAccesses = accesses
+                }
+            } catch { }
+        }
+    }
+
+    func addAccessMember(userId: String) {
+        guard let roomId = currentRoomId else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                _ = try self?.client.addAccess(userId: userId, roomId: roomId)
+                self?.refreshAccesses()
+            } catch { }
+        }
+    }
+
+    func removeAccessMember(accessId: String) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                try self?.client.removeAccess(accessId: accessId)
+                self?.refreshAccesses()
+            } catch { }
         }
     }
 
