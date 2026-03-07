@@ -69,6 +69,18 @@ class VisioManager: ObservableObject {
                 trackSid: trackSid
             )
         }, nil)
+
+        // Load ONNX segmentation model for background blur
+        if let modelUrl = Bundle.main.url(forResource: "selfie_segmentation", withExtension: "onnx") {
+            do {
+                try client.loadBlurModel(modelPath: modelUrl.path)
+                NSLog("VisioManager: blur model loaded")
+            } catch {
+                NSLog("VisioManager: failed to load blur model: \(error)")
+            }
+        } else {
+            NSLog("VisioManager: selfie_segmentation.onnx not found in bundle")
+        }
     }
 
     // MARK: - Public API

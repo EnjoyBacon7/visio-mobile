@@ -1231,6 +1231,11 @@ export default function App() {
         if (s.theme) setTheme(s.theme);
       })
       .catch(() => {});
+
+    // Load ONNX segmentation model for background blur
+    resolveResource("models/selfie_segmentation.onnx")
+      .then((path) => invoke("load_blur_model", { modelPath: path }))
+      .catch(() => {});
   }, []);
 
   // Deep link listener
