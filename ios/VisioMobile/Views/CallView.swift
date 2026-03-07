@@ -20,6 +20,7 @@ struct CallView: View {
     @State private var showOverflow: Bool = false
     @State private var showReactionPicker: Bool = false
     @State private var showModeBanner = false
+    @State private var adaptiveModeOverride: AdaptiveMode? = nil
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -439,6 +440,44 @@ struct CallView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
+                .background(Color.black.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+
+                // Adaptive mode override
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(Strings.t("adaptive.override", lang: lang))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white)
+                    HStack(spacing: 8) {
+                        let modeOptions: [(AdaptiveMode?, String)] = [
+                            (nil, Strings.t("adaptive.auto", lang: lang)),
+                            (.office, Strings.t("adaptive.office", lang: lang)),
+                            (.pedestrian, Strings.t("adaptive.pedestrian", lang: lang)),
+                            (.car, Strings.t("adaptive.car", lang: lang)),
+                        ]
+                        ForEach(Array(modeOptions.enumerated()), id: \.offset) { _, option in
+                            let (mode, label) = option
+                            let isSelected = mode == adaptiveModeOverride
+                            Button {
+                                adaptiveModeOverride = mode
+                                manager.client.setAdaptiveModeOverride(mode: mode)
+                            } label: {
+                                Text(label)
+                                    .font(.system(size: 11, weight: isSelected ? .bold : .regular))
+                                    .foregroundStyle(isSelected ? .black : .white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(isSelected ? VisioColors.primary500 : VisioColors.primaryDark100)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.black.opacity(0.8))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 16)

@@ -89,6 +89,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.visio.AdaptiveMode
 import uniffi.visio.ConnectionState
 import uniffi.visio.ParticipantInfo
 import uniffi.visio.WaitingParticipant
@@ -500,6 +501,7 @@ fun CallScreen(
                 unreadCount = unreadCount,
                 participantCount = participants.size,
                 showReactionPicker = showReactionPicker,
+                adaptiveMode = adaptiveMode,
                 lang = lang,
                 onToggleMic = {
                     val newState = !micEnabled
@@ -598,6 +600,11 @@ fun CallScreen(
                 onHangUp = {
                     VisioManager.disconnect()
                     onHangUp()
+                },
+                onAdaptiveModeOverride = { mode ->
+                    coroutineScope.launch(Dispatchers.IO) {
+                        VisioManager.client.setAdaptiveModeOverride(mode)
+                    }
                 },
             )
 
@@ -704,6 +711,7 @@ private fun ControlBar(
     unreadCount: Int,
     participantCount: Int,
     showReactionPicker: Boolean,
+    adaptiveMode: AdaptiveMode,
     lang: String,
     onToggleMic: () -> Unit,
     onAudioPicker: () -> Unit,
@@ -715,8 +723,10 @@ private fun ControlBar(
     onSettings: () -> Unit,
     onChat: () -> Unit,
     onHangUp: () -> Unit,
+    onAdaptiveModeOverride: (AdaptiveMode?) -> Unit,
 ) {
     var showOverflow by remember { mutableStateOf(false) }
+    var adaptiveModeOverride by remember { mutableStateOf<AdaptiveMode?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -869,6 +879,54 @@ private fun ControlBar(
                         fontSize = 10.sp,
                         maxLines = 1,
                     )
+                }
+            }
+
+            // Adaptive mode override
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .background(Color(0xCC000000), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = Strings.t("adaptive.override", lang),
+                    color = VisioColors.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    val modeOptions = listOf<Pair<AdaptiveMode?, String>>(
+                        null to Strings.t("adaptive.auto", lang),
+                        AdaptiveMode.OFFICE to Strings.t("adaptive.office", lang),
+                        AdaptiveMode.PEDESTRIAN to Strings.t("adaptive.pedestrian", lang),
+                        AdaptiveMode.CAR to Strings.t("adaptive.car", lang),
+                    )
+                    modeOptions.forEach { (mode, label) ->
+                        val isSelected = mode == adaptiveModeOverride
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color.Black else VisioColors.White,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .background(
+                                    if (isSelected) VisioColors.Primary500 else VisioColors.PrimaryDark100,
+                                    RoundedCornerShape(16.dp),
+                                )
+                                .clickable {
+                                    adaptiveModeOverride = mode
+                                    onAdaptiveModeOverride(mode)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
