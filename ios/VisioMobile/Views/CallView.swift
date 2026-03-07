@@ -26,7 +26,10 @@ struct CallView: View {
 
     var body: some View {
         ZStack {
-            VisioColors.background(dark: isDark).ignoresSafeArea()
+            (manager.adaptiveMode == .office
+                ? VisioColors.background(dark: isDark)
+                : Color.black
+            ).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Lobby join notification banner
@@ -81,6 +84,12 @@ struct CallView: View {
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if manager.adaptiveMode == .car {
+                        // Car mode: audio-only screen with active speaker name
+                        carAudioOnlyView
+                    } else if manager.adaptiveMode == .pedestrian {
+                        // Pedestrian mode: single active speaker tile
+                        pedestrianSingleTile
                     } else if let focused = focusedParticipant,
                               let focusedP = manager.participants.first(where: { $0.sid == focused }) {
                         // Focus layout
@@ -320,6 +329,54 @@ struct CallView: View {
         }
     }
 
+    // MARK: - Pedestrian Single Tile
+
+    private var pedestrianSingleTile: some View {
+        let activeSpeaker = manager.participants.first(where: {
+            manager.activeSpeakers.contains($0.sid)
+        }) ?? manager.participants.first
+        return Group {
+            if let speaker = activeSpeaker {
+                ParticipantTile(
+                    participant: speaker,
+                    large: true,
+                    isActiveSpeaker: true,
+                    handRaisePosition: manager.handRaisedMap[speaker.sid] ?? 0,
+                    isDark: true
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(8)
+            }
+        }
+    }
+
+    // MARK: - Car Audio-Only View
+
+    private var carAudioOnlyView: some View {
+        let activeSpeaker = manager.participants.first(where: {
+            manager.activeSpeakers.contains($0.sid)
+        }) ?? manager.participants.first
+        let speakerName = activeSpeaker?.name ?? activeSpeaker?.identity ?? ""
+        return VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "speaker.wave.3.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.white.opacity(0.6))
+            Text(speakerName)
+                .font(.system(size: 36, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Text(Strings.t("adaptive.audioOnly", lang: lang))
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Connection Banner
 
     @ViewBuilder
@@ -363,10 +420,18 @@ struct CallView: View {
 
     // MARK: - Control Bar
 
+    private var isLargeButtons: Bool {
+        manager.adaptiveMode == .pedestrian || manager.adaptiveMode == .car
+    }
+
+    private var buttonSize: CGFloat { isLargeButtons ? 96 : 38 }
+    private var buttonIconSize: CGFloat { isLargeButtons ? 36 : 18 }
+    private var buttonCornerRadius: CGFloat { isLargeButtons ? 16 : 8 }
+
     private var controlBar: some View {
         VStack(spacing: 4) {
-            // Reaction picker row (above control bar)
-            if showReactionPicker {
+            // Reaction picker row (above control bar) — office only
+            if showReactionPicker && manager.adaptiveMode == .office {
                 HStack(spacing: 0) {
                     ForEach(Self.reactionEmojis, id: \.id) { item in
                         Button {
@@ -388,8 +453,8 @@ struct CallView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Overflow menu row (above control bar)
-            if showOverflow {
+            // Overflow menu row (above control bar) — office only
+            if showOverflow && manager.adaptiveMode == .office {
                 HStack(spacing: 0) {
                     Spacer()
 
@@ -482,114 +547,138 @@ struct CallView: View {
             }
 
             // Main control bar
-            HStack(spacing: 8) {
+            HStack(spacing: isLargeButtons ? 16 : 8) {
                 // Mic toggle + audio route chevron (grouped)
-                HStack(spacing: 1) {
+                if manager.adaptiveMode == .office {
+                    // Office: mic button with audio route chevron
+                    HStack(spacing: 1) {
+                        Button {
+                            manager.toggleMic()
+                        } label: {
+                            Image(systemName: manager.isMicEnabled ? "mic.fill" : "mic.slash.fill")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 38, height: 38)
+                                .background(manager.isMicEnabled ? VisioColors.primaryDark100 : VisioColors.error200)
+                                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8, bottomTrailingRadius: 2, topTrailingRadius: 2))
+                        }
+                        .accessibilityLabel(Strings.t(manager.isMicEnabled ? "control.mute" : "control.unmute", lang: lang))
+
+                        Button {
+                            showAudioDevices = true
+                        } label: {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 22, height: 38)
+                                .background(VisioColors.primaryDark100)
+                                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 2, bottomLeadingRadius: 2, bottomTrailingRadius: 8, topTrailingRadius: 8))
+                        }
+                        .accessibilityLabel(Strings.t("control.audioDevices", lang: lang))
+                    }
+                } else {
+                    // Pedestrian / Car: large mic button (no chevron)
                     Button {
                         manager.toggleMic()
                     } label: {
                         Image(systemName: manager.isMicEnabled ? "mic.fill" : "mic.slash.fill")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.system(size: buttonIconSize, weight: .medium))
                             .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
+                            .frame(width: buttonSize, height: buttonSize)
                             .background(manager.isMicEnabled ? VisioColors.primaryDark100 : VisioColors.error200)
-                            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8, bottomTrailingRadius: 2, topTrailingRadius: 2))
+                            .clipShape(RoundedRectangle(cornerRadius: buttonCornerRadius))
                     }
                     .accessibilityLabel(Strings.t(manager.isMicEnabled ? "control.mute" : "control.unmute", lang: lang))
+                }
 
+                // Camera toggle — office and pedestrian only
+                if manager.adaptiveMode != .car {
                     Button {
-                        showAudioDevices = true
+                        manager.toggleCamera()
                     } label: {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 10, weight: .bold))
+                        Image(systemName: manager.isCameraEnabled ? "video.fill" : "video.slash.fill")
+                            .font(.system(size: buttonIconSize, weight: .medium))
                             .foregroundStyle(.white)
-                            .frame(width: 22, height: 38)
-                            .background(VisioColors.primaryDark100)
-                            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 2, bottomLeadingRadius: 2, bottomTrailingRadius: 8, topTrailingRadius: 8))
+                            .frame(width: buttonSize, height: buttonSize)
+                            .background(manager.isCameraEnabled ? VisioColors.primaryDark100 : VisioColors.error200)
+                            .clipShape(RoundedRectangle(cornerRadius: buttonCornerRadius))
                     }
-                    .accessibilityLabel(Strings.t("control.audioDevices", lang: lang))
+                    .accessibilityLabel(Strings.t(manager.isCameraEnabled ? "control.camOff" : "control.camOn", lang: lang))
                 }
 
-                // Camera toggle
-                Button {
-                    manager.toggleCamera()
-                } label: {
-                    Image(systemName: manager.isCameraEnabled ? "video.fill" : "video.slash.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(manager.isCameraEnabled ? VisioColors.primaryDark100 : VisioColors.error200)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .accessibilityLabel(Strings.t(manager.isCameraEnabled ? "control.camOff" : "control.camOn", lang: lang))
+                // Participants with count badge — office only
+                if manager.adaptiveMode == .office {
+                    Button {
+                        showParticipantList = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 38, height: 38)
+                                .background(VisioColors.primaryDark100)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                // Participants with count badge
-                Button {
-                    showParticipantList = true
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(VisioColors.primaryDark100)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        Text("\(manager.participants.count)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(VisioColors.primary500)
-                            .clipShape(Capsule())
-                            .offset(x: 4, y: -4)
-                    }
-                }
-                .accessibilityLabel(Strings.t("participants.title", lang: lang))
-
-                // Chat with unread badge
-                Button {
-                    showChat = true
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "message.fill")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(VisioColors.primaryDark100)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        if manager.unreadCount > 0 {
-                            Text(manager.unreadCount <= 9 ? "\(manager.unreadCount)" : "9+")
+                            Text("\(manager.participants.count)")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(VisioColors.error500)
+                                .background(VisioColors.primary500)
                                 .clipShape(Capsule())
                                 .offset(x: 4, y: -4)
                         }
                     }
+                    .accessibilityLabel(Strings.t("participants.title", lang: lang))
                 }
-                .accessibilityLabel(Strings.t("chat", lang: lang))
 
-                // More (overflow) button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showOverflow.toggle()
-                        if showOverflow {
-                            showReactionPicker = false
+                // Chat with unread badge — office only
+                if manager.adaptiveMode == .office {
+                    Button {
+                        showChat = true
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 38, height: 38)
+                                .background(VisioColors.primaryDark100)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            if manager.unreadCount > 0 {
+                                Text(manager.unreadCount <= 9 ? "\(manager.unreadCount)" : "9+")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(VisioColors.error500)
+                                    .clipShape(Capsule())
+                                    .offset(x: 4, y: -4)
+                            }
                         }
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(showOverflow ? VisioColors.primary500 : VisioColors.primaryDark100)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityLabel(Strings.t("chat", lang: lang))
                 }
-                .accessibilityLabel("More")
+
+                // More (overflow) button — office only
+                if manager.adaptiveMode == .office {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showOverflow.toggle()
+                            if showOverflow {
+                                showReactionPicker = false
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(showOverflow ? VisioColors.primary500 : VisioColors.primaryDark100)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .accessibilityLabel("More")
+                }
 
                 // Hangup
                 Button {
@@ -598,17 +687,20 @@ struct CallView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "phone.down.fill")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: buttonIconSize, weight: .medium))
                         .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
+                        .frame(width: buttonSize, height: buttonSize)
                         .background(VisioColors.error500)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: buttonCornerRadius))
                 }
                 .accessibilityLabel(Strings.t("control.leave", lang: lang))
             }
-            .padding(8)
-            .background(VisioColors.surface(dark: isDark))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(isLargeButtons ? 12 : 8)
+            .background(manager.adaptiveMode == .office
+                ? VisioColors.surface(dark: isDark)
+                : Color.black.opacity(0.6)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: isLargeButtons ? 24 : 16))
             .padding(.horizontal, 8)
         }
         .padding(.bottom, 8)

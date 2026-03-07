@@ -172,5 +172,6 @@
   "adaptive.pedestrian": "Modalità pedonale",
   "adaptive.car": "Modalità auto",
   "adaptive.auto": "Auto",
-  "adaptive.override": "Forza modalità"
+  "adaptive.override": "Forza modalità",
+  "adaptive.audioOnly": "Solo audio"
 }

@@ -377,11 +377,12 @@ fun CallScreen(
     }
 
     // Main call layout
+    val callBackground = if (adaptiveMode == AdaptiveMode.OFFICE) VisioColors.PrimaryDark50 else Color.Black
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(VisioColors.PrimaryDark50),
+                .background(callBackground),
     ) {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             // Connection state banner
@@ -395,66 +396,132 @@ fun CallScreen(
                         .fillMaxWidth()
                         .padding(8.dp),
             ) {
-                val focusedP = focusedParticipantSid?.let { sid -> participants.find { it.sid == sid } }
+                when (adaptiveMode) {
+                    AdaptiveMode.CAR -> {
+                        // Car mode: audio-only view with active speaker name
+                        val activeSpeakerSid = activeSpeakers.firstOrNull()
+                        val speaker = participants.find { it.sid == activeSpeakerSid } ?: participants.firstOrNull()
+                        val speakerName = speaker?.name ?: speaker?.identity ?: ""
 
-                if (focusedP != null) {
-                    // Focus mode — full-screen focused participant
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(8.dp)),
-                    ) {
-                        ParticipantTile(
-                            participant = focusedP,
-                            isActiveSpeaker = activeSpeakers.contains(focusedP.sid),
-                            handRaisePosition = handRaisedMap[focusedP.sid] ?: 0,
-                            onClick = { focusedParticipantSid = null },
-                        )
-                    }
-                } else {
-                    // Grid mode — space-filling tiles
-                    val count = participants.size
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                        val isLandscape = maxWidth > maxHeight
-                        val columnCount =
-                            when {
-                                count == 1 -> 1
-                                isLandscape -> minOf(count, 3)
-                                count <= 2 -> 1
-                                else -> 2
-                            }
-                        val rowCount = (count + columnCount - 1) / columnCount
-                        val tileHeight = (maxHeight - 8.dp * (rowCount - 1)) / rowCount
-
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        Box(
                             modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            for (rowStart in 0 until count step columnCount) {
-                                val rowEnd = minOf(rowStart + columnCount, count)
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(tileHeight),
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ri_mic_line),
+                                    contentDescription = null,
+                                    tint = VisioColors.Primary500,
+                                    modifier = Modifier.size(64.dp),
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = speakerName,
+                                    color = Color.White,
+                                    fontSize = 32.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = Strings.t("adaptive.audioOnly", lang),
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 16.sp,
+                                )
+                            }
+                        }
+                    }
+
+                    AdaptiveMode.PEDESTRIAN -> {
+                        // Pedestrian mode: single active speaker tile
+                        val activeSpeakerSid = activeSpeakers.firstOrNull()
+                        val speaker = participants.find { it.sid == activeSpeakerSid } ?: participants.firstOrNull()
+                        if (speaker != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp)),
+                            ) {
+                                ParticipantTile(
+                                    participant = speaker,
+                                    isActiveSpeaker = activeSpeakers.contains(speaker.sid),
+                                    handRaisePosition = handRaisedMap[speaker.sid] ?: 0,
+                                    onClick = {},
+                                )
+                            }
+                        }
+                    }
+
+                    AdaptiveMode.OFFICE -> {
+                        // Office mode: full grid (existing behavior)
+                        val focusedP = focusedParticipantSid?.let { sid -> participants.find { it.sid == sid } }
+
+                        if (focusedP != null) {
+                            // Focus mode — full-screen focused participant
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp)),
+                            ) {
+                                ParticipantTile(
+                                    participant = focusedP,
+                                    isActiveSpeaker = activeSpeakers.contains(focusedP.sid),
+                                    handRaisePosition = handRaisedMap[focusedP.sid] ?: 0,
+                                    onClick = { focusedParticipantSid = null },
+                                )
+                            }
+                        } else {
+                            // Grid mode — space-filling tiles
+                            val count = participants.size
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val isLandscape = maxWidth > maxHeight
+                                val columnCount =
+                                    when {
+                                        count == 1 -> 1
+                                        isLandscape -> minOf(count, 3)
+                                        count <= 2 -> 1
+                                        else -> 2
+                                    }
+                                val rowCount = (count + columnCount - 1) / columnCount
+                                val tileHeight = (maxHeight - 8.dp * (rowCount - 1)) / rowCount
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxSize(),
                                 ) {
-                                    for (idx in rowStart until rowEnd) {
-                                        val p = participants[idx]
-                                        Box(
+                                    for (rowStart in 0 until count step columnCount) {
+                                        val rowEnd = minOf(rowStart + columnCount, count)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             modifier =
                                                 Modifier
-                                                    .weight(1f)
-                                                    .fillMaxHeight()
-                                                    .clip(RoundedCornerShape(8.dp)),
+                                                    .fillMaxWidth()
+                                                    .height(tileHeight),
                                         ) {
-                                            ParticipantTile(
-                                                participant = p,
-                                                isActiveSpeaker = activeSpeakers.contains(p.sid),
-                                                handRaisePosition = handRaisedMap[p.sid] ?: 0,
-                                                onClick = { focusedParticipantSid = p.sid },
-                                            )
+                                            for (idx in rowStart until rowEnd) {
+                                                val p = participants[idx]
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .weight(1f)
+                                                            .fillMaxHeight()
+                                                            .clip(RoundedCornerShape(8.dp)),
+                                                ) {
+                                                    ParticipantTile(
+                                                        participant = p,
+                                                        isActiveSpeaker = activeSpeakers.contains(p.sid),
+                                                        handRaisePosition = handRaisedMap[p.sid] ?: 0,
+                                                        onClick = { focusedParticipantSid = p.sid },
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -930,7 +997,12 @@ private fun ControlBar(
             }
         }
 
-        // Main control bar
+        // Main control bar — button sizes adapt to mode
+        val isLargeButtons = adaptiveMode != AdaptiveMode.OFFICE
+        val btnSize = if (isLargeButtons) 96.dp else 38.dp
+        val iconSize = if (isLargeButtons) 48.dp else 20.dp
+        val cornerRadius = if (isLargeButtons) 16.dp else 8.dp
+
         Row(
             modifier =
                 Modifier
@@ -947,13 +1019,13 @@ private fun ControlBar(
                     Modifier
                         .background(
                             if (micEnabled) VisioColors.PrimaryDark100 else VisioColors.Error200,
-                            RoundedCornerShape(8.dp),
+                            RoundedCornerShape(cornerRadius),
                         ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
                     onClick = onToggleMic,
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(btnSize),
                 ) {
                     Icon(
                         painter =
@@ -962,130 +1034,140 @@ private fun ControlBar(
                             ),
                         contentDescription = if (micEnabled) Strings.t("control.mute", lang) else Strings.t("control.unmute", lang),
                         tint = VisioColors.White,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(iconSize),
                     )
                 }
-                IconButton(
-                    onClick = onAudioPicker,
-                    modifier = Modifier.size(22.dp, 38.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ri_arrow_up_s_line),
-                        contentDescription = Strings.t("control.audioDevices", lang),
-                        tint = VisioColors.White,
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
-            }
-
-            // Camera toggle
-            IconButton(
-                onClick = onToggleCamera,
-                modifier =
-                    Modifier
-                        .size(38.dp)
-                        .background(
-                            if (cameraEnabled) VisioColors.PrimaryDark100 else VisioColors.Error200,
-                            RoundedCornerShape(8.dp),
-                        ),
-            ) {
-                Icon(
-                    painter =
-                        painterResource(
-                            if (cameraEnabled) R.drawable.ri_video_on_line else R.drawable.ri_video_off_line,
-                        ),
-                    contentDescription = if (cameraEnabled) Strings.t("control.camOff", lang) else Strings.t("control.camOn", lang),
-                    tint = VisioColors.White,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            // Participants with count badge
-            IconButton(
-                onClick = onParticipants,
-                modifier =
-                    Modifier
-                        .size(38.dp)
-                        .background(VisioColors.PrimaryDark100, RoundedCornerShape(8.dp)),
-            ) {
-                BadgedBox(
-                    badge = {
-                        if (participantCount > 0) {
-                            Badge(
-                                containerColor = VisioColors.Primary500,
-                                contentColor = VisioColors.White,
-                            ) {
-                                Text(
-                                    text = "$participantCount",
-                                    fontSize = 10.sp,
-                                )
-                            }
-                        }
-                    },
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ri_group_line),
-                        contentDescription = Strings.t("participants.title", lang),
-                        tint = VisioColors.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            // Chat with unread badge
-            IconButton(
-                onClick = onChat,
-                modifier =
-                    Modifier
-                        .size(38.dp)
-                        .background(VisioColors.PrimaryDark100, RoundedCornerShape(8.dp)),
-            ) {
-                BadgedBox(
-                    badge = {
-                        if (unreadCount > 0) {
-                            Badge(
-                                containerColor = VisioColors.Error500,
-                                contentColor = VisioColors.White,
-                            ) {
-                                Text(
-                                    text = "$unreadCount",
-                                    fontSize = 10.sp,
-                                )
-                            }
-                        }
-                    },
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ri_chat_1_line),
-                        contentDescription = Strings.t("chat", lang),
-                        tint = VisioColors.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            // More (overflow) button
-            IconButton(
-                onClick = {
-                    showOverflow = !showOverflow
-                    if (showOverflow) {
-                        // Close reaction picker when opening overflow
+                if (adaptiveMode == AdaptiveMode.OFFICE) {
+                    IconButton(
+                        onClick = onAudioPicker,
+                        modifier = Modifier.size(22.dp, 38.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ri_arrow_up_s_line),
+                            contentDescription = Strings.t("control.audioDevices", lang),
+                            tint = VisioColors.White,
+                            modifier = Modifier.size(14.dp),
+                        )
                     }
-                },
-                modifier =
-                    Modifier
-                        .size(38.dp)
-                        .background(
-                            if (showOverflow) VisioColors.Primary500 else VisioColors.PrimaryDark100,
-                            RoundedCornerShape(8.dp),
-                        ),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ri_more_2_fill),
-                    contentDescription = "More",
-                    tint = VisioColors.White,
-                    modifier = Modifier.size(20.dp),
-                )
+                }
+            }
+
+            // Camera toggle — visible in OFFICE and PEDESTRIAN only
+            if (adaptiveMode != AdaptiveMode.CAR) {
+                IconButton(
+                    onClick = onToggleCamera,
+                    modifier =
+                        Modifier
+                            .size(btnSize)
+                            .background(
+                                if (cameraEnabled) VisioColors.PrimaryDark100 else VisioColors.Error200,
+                                RoundedCornerShape(cornerRadius),
+                            ),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                if (cameraEnabled) R.drawable.ri_video_on_line else R.drawable.ri_video_off_line,
+                            ),
+                        contentDescription = if (cameraEnabled) Strings.t("control.camOff", lang) else Strings.t("control.camOn", lang),
+                        tint = VisioColors.White,
+                        modifier = Modifier.size(iconSize),
+                    )
+                }
+            }
+
+            // Participants with count badge — OFFICE only
+            if (adaptiveMode == AdaptiveMode.OFFICE) {
+                IconButton(
+                    onClick = onParticipants,
+                    modifier =
+                        Modifier
+                            .size(btnSize)
+                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius)),
+                ) {
+                    BadgedBox(
+                        badge = {
+                            if (participantCount > 0) {
+                                Badge(
+                                    containerColor = VisioColors.Primary500,
+                                    contentColor = VisioColors.White,
+                                ) {
+                                    Text(
+                                        text = "$participantCount",
+                                        fontSize = 10.sp,
+                                    )
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ri_group_line),
+                            contentDescription = Strings.t("participants.title", lang),
+                            tint = VisioColors.White,
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                }
+            }
+
+            // Chat with unread badge — OFFICE only
+            if (adaptiveMode == AdaptiveMode.OFFICE) {
+                IconButton(
+                    onClick = onChat,
+                    modifier =
+                        Modifier
+                            .size(btnSize)
+                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius)),
+                ) {
+                    BadgedBox(
+                        badge = {
+                            if (unreadCount > 0) {
+                                Badge(
+                                    containerColor = VisioColors.Error500,
+                                    contentColor = VisioColors.White,
+                                ) {
+                                    Text(
+                                        text = "$unreadCount",
+                                        fontSize = 10.sp,
+                                    )
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ri_chat_1_line),
+                            contentDescription = Strings.t("chat", lang),
+                            tint = VisioColors.White,
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                }
+            }
+
+            // More (overflow) button — OFFICE only
+            if (adaptiveMode == AdaptiveMode.OFFICE) {
+                IconButton(
+                    onClick = {
+                        showOverflow = !showOverflow
+                        if (showOverflow) {
+                            // Close reaction picker when opening overflow
+                        }
+                    },
+                    modifier =
+                        Modifier
+                            .size(btnSize)
+                            .background(
+                                if (showOverflow) VisioColors.Primary500 else VisioColors.PrimaryDark100,
+                                RoundedCornerShape(cornerRadius),
+                            ),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ri_more_2_fill),
+                        contentDescription = "More",
+                        tint = VisioColors.White,
+                        modifier = Modifier.size(iconSize),
+                    )
+                }
             }
 
             // Hangup
@@ -1093,14 +1175,14 @@ private fun ControlBar(
                 onClick = onHangUp,
                 modifier =
                     Modifier
-                        .size(38.dp)
-                        .background(VisioColors.Error500, RoundedCornerShape(8.dp)),
+                        .size(btnSize)
+                        .background(VisioColors.Error500, RoundedCornerShape(cornerRadius)),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ri_phone_fill),
                     contentDescription = Strings.t("control.leave", lang),
                     tint = VisioColors.White,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(iconSize),
                 )
             }
         }
