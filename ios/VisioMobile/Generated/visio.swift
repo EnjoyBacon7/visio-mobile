@@ -507,6 +507,8 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     
     func activeSpeakers()  -> [String]
     
+    func addAccess(userId: String, roomId: String) throws  -> RoomAccess
+    
     func addListener(listener: VisioEventListener) 
     
     func admitParticipant(participantId: String) throws 
@@ -539,6 +541,8 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     
     func isMicrophoneEnabled()  -> Bool
     
+    func listAccesses(roomId: String) throws  -> [RoomAccess]
+    
     func listWaitingParticipants() throws  -> [WaitingParticipant]
     
     func logout(meetUrl: String) throws 
@@ -550,6 +554,10 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     func raiseHand() throws 
     
     func reconnect() throws 
+    
+    func removeAccess(accessId: String) throws 
+    
+    func searchUsers(query: String) throws  -> [UserSearchResult]
     
     func sendChatMessage(text: String) throws  -> ChatMessage
     
@@ -651,6 +659,15 @@ public convenience init(dataDir: String) {
 open func activeSpeakers() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_visio_ffi_fn_method_visioclient_active_speakers(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func addAccess(userId: String, roomId: String)throws  -> RoomAccess  {
+    return try  FfiConverterTypeRoomAccess_lift(try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_add_access(self.uniffiClonePointer(),
+        FfiConverterString.lower(userId),
+        FfiConverterString.lower(roomId),$0
     )
 })
 }
@@ -770,6 +787,14 @@ open func isMicrophoneEnabled() -> Bool  {
 })
 }
     
+open func listAccesses(roomId: String)throws  -> [RoomAccess]  {
+    return try  FfiConverterSequenceTypeRoomAccess.lift(try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_list_accesses(self.uniffiClonePointer(),
+        FfiConverterString.lower(roomId),$0
+    )
+})
+}
+    
 open func listWaitingParticipants()throws  -> [WaitingParticipant]  {
     return try  FfiConverterSequenceTypeWaitingParticipant.lift(try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_list_waiting_participants(self.uniffiClonePointer(),$0
@@ -807,6 +832,21 @@ open func reconnect()throws   {try rustCallWithError(FfiConverterTypeVisioError_
     uniffi_visio_ffi_fn_method_visioclient_reconnect(self.uniffiClonePointer(),$0
     )
 }
+}
+    
+open func removeAccess(accessId: String)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_remove_access(self.uniffiClonePointer(),
+        FfiConverterString.lower(accessId),$0
+    )
+}
+}
+    
+open func searchUsers(query: String)throws  -> [UserSearchResult]  {
+    return try  FfiConverterSequenceTypeUserSearchResult.lift(try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_search_users(self.uniffiClonePointer(),
+        FfiConverterString.lower(query),$0
+    )
+})
 }
     
 open func sendChatMessage(text: String)throws  -> ChatMessage  {
@@ -1090,6 +1130,7 @@ public func FfiConverterTypeChatMessage_lower(_ value: ChatMessage) -> RustBuffe
 
 
 public struct CreateRoomResult {
+    public var id: String
     public var slug: String
     public var name: String
     public var accessLevel: String
@@ -1098,7 +1139,8 @@ public struct CreateRoomResult {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(slug: String, name: String, accessLevel: String, livekitUrl: String, livekitToken: String) {
+    public init(id: String, slug: String, name: String, accessLevel: String, livekitUrl: String, livekitToken: String) {
+        self.id = id
         self.slug = slug
         self.name = name
         self.accessLevel = accessLevel
@@ -1114,6 +1156,9 @@ extension CreateRoomResult: Sendable {}
 
 extension CreateRoomResult: Equatable, Hashable {
     public static func ==(lhs: CreateRoomResult, rhs: CreateRoomResult) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
         if lhs.slug != rhs.slug {
             return false
         }
@@ -1133,6 +1178,7 @@ extension CreateRoomResult: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
         hasher.combine(slug)
         hasher.combine(name)
         hasher.combine(accessLevel)
@@ -1150,6 +1196,7 @@ public struct FfiConverterTypeCreateRoomResult: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomResult {
         return
             try CreateRoomResult(
+                id: FfiConverterString.read(from: &buf), 
                 slug: FfiConverterString.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
                 accessLevel: FfiConverterString.read(from: &buf), 
@@ -1159,6 +1206,7 @@ public struct FfiConverterTypeCreateRoomResult: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: CreateRoomResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
         FfiConverterString.write(value.slug, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterString.write(value.accessLevel, into: &buf)
@@ -1290,6 +1338,92 @@ public func FfiConverterTypeParticipantInfo_lift(_ buf: RustBuffer) throws -> Pa
 #endif
 public func FfiConverterTypeParticipantInfo_lower(_ value: ParticipantInfo) -> RustBuffer {
     return FfiConverterTypeParticipantInfo.lower(value)
+}
+
+
+public struct RoomAccess {
+    public var id: String
+    public var user: UserSearchResult
+    public var resource: String
+    public var role: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, user: UserSearchResult, resource: String, role: String) {
+        self.id = id
+        self.user = user
+        self.resource = resource
+        self.role = role
+    }
+}
+
+#if compiler(>=6)
+extension RoomAccess: Sendable {}
+#endif
+
+
+extension RoomAccess: Equatable, Hashable {
+    public static func ==(lhs: RoomAccess, rhs: RoomAccess) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.user != rhs.user {
+            return false
+        }
+        if lhs.resource != rhs.resource {
+            return false
+        }
+        if lhs.role != rhs.role {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(user)
+        hasher.combine(resource)
+        hasher.combine(role)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomAccess: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAccess {
+        return
+            try RoomAccess(
+                id: FfiConverterString.read(from: &buf), 
+                user: FfiConverterTypeUserSearchResult.read(from: &buf), 
+                resource: FfiConverterString.read(from: &buf), 
+                role: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomAccess, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterTypeUserSearchResult.write(value.user, into: &buf)
+        FfiConverterString.write(value.resource, into: &buf)
+        FfiConverterString.write(value.role, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomAccess_lift(_ buf: RustBuffer) throws -> RoomAccess {
+    return try FfiConverterTypeRoomAccess.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomAccess_lower(_ value: RoomAccess) -> RustBuffer {
+    return FfiConverterTypeRoomAccess.lower(value)
 }
 
 
@@ -1502,6 +1636,92 @@ public func FfiConverterTypeTrackInfo_lift(_ buf: RustBuffer) throws -> TrackInf
 #endif
 public func FfiConverterTypeTrackInfo_lower(_ value: TrackInfo) -> RustBuffer {
     return FfiConverterTypeTrackInfo.lower(value)
+}
+
+
+public struct UserSearchResult {
+    public var id: String
+    public var email: String
+    public var fullName: String?
+    public var shortName: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, email: String, fullName: String?, shortName: String?) {
+        self.id = id
+        self.email = email
+        self.fullName = fullName
+        self.shortName = shortName
+    }
+}
+
+#if compiler(>=6)
+extension UserSearchResult: Sendable {}
+#endif
+
+
+extension UserSearchResult: Equatable, Hashable {
+    public static func ==(lhs: UserSearchResult, rhs: UserSearchResult) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.email != rhs.email {
+            return false
+        }
+        if lhs.fullName != rhs.fullName {
+            return false
+        }
+        if lhs.shortName != rhs.shortName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(email)
+        hasher.combine(fullName)
+        hasher.combine(shortName)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUserSearchResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UserSearchResult {
+        return
+            try UserSearchResult(
+                id: FfiConverterString.read(from: &buf), 
+                email: FfiConverterString.read(from: &buf), 
+                fullName: FfiConverterOptionString.read(from: &buf), 
+                shortName: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UserSearchResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.email, into: &buf)
+        FfiConverterOptionString.write(value.fullName, into: &buf)
+        FfiConverterOptionString.write(value.shortName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserSearchResult_lift(_ buf: RustBuffer) throws -> UserSearchResult {
+    return try FfiConverterTypeUserSearchResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserSearchResult_lower(_ value: UserSearchResult) -> RustBuffer {
+    return FfiConverterTypeUserSearchResult.lower(value)
 }
 
 
@@ -2635,6 +2855,56 @@ fileprivate struct FfiConverterSequenceTypeParticipantInfo: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRoomAccess: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomAccess]
+
+    public static func write(_ value: [RoomAccess], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomAccess.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomAccess] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomAccess]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomAccess.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUserSearchResult: FfiConverterRustBuffer {
+    typealias SwiftType = [UserSearchResult]
+
+    public static func write(_ value: [UserSearchResult], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUserSearchResult.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UserSearchResult] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UserSearchResult]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUserSearchResult.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWaitingParticipant: FfiConverterRustBuffer {
     typealias SwiftType = [WaitingParticipant]
 
@@ -2681,6 +2951,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_active_speakers() != 15815) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_add_access() != 17518) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_add_listener() != 29296) {
@@ -2731,6 +3004,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_visio_ffi_checksum_method_visioclient_is_microphone_enabled() != 33466) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_visio_ffi_checksum_method_visioclient_list_accesses() != 20835) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_visio_ffi_checksum_method_visioclient_list_waiting_participants() != 28692) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2747,6 +3023,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_reconnect() != 64546) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_remove_access() != 62026) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_search_users() != 10285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_send_chat_message() != 33280) {

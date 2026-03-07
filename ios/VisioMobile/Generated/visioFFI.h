@@ -286,6 +286,11 @@ void*_Nonnull uniffi_visio_ffi_fn_constructor_visioclient_new(RustBuffer data_di
 RustBuffer uniffi_visio_ffi_fn_method_visioclient_active_speakers(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_ACCESS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_ACCESS
+RustBuffer uniffi_visio_ffi_fn_method_visioclient_add_access(void*_Nonnull ptr, RustBuffer user_id, RustBuffer room_id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_LISTENER
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_LISTENER
 void uniffi_visio_ffi_fn_method_visioclient_add_listener(void*_Nonnull ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
@@ -366,6 +371,11 @@ int8_t uniffi_visio_ffi_fn_method_visioclient_is_hand_raised(void*_Nonnull ptr, 
 int8_t uniffi_visio_ffi_fn_method_visioclient_is_microphone_enabled(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LIST_ACCESSES
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LIST_ACCESSES
+RustBuffer uniffi_visio_ffi_fn_method_visioclient_list_accesses(void*_Nonnull ptr, RustBuffer room_id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LIST_WAITING_PARTICIPANTS
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LIST_WAITING_PARTICIPANTS
 RustBuffer uniffi_visio_ffi_fn_method_visioclient_list_waiting_participants(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -394,6 +404,16 @@ void uniffi_visio_ffi_fn_method_visioclient_raise_hand(void*_Nonnull ptr, RustCa
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_RECONNECT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_RECONNECT
 void uniffi_visio_ffi_fn_method_visioclient_reconnect(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_REMOVE_ACCESS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_REMOVE_ACCESS
+void uniffi_visio_ffi_fn_method_visioclient_remove_access(void*_Nonnull ptr, RustBuffer access_id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_SEARCH_USERS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_SEARCH_USERS
+RustBuffer uniffi_visio_ffi_fn_method_visioclient_search_users(void*_Nonnull ptr, RustBuffer query, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_SEND_CHAT_MESSAGE
@@ -789,6 +809,12 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_active_speakers(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_ACCESS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_ACCESS
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_add_access(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_LISTENER
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_LISTENER
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_add_listener(void
@@ -885,6 +911,12 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_is_microphone_enabled(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LIST_ACCESSES
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LIST_ACCESSES
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_list_accesses(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LIST_WAITING_PARTICIPANTS
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LIST_WAITING_PARTICIPANTS
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_list_waiting_participants(void
@@ -918,6 +950,18 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_raise_hand(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_RECONNECT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_RECONNECT
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_reconnect(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_REMOVE_ACCESS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_REMOVE_ACCESS
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_remove_access(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_SEARCH_USERS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_SEARCH_USERS
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_search_users(void
     
 );
 #endif
