@@ -2,6 +2,7 @@ import Foundation
 import Network
 import CoreMotion
 import AVFoundation
+import visioFFI
 
 class ContextDetector {
     private let pathMonitor = NWPathMonitor()

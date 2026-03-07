@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.visio.AdaptiveMode
 import uniffi.visio.ChatMessage
 import uniffi.visio.ConnectionState
 import uniffi.visio.ParticipantInfo
@@ -98,6 +99,13 @@ object VisioManager : VisioEventListener {
     private var reactionIdCounter = 0L
     private val _reactions = MutableStateFlow<List<ReactionData>>(emptyList())
     val reactions: StateFlow<List<ReactionData>> = _reactions.asStateFlow()
+
+    // Adaptive mode
+    private val _adaptiveMode = MutableStateFlow(AdaptiveMode.OFFICE)
+    val adaptiveMode: StateFlow<AdaptiveMode> = _adaptiveMode.asStateFlow()
+
+    // Context detector for adaptive modes
+    private var contextDetector: ContextDetector? = null
 
     // Deep link: pre-fill room URL on HomeScreen
     var pendingDeepLink: String? by mutableStateOf(null)
@@ -331,6 +339,14 @@ object VisioManager : VisioEventListener {
     }
 
     /**
+     * Start context detection for adaptive modes (network, motion, bluetooth).
+     * Call after connecting to a room.
+     */
+    fun startContextDetection() {
+        contextDetector = ContextDetector(appContext).also { it.start() }
+    }
+
+    /**
      * Route audio input to a specific device.
      */
     fun setAudioInputDevice(device: AudioDeviceInfo) {
@@ -446,6 +462,8 @@ object VisioManager : VisioEventListener {
      * Full teardown: stop captures, playout, cancel pending coroutines, disconnect.
      */
     fun disconnect() {
+        contextDetector?.stop()
+        contextDetector = null
         stopCameraCapture()
         stopAudioCapture()
         stopAudioPlayout()
@@ -518,6 +536,7 @@ object VisioManager : VisioEventListener {
                         refreshParticipants()
                         refreshChatMessages()
                         CallForegroundService.start(appContext)
+                        startContextDetection()
                     }
                     is ConnectionState.Disconnected -> {
                         _handRaisedMap.value = emptyMap()
@@ -617,6 +636,10 @@ object VisioManager : VisioEventListener {
                         Log.e("VISIO", "Auto-reconnection failed: ${e.message}")
                     }
                 }
+            }
+            is VisioEvent.AdaptiveModeChanged -> {
+                _adaptiveMode.value = event.mode
+                Log.d("VISIO", "Adaptive mode changed: ${event.mode}")
             }
         }
     }
