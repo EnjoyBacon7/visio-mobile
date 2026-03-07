@@ -36,47 +36,49 @@ class AudioCapture {
         synchronized(lock) {
             if (running) return
             running = true
-        }
 
-        val bufferSize =
-            maxOf(
-                AudioRecord.getMinBufferSize(
+            val bufferSize =
+                maxOf(
+                    AudioRecord.getMinBufferSize(
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                    ),
+                    // 2 bytes per i16 sample
+                    SAMPLES_PER_FRAME * 2,
+                )
+
+            val rec =
+                AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                     SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT,
-                ),
-                // 2 bytes per i16 sample
-                SAMPLES_PER_FRAME * 2,
-            )
+                    bufferSize,
+                )
 
-        val rec =
-            AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize,
-            )
+            if (rec.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioRecord failed to initialize")
+                running = false
+                return
+            }
 
-        if (rec.state != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "AudioRecord failed to initialize")
-            running = false
-            return
+            recorder = rec
+            rec.startRecording()
         }
 
-        recorder = rec
+        Log.i(TAG, "Audio capture started: ${SAMPLE_RATE}Hz mono, ${FRAME_SIZE_MS}ms frames")
 
         recordThread =
             Thread({
+                val rec = synchronized(lock) { recorder } ?: return@Thread
+
                 // Direct ByteBuffer for JNI zero-copy
                 val buffer = ByteBuffer.allocateDirect(SAMPLES_PER_FRAME * 2)
                 buffer.order(ByteOrder.nativeOrder())
                 val shortBuffer = buffer.asShortBuffer()
 
                 android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-
-                rec.startRecording()
-                Log.i(TAG, "Audio capture started: ${SAMPLE_RATE}Hz mono, ${FRAME_SIZE_MS}ms frames")
 
                 val tempArray = ShortArray(SAMPLES_PER_FRAME)
 
@@ -95,8 +97,6 @@ class AudioCapture {
                     }
                 }
 
-                rec.stop()
-                rec.release()
                 Log.i(TAG, "Audio capture stopped")
             }, "AudioCapture").also { it.start() }
     }
@@ -107,11 +107,13 @@ class AudioCapture {
 
     fun stop() {
         val thread: Thread?
+        val rec: AudioRecord?
         synchronized(lock) {
             if (!running) return
             running = false
             thread = recordThread
             recordThread = null
+            rec = recorder
             recorder = null
         }
         thread?.let {
@@ -120,6 +122,10 @@ class AudioCapture {
                 Log.w(TAG, "Capture thread did not stop within 1s, interrupting")
                 it.interrupt()
             }
+        }
+        rec?.let {
+            it.stop()
+            it.release()
         }
         NativeVideo.nativeStopAudioCapture()
     }
