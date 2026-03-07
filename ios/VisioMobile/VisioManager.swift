@@ -29,6 +29,7 @@ class VisioManager: ObservableObject {
     @Published var displayName: String = ""
     @Published var pendingDeepLink: String? = nil
     @Published var isFrontCamera: Bool = true
+    @Published var backgroundMode: String = "off"
 
     // MARK: - Private
 
