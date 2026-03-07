@@ -28,6 +28,12 @@ pub enum VisioEvent {
         position: u32,
     },
     UnreadCountChanged(u32),
+    /// A participant is waiting in the lobby (host notification).
+    LobbyParticipantJoined { id: String, username: String },
+    /// A waiting participant left the lobby.
+    LobbyParticipantLeft { id: String },
+    /// Entry was denied by the host (participant notification).
+    LobbyDenied,
     /// Connection lost unexpectedly — native UI should call reconnect().
     ConnectionLost,
 }
@@ -38,6 +44,7 @@ pub enum ConnectionState {
     Connecting,
     Connected,
     Reconnecting { attempt: u32 },
+    WaitingForHost,
 }
 
 #[derive(Debug, Clone)]
