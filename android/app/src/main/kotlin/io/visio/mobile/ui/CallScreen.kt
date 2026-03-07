@@ -299,6 +299,7 @@ fun CallScreen(
     // In-call settings bottom sheet (replaces audio device sheet)
     if (showInCallSettings) {
         InCallSettingsSheet(
+            roomUrl = roomUrl,
             initialTab = inCallSettingsTab,
             onDismiss = { showInCallSettings = false },
             onSelectAudioInput = { device -> VisioManager.setAudioInputDevice(device) },

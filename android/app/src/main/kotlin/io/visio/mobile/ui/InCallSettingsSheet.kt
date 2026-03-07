@@ -20,7 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +60,7 @@ import io.visio.mobile.ui.theme.VisioColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InCallSettingsSheet(
+    roomUrl: String,
     initialTab: Int = 0,
     onDismiss: () -> Unit,
     onSelectAudioInput: (AudioDeviceInfo) -> Unit,
@@ -116,6 +124,12 @@ fun InCallSettingsSheet(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                 )
+                TabIcon(
+                    icon = Icons.Outlined.Info,
+                    label = Strings.t("settings.incall.roomInfo", lang),
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                )
             }
 
             // Right content
@@ -128,6 +142,7 @@ fun InCallSettingsSheet(
                 when (selectedTab) {
                     0 -> MicroTab(context, lang, onSelectAudioInput, onSelectAudioOutput)
                     1 -> CameraTab(lang, isFrontCamera, onSwitchCamera)
+                    3 -> RoomInfoTab(roomUrl, lang)
                     2 ->
                         NotificationsTab(
                             lang = lang,
@@ -492,6 +507,110 @@ private fun NotificationRow(
                     uncheckedTrackColor = VisioColors.PrimaryDark100,
                 ),
         )
+    }
+}
+
+@Composable
+private fun RoomInfoTab(roomUrl: String, lang: String) {
+    val context = LocalContext.current
+    val displayUrl = roomUrl.removePrefix("https://").removePrefix("http://")
+    val deepLink = "visio://$displayUrl"
+    var copiedHttp by remember { mutableStateOf(false) }
+    var copiedDeep by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // HTTPS link section
+        SectionHeader(Strings.t("settings.incall.roomLink", lang))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(VisioColors.PrimaryDark50, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Language,
+                contentDescription = null,
+                tint = VisioColors.White,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = displayUrl,
+                color = VisioColors.White,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            IconButton(onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Room URL", roomUrl))
+                copiedHttp = true
+            }) {
+                Icon(
+                    imageVector = if (copiedHttp) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                    contentDescription = if (copiedHttp) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),
+                    tint = VisioColors.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        // Deep link section
+        SectionHeader(Strings.t("settings.incall.deepLink", lang))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(VisioColors.PrimaryDark50, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.PhoneAndroid,
+                contentDescription = null,
+                tint = VisioColors.White,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = deepLink,
+                color = VisioColors.White,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            IconButton(onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Deep Link", deepLink))
+                copiedDeep = true
+            }) {
+                Icon(
+                    imageVector = if (copiedDeep) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                    contentDescription = if (copiedDeep) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),
+                    tint = VisioColors.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        // Share button
+        Button(
+            onClick = {
+                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, roomUrl)
+                }
+                context.startActivity(android.content.Intent.createChooser(shareIntent, null))
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Share,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(Strings.t("settings.incall.share", lang))
+        }
     }
 }
 
