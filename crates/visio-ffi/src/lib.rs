@@ -14,7 +14,7 @@ use visio_core::{
     },
 };
 
-mod blur;
+pub mod blur;
 
 uniffi::include_scaffolding!("visio");
 
