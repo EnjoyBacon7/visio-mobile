@@ -30,6 +30,18 @@ enum TrackSource {
     "Unknown",
 };
 
+enum AdaptiveMode {
+    "Office",
+    "Pedestrian",
+    "Car",
+};
+
+enum NetworkType {
+    "Wifi",
+    "Cellular",
+    "Unknown",
+};
+
 dictionary ParticipantInfo {
     string sid;
     string identity;
@@ -85,6 +97,7 @@ interface VisioEvent {
     LobbyParticipantLeft(string id);
     LobbyDenied();
     ReactionReceived(string participant_sid, string participant_name, string emoji);
+    AdaptiveModeChanged(AdaptiveMode mode);
     ConnectionLost();
 };
 
@@ -254,6 +267,16 @@ interface VisioClient {
 
     [Throws=VisioError]
     void remove_access(string access_id);
+
+    void report_network_type(NetworkType network_type);
+
+    void report_motion_detected(boolean detected);
+
+    void report_bluetooth_car_kit(boolean connected);
+
+    AdaptiveMode adaptive_mode();
+
+    void set_adaptive_mode_override(AdaptiveMode? mode);
 
     void start_video_renderer(string track_sid);
 

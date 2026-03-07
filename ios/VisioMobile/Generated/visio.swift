@@ -524,6 +524,7 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     func activeSpeakers()  -> [String]
     
     func addAccess(userId: String, roomId: String) throws  -> RoomAccess
+    func adaptiveMode()  -> AdaptiveMode
     
     func addListener(listener: VisioEventListener) 
     
@@ -580,10 +581,17 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     func removeAccess(accessId: String) throws 
     
     func searchUsers(query: String) throws  -> [UserSearchResult]
+    func reportBluetoothCarKit(connected: Bool) 
+    
+    func reportMotionDetected(detected: Bool) 
+    
+    func reportNetworkType(networkType: NetworkType) 
     
     func sendChatMessage(text: String) throws  -> ChatMessage
     
     func sendReaction(emoji: String) throws 
+    
+    func setAdaptiveModeOverride(mode: AdaptiveMode?) 
     
     func setBackgroundMode(mode: String) 
     
@@ -694,6 +702,9 @@ open func addAccess(userId: String, roomId: String)throws  -> RoomAccess  {
     uniffi_visio_ffi_fn_method_visioclient_add_access(self.uniffiClonePointer(),
         FfiConverterString.lower(userId),
         FfiConverterString.lower(roomId),$0
+open func adaptiveMode() -> AdaptiveMode  {
+    return try!  FfiConverterTypeAdaptiveMode_lift(try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_adaptive_mode(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -885,6 +896,9 @@ open func reconnect()throws   {try rustCallWithError(FfiConverterTypeVisioError_
 open func removeAccess(accessId: String)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_remove_access(self.uniffiClonePointer(),
         FfiConverterString.lower(accessId),$0
+open func reportBluetoothCarKit(connected: Bool)  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_report_bluetooth_car_kit(self.uniffiClonePointer(),
+        FfiConverterBool.lower(connected),$0
     )
 }
 }
@@ -895,6 +909,18 @@ open func searchUsers(query: String)throws  -> [UserSearchResult]  {
         FfiConverterString.lower(query),$0
     )
 })
+open func reportMotionDetected(detected: Bool)  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_report_motion_detected(self.uniffiClonePointer(),
+        FfiConverterBool.lower(detected),$0
+    )
+}
+}
+    
+open func reportNetworkType(networkType: NetworkType)  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_report_network_type(self.uniffiClonePointer(),
+        FfiConverterTypeNetworkType_lower(networkType),$0
+    )
+}
 }
     
 open func sendChatMessage(text: String)throws  -> ChatMessage  {
@@ -908,6 +934,13 @@ open func sendChatMessage(text: String)throws  -> ChatMessage  {
 open func sendReaction(emoji: String)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_send_reaction(self.uniffiClonePointer(),
         FfiConverterString.lower(emoji),$0
+    )
+}
+}
+    
+open func setAdaptiveModeOverride(mode: AdaptiveMode?)  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_set_adaptive_mode_override(self.uniffiClonePointer(),
+        FfiConverterOptionTypeAdaptiveMode.lower(mode),$0
     )
 }
 }
@@ -1859,6 +1892,83 @@ public func FfiConverterTypeWaitingParticipant_lower(_ value: WaitingParticipant
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AdaptiveMode {
+    
+    case office
+    case pedestrian
+    case car
+}
+
+
+#if compiler(>=6)
+extension AdaptiveMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAdaptiveMode: FfiConverterRustBuffer {
+    typealias SwiftType = AdaptiveMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AdaptiveMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .office
+        
+        case 2: return .pedestrian
+        
+        case 3: return .car
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AdaptiveMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .office:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .pedestrian:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .car:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAdaptiveMode_lift(_ buf: RustBuffer) throws -> AdaptiveMode {
+    return try FfiConverterTypeAdaptiveMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAdaptiveMode_lower(_ value: AdaptiveMode) -> RustBuffer {
+    return FfiConverterTypeAdaptiveMode.lower(value)
+}
+
+
+extension AdaptiveMode: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ConnectionQuality {
     
     case excellent
@@ -2028,6 +2138,83 @@ public func FfiConverterTypeConnectionState_lower(_ value: ConnectionState) -> R
 
 
 extension ConnectionState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum NetworkType {
+    
+    case wifi
+    case cellular
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension NetworkType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkType: FfiConverterRustBuffer {
+    typealias SwiftType = NetworkType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .wifi
+        
+        case 2: return .cellular
+        
+        case 3: return .unknown
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NetworkType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .wifi:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .cellular:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .unknown:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkType_lift(_ buf: RustBuffer) throws -> NetworkType {
+    return try FfiConverterTypeNetworkType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkType_lower(_ value: NetworkType) -> RustBuffer {
+    return FfiConverterTypeNetworkType.lower(value)
+}
+
+
+extension NetworkType: Equatable, Hashable {}
 
 
 
@@ -2529,6 +2716,8 @@ public enum VisioEvent {
     case lobbyDenied
     case reactionReceived(participantSid: String, participantName: String, emoji: String
     )
+    case adaptiveModeChanged(mode: AdaptiveMode
+    )
     case connectionLost
 }
 
@@ -2595,6 +2784,11 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
         )
 
         case 17: return .connectionLost
+        
+        case 14: return .adaptiveModeChanged(mode: try FfiConverterTypeAdaptiveMode.read(from: &buf)
+        )
+        
+        case 15: return .connectionLost
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2693,6 +2887,15 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
 
         case .connectionLost:
             writeInt(&buf, Int32(17))
+            
+        
+        case let .adaptiveModeChanged(mode):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeAdaptiveMode.write(mode, into: &buf)
+            
+        
+        case .connectionLost:
+            writeInt(&buf, Int32(15))
         
         }
     }
@@ -2856,6 +3059,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAdaptiveMode: FfiConverterRustBuffer {
+    typealias SwiftType = AdaptiveMode?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAdaptiveMode.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAdaptiveMode.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -3038,6 +3265,7 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_add_access() != 17518) {
+    if (uniffi_visio_ffi_checksum_method_visioclient_adaptive_mode() != 32610) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_add_listener() != 29296) {
@@ -3122,12 +3350,22 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_search_users() != 10285) {
+    if (uniffi_visio_ffi_checksum_method_visioclient_report_bluetooth_car_kit() != 30310) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_report_motion_detected() != 62691) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_report_network_type() != 31080) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_send_chat_message() != 33280) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_send_reaction() != 6155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_set_adaptive_mode_override() != 48849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_set_background_mode() != 59805) {
