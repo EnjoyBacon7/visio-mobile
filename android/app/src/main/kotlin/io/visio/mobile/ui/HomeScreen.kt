@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +56,7 @@ fun HomeScreen(
     onJoin: (roomUrl: String, username: String) -> Unit,
     onSettings: () -> Unit,
 ) {
+    val context = LocalContext.current
     var roomUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     val lang = VisioManager.currentLang
@@ -118,7 +121,7 @@ fun HomeScreen(
     }
 
     // Pre-fill display name from VisioManager observable state
-    LaunchedEffect(Unit) {
+    LaunchedEffect(VisioManager.displayName) {
         val name = VisioManager.displayName
         if (name.isNotBlank() && username.isEmpty()) {
             username = name
@@ -176,7 +179,35 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Connect / Logout section
+        if (VisioManager.isAuthenticated) {
+            Text(
+                text = "${Strings.t("home.loggedAs", lang)} ${VisioManager.authenticatedDisplayName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isDark) VisioColors.Greyscale400 else VisioColors.LightTextSecondary,
+            )
+            TextButton(onClick = { VisioManager.logout() }) {
+                Text(Strings.t("home.logout", lang))
+            }
+        } else {
+            Button(
+                onClick = {
+                    val meetInstance = meetInstances.firstOrNull() ?: return@Button
+                    VisioManager.authManager.launchOidcFlow(
+                        context as android.app.Activity,
+                        meetInstance,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(),
+            ) {
+                Text(Strings.t("home.connect", lang))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = Strings.t("home.meetUrl", lang),
