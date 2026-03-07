@@ -85,11 +85,11 @@ impl AdaptiveEngine {
 
     /// Computes the mode from current signals (ignoring override).
     ///
-    /// Priority: Car (bluetooth) > Pedestrian (cellular + motion) > Office.
+    /// Priority: Car (bluetooth) > Pedestrian (motion) > Office.
     fn compute_mode(&self) -> AdaptiveMode {
         if self.bluetooth_car {
             AdaptiveMode::Car
-        } else if self.network == NetworkType::Cellular && self.motion {
+        } else if self.motion {
             AdaptiveMode::Pedestrian
         } else {
             AdaptiveMode::Office
@@ -108,18 +108,17 @@ mod tests {
     }
 
     #[test]
-    fn cellular_without_motion_stays_office() {
+    fn motion_becomes_pedestrian() {
         let mut engine = AdaptiveEngine::new();
-        engine.update_signal(ContextSignal::NetworkType(NetworkType::Cellular));
-        assert_eq!(engine.current_mode(), AdaptiveMode::Office);
+        engine.update_signal(ContextSignal::MotionDetected(true));
+        assert_eq!(engine.current_mode(), AdaptiveMode::Pedestrian);
     }
 
     #[test]
-    fn cellular_with_motion_becomes_pedestrian() {
+    fn no_motion_stays_office() {
         let mut engine = AdaptiveEngine::new();
         engine.update_signal(ContextSignal::NetworkType(NetworkType::Cellular));
-        engine.update_signal(ContextSignal::MotionDetected(true));
-        assert_eq!(engine.current_mode(), AdaptiveMode::Pedestrian);
+        assert_eq!(engine.current_mode(), AdaptiveMode::Office);
     }
 
     #[test]
@@ -163,13 +162,12 @@ mod tests {
     }
 
     #[test]
-    fn wifi_resets_to_office() {
+    fn motion_stops_returns_to_office() {
         let mut engine = AdaptiveEngine::new();
-        engine.update_signal(ContextSignal::NetworkType(NetworkType::Cellular));
         engine.update_signal(ContextSignal::MotionDetected(true));
         assert_eq!(engine.current_mode(), AdaptiveMode::Pedestrian);
 
-        engine.update_signal(ContextSignal::NetworkType(NetworkType::Wifi));
+        engine.update_signal(ContextSignal::MotionDetected(false));
         assert_eq!(engine.current_mode(), AdaptiveMode::Office);
     }
 }

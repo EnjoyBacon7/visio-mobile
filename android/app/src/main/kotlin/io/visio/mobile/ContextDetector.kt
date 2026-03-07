@@ -33,9 +33,14 @@ class ContextDetector(private val context: Context) {
 
     private var lastAccelTimestamp = 0L
     private var motionCount = 0
-    private val MOTION_THRESHOLD = 1.5f
-    private val MOTION_WINDOW_MS = 5000L
-    private val MOTION_COUNT_THRESHOLD = 10
+    private var lastReportedMotion = false
+    private val MOTION_THRESHOLD = 1.2f
+    private val MOTION_WINDOW_MS = 3000L
+    private val MOTION_COUNT_THRESHOLD = 8
+
+    companion object {
+        private const val TAG = "ContextDetector"
+    }
 
     fun start() {
         startNetworkMonitoring()
@@ -65,9 +70,11 @@ class ContextDetector(private val context: Context) {
                     caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
                     else -> NetworkType.UNKNOWN
                 }
+                Log.d(TAG, "Network type: $type")
                 try { VisioManager.client.reportNetworkType(type) } catch (_: Exception) {}
             }
             override fun onLost(network: Network) {
+                Log.d(TAG, "Network lost")
                 try { VisioManager.client.reportNetworkType(NetworkType.UNKNOWN) } catch (_: Exception) {}
             }
         }
@@ -107,7 +114,11 @@ class ContextDetector(private val context: Context) {
                 }
 
                 val moving = motionCount > MOTION_COUNT_THRESHOLD
-                try { VisioManager.client.reportMotionDetected(moving) } catch (_: Exception) {}
+                if (moving != lastReportedMotion) {
+                    lastReportedMotion = moving
+                    Log.d(TAG, "Motion state changed: moving=$moving (count=$motionCount)")
+                    try { VisioManager.client.reportMotionDetected(moving) } catch (_: Exception) {}
+                }
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
