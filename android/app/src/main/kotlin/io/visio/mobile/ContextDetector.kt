@@ -1,5 +1,9 @@
 package io.visio.mobile
 
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -152,12 +156,48 @@ class ContextDetector(private val context: Context) {
     }
 
     private fun reportBluetoothCarKit() {
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val hasCarKit = devices.any {
-            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val adapter = btManager?.adapter
+        if (adapter == null) {
+            Log.d(TAG, "No Bluetooth adapter")
+            try { VisioManager.client.reportBluetoothCarKit(false) } catch (_: Exception) {}
+            return
         }
-        Log.d(TAG, "Bluetooth car kit: $hasCarKit (outputs: ${devices.map { "${it.productName}(${it.type})" }})")
-        try { VisioManager.client.reportBluetoothCarKit(hasCarKit) } catch (_: Exception) {}
+
+        // Check connected Bluetooth audio devices via A2DP and Headset profiles
+        var hasCarKit = false
+        val profilesToCheck = listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET)
+
+        // getConnectedDevices needs BLUETOOTH_CONNECT permission
+        try {
+            for (profileType in profilesToCheck) {
+                adapter.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
+                    override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                        val devices = proxy.connectedDevices
+                        for (device in devices) {
+                            val deviceClass = device.bluetoothClass?.deviceClass ?: 0
+                            val majorClass = device.bluetoothClass?.majorDeviceClass ?: 0
+                            val name = device.name ?: "unknown"
+                            Log.d(TAG, "BT device: name=$name class=0x${deviceClass.toString(16)} major=0x${majorClass.toString(16)}")
+
+                            val isCarAudio = deviceClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
+                                deviceClass == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
+                            if (isCarAudio) {
+                                hasCarKit = true
+                                Log.d(TAG, "Car audio device detected: $name")
+                            }
+                        }
+                        Log.d(TAG, "Bluetooth car kit (profile=$profile): $hasCarKit")
+                        try { VisioManager.client.reportBluetoothCarKit(hasCarKit) } catch (_: Exception) {}
+                        adapter.closeProfileProxy(profile, proxy)
+                    }
+
+                    override fun onServiceDisconnected(profile: Int) {}
+                }, profileType)
+            }
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Missing BLUETOOTH_CONNECT permission: ${e.message}")
+            try { VisioManager.client.reportBluetoothCarKit(false) } catch (_: Exception) {}
+        }
     }
 }
