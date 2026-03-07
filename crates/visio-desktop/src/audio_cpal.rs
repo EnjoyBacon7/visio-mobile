@@ -69,17 +69,16 @@ impl CpalAudioPlayout {
                     let mut buf = vec![0i16; lk_samples];
                     playout_buffer.pull_samples(&mut buf);
 
-                    // Write to output: resample + mono→stereo expansion + i16→f32
-                    for frame_idx in 0..device_frames {
-                        let src_idx = if device_sr == LK_SAMPLE_RATE {
-                            frame_idx
-                        } else {
-                            (frame_idx as u64 * lk_samples as u64 / device_frames as u64) as usize
-                        };
-                        let src_idx = src_idx.min(lk_samples - 1);
-                        let sample_f32 = buf[src_idx] as f32 / 32768.0;
+                    // Resample 48kHz → device rate using linear interpolation
+                    let resampled = if device_sr == LK_SAMPLE_RATE {
+                        buf
+                    } else {
+                        linear_resample(&buf, device_frames)
+                    };
 
-                        // Duplicate mono to all channels
+                    // Write to output: i16→f32 + mono→multichannel expansion
+                    for (frame_idx, &sample) in resampled.iter().enumerate() {
+                        let sample_f32 = sample as f32 / 32768.0;
                         for ch in 0..device_ch as usize {
                             data[frame_idx * device_ch as usize + ch] = sample_f32;
                         }
@@ -163,23 +162,24 @@ impl CpalAudioCapture {
                     };
                     let lk_frames = lk_frames.max(1);
 
-                    let mut pcm = vec![0i16; lk_frames];
-                    for i in 0..lk_frames {
-                        let src_frame = if device_sr == LK_SAMPLE_RATE {
-                            i
-                        } else {
-                            (i as u64 * device_frames as u64 / lk_frames as u64) as usize
-                        };
-                        let src_frame = src_frame.min(device_frames - 1);
+                    // Mix multichannel to mono
+                    let mono = if device_ch == 1 {
+                        data.to_vec()
+                    } else {
+                        mix_to_mono(data, device_ch as usize)
+                    };
 
-                        // Average all channels → mono
-                        let mut sum = 0.0f32;
-                        for ch in 0..device_ch as usize {
-                            sum += data[src_frame * device_ch as usize + ch];
-                        }
-                        let mono = sum / device_ch as f32;
-                        pcm[i] = (mono * 32767.0).clamp(-32768.0, 32767.0) as i16;
-                    }
+                    // Convert f32 mono to i16
+                    let mono_i16: Vec<i16> = mono.iter()
+                        .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
+                        .collect();
+
+                    // Resample device rate → 48kHz using linear interpolation
+                    let pcm = if device_sr == LK_SAMPLE_RATE {
+                        mono_i16
+                    } else {
+                        linear_resample(&mono_i16, lk_frames)
+                    };
 
                     let frame = AudioFrame {
                         data: pcm.into(),
@@ -209,5 +209,111 @@ impl CpalAudioCapture {
     pub fn stop(&self) {
         self.running.store(false, Ordering::Relaxed);
         tracing::info!("cpal audio capture stopped");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pure helper functions for audio processing
+// ---------------------------------------------------------------------------
+
+/// Linear interpolation resampling from `input` to a buffer of `output_len` samples.
+fn linear_resample(input: &[i16], output_len: usize) -> Vec<i16> {
+    if input.is_empty() || output_len == 0 {
+        return vec![0i16; output_len];
+    }
+    if input.len() == output_len {
+        return input.to_vec();
+    }
+    let mut output = Vec::with_capacity(output_len);
+    let ratio = (input.len() - 1) as f64 / (output_len - 1).max(1) as f64;
+    for i in 0..output_len {
+        let pos = i as f64 * ratio;
+        let idx = pos as usize;
+        let frac = pos - idx as f64;
+        let sample = if idx + 1 < input.len() {
+            input[idx] as f64 * (1.0 - frac) + input[idx + 1] as f64 * frac
+        } else {
+            input[idx] as f64
+        };
+        output.push(sample.round() as i16);
+    }
+    output
+}
+
+/// Mix multi-channel f32 interleaved audio to mono, averaging all channels.
+fn mix_to_mono(data: &[f32], channels: usize) -> Vec<f32> {
+    if channels == 0 {
+        return Vec::new();
+    }
+    let frames = data.len() / channels;
+    let mut mono = Vec::with_capacity(frames);
+    for f in 0..frames {
+        let mut sum = 0.0f32;
+        for ch in 0..channels {
+            sum += data[f * channels + ch];
+        }
+        mono.push(sum / channels as f32);
+    }
+    mono
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resample_same_length() {
+        let input: Vec<i16> = vec![0, 100, 200, 300, 400];
+        let output = linear_resample(&input, 5);
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn resample_upsample_2x() {
+        let input: Vec<i16> = vec![0, 100];
+        let output = linear_resample(&input, 3);
+        assert_eq!(output, vec![0, 50, 100]);
+    }
+
+    #[test]
+    fn resample_downsample() {
+        let input: Vec<i16> = vec![0, 50, 100];
+        let output = linear_resample(&input, 2);
+        assert_eq!(output[0], 0);
+        assert_eq!(output[1], 100);
+    }
+
+    #[test]
+    fn resample_empty_input() {
+        let output = linear_resample(&[], 0);
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn resample_single_sample() {
+        let output = linear_resample(&[42], 5);
+        assert_eq!(output, vec![42, 42, 42, 42, 42]);
+    }
+
+    #[test]
+    fn mix_to_mono_stereo() {
+        let stereo = vec![100.0f32, 200.0, 300.0, 400.0];
+        let mono = mix_to_mono(&stereo, 2);
+        assert_eq!(mono.len(), 2);
+        assert!((mono[0] - 150.0).abs() < f32::EPSILON);
+        assert!((mono[1] - 350.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mix_to_mono_single_channel() {
+        let data = vec![1.0f32, 2.0, 3.0];
+        let mono = mix_to_mono(&data, 1);
+        assert_eq!(mono, data);
+    }
+
+    #[test]
+    fn mix_to_mono_empty() {
+        let mono = mix_to_mono(&[], 2);
+        assert!(mono.is_empty());
     }
 }
