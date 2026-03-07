@@ -167,5 +167,10 @@
   "notification.channelName": "Llamada activa",
   "notification.channelDescription": "Se muestra cuando hay una llamada en curso",
   "notification.title": "Visio Mobile",
-  "notification.text": "Llamada en curso"
+  "notification.text": "Llamada en curso",
+  "adaptive.office": "Modo oficina",
+  "adaptive.pedestrian": "Modo peatón",
+  "adaptive.car": "Modo coche",
+  "adaptive.auto": "Auto",
+  "adaptive.override": "Forzar modo"
 }

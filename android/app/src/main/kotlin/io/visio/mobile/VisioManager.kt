@@ -640,6 +640,14 @@ object VisioManager : VisioEventListener {
             is VisioEvent.AdaptiveModeChanged -> {
                 _adaptiveMode.value = event.mode
                 Log.d("VISIO", "Adaptive mode changed: ${event.mode}")
+                if (event.mode == uniffi.visio.AdaptiveMode.CAR) {
+                    scope.launch(Dispatchers.IO) {
+                        if (client.isCameraEnabled()) {
+                            stopCameraCapture()
+                            client.setCameraEnabled(false)
+                        }
+                    }
+                }
             }
         }
     }

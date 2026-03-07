@@ -167,5 +167,10 @@
   "restricted.member": "Membre",
   "restricted.alreadyInvited": "Déjà invité",
   "restricted.searchUnavailable": "La recherche d'utilisateurs n'est pas disponible sur ce serveur",
-  "restricted.noResults": "Aucun utilisateur trouvé"
+  "restricted.noResults": "Aucun utilisateur trouvé",
+  "adaptive.office": "Mode bureau",
+  "adaptive.pedestrian": "Mode piéton",
+  "adaptive.car": "Mode voiture",
+  "adaptive.auto": "Auto",
+  "adaptive.override": "Forcer le mode"
 }
