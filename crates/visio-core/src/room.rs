@@ -361,14 +361,6 @@ impl RoomManager {
             .await
             .map_err(|e| VisioError::Room(format!("send reaction: {e}")))?;
 
-        // Also emit locally so the sender sees their own reaction
-        let local = room.local_participant();
-        self.emitter.emit(VisioEvent::ReactionReceived {
-            participant_sid: local.sid().to_string(),
-            participant_name: local.name().to_string(),
-            emoji: emoji.to_string(),
-        });
-
         Ok(())
     }
 
