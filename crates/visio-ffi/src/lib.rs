@@ -14,6 +14,8 @@ use visio_core::{
     },
 };
 
+mod blur;
+
 uniffi::include_scaffolding!("visio");
 
 // ── Android WebRTC initialization ────────────────────────────────────
