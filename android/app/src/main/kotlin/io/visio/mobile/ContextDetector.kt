@@ -173,23 +173,28 @@ class ContextDetector(private val context: Context) {
             for (profileType in profilesToCheck) {
                 adapter.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
                     override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                        val devices = proxy.connectedDevices
-                        for (device in devices) {
-                            val deviceClass = device.bluetoothClass?.deviceClass ?: 0
-                            val majorClass = device.bluetoothClass?.majorDeviceClass ?: 0
-                            val name = device.name ?: "unknown"
-                            Log.d(TAG, "BT device: name=$name class=0x${deviceClass.toString(16)} major=0x${majorClass.toString(16)}")
+                        try {
+                            val devices = proxy.connectedDevices
+                            for (device in devices) {
+                                val deviceClass = device.bluetoothClass?.deviceClass ?: 0
+                                val majorClass = device.bluetoothClass?.majorDeviceClass ?: 0
+                                val name = device.name ?: "unknown"
+                                Log.d(TAG, "BT device: name=$name class=0x${deviceClass.toString(16)} major=0x${majorClass.toString(16)}")
 
-                            val isCarAudio = deviceClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
-                                deviceClass == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
-                            if (isCarAudio) {
-                                hasCarKit = true
-                                Log.d(TAG, "Car audio device detected: $name")
+                                val isCarAudio = deviceClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
+                                    deviceClass == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
+                                if (isCarAudio) {
+                                    hasCarKit = true
+                                    Log.d(TAG, "Car audio device detected: $name")
+                                }
                             }
-                        }
-                        Log.d(TAG, "Bluetooth car kit (profile=$profile): $hasCarKit")
-                        try { VisioManager.client.reportBluetoothCarKit(hasCarKit) } catch (_: Exception) {}
-                        adapter.closeProfileProxy(profile, proxy)
+                            Log.d(TAG, "Bluetooth car kit (profile=$profile): $hasCarKit")
+                            VisioManager.client.reportBluetoothCarKit(hasCarKit)
+                        } catch (e: SecurityException) {
+                            Log.w(TAG, "BLUETOOTH_CONNECT permission not granted: ${e.message}")
+                            try { VisioManager.client.reportBluetoothCarKit(false) } catch (_: Exception) {}
+                        } catch (_: Exception) {}
+                        try { adapter.closeProfileProxy(profile, proxy) } catch (_: Exception) {}
                     }
 
                     override fun onServiceDisconnected(profile: Int) {}
