@@ -90,6 +90,7 @@ interface VisioError {
     Auth(string msg);
     Http(string msg);
     InvalidUrl(string msg);
+    Session(string msg);
 };
 
 callback interface VisioEventListener {

@@ -250,7 +250,7 @@ async fn validate_room(
     if let Err(e) = visio_core::AuthService::extract_slug(&url) {
         return Ok(serde_json::json!({ "status": "invalid_format", "message": e.to_string() }));
     }
-    match visio_core::AuthService::validate_room(&url, username.as_deref()).await {
+    match visio_core::AuthService::validate_room(&url, username.as_deref(), None).await {
         Ok(token_info) => Ok(serde_json::json!({
             "status": "valid",
             "livekit_url": token_info.livekit_url,
@@ -270,7 +270,7 @@ async fn connect(
     username: Option<String>,
 ) -> Result<(), String> {
     let room = state.room.lock().await;
-    room.connect(&meet_url, username.as_deref())
+    room.connect(&meet_url, username.as_deref(), None)
         .await
         .map_err(|e| e.to_string())
 }

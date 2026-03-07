@@ -33,6 +33,7 @@ impl AuthService {
     pub async fn request_token(
         meet_url: &str,
         username: Option<&str>,
+        session_cookie: Option<&str>,
     ) -> Result<TokenInfo, VisioError> {
         let (instance, slug) = Self::parse_meet_url(meet_url)?;
 
@@ -44,7 +45,14 @@ impl AuthService {
 
         tracing::info!("requesting token from Meet API: {}", api_url);
 
-        let resp = reqwest::get(&api_url)
+        let client = reqwest::Client::new();
+        let mut request = client.get(&api_url);
+        if let Some(cookie) = session_cookie {
+            request = request.header(reqwest::header::COOKIE, format!("sessionid={}", cookie));
+        }
+
+        let resp = request
+            .send()
             .await
             .map_err(|e| VisioError::Http(e.to_string()))?;
 
@@ -102,8 +110,9 @@ impl AuthService {
     pub async fn validate_room(
         meet_url: &str,
         username: Option<&str>,
+        session_cookie: Option<&str>,
     ) -> Result<TokenInfo, VisioError> {
-        Self::request_token(meet_url, username).await
+        Self::request_token(meet_url, username, session_cookie).await
     }
 
     /// Parse a Meet URL into (instance, room_slug).

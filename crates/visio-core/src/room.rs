@@ -168,14 +168,19 @@ impl RoomManager {
     /// Connect to a room using the Meet API.
     ///
     /// Calls the Meet API to get a token, then connects to the LiveKit room.
-    pub async fn connect(&self, meet_url: &str, username: Option<&str>) -> Result<(), VisioError> {
+    pub async fn connect(
+        &self,
+        meet_url: &str,
+        username: Option<&str>,
+        session_cookie: Option<&str>,
+    ) -> Result<(), VisioError> {
         // Store connection info for potential reconnection
         *self.last_meet_url.lock().await = Some(meet_url.to_string());
         *self.last_username.lock().await = username.map(|s| s.to_string());
 
         self.set_connection_state(ConnectionState::Connecting).await;
 
-        let token_info = AuthService::request_token(meet_url, username).await?;
+        let token_info = AuthService::request_token(meet_url, username, session_cookie).await?;
 
         self.connect_with_token(&token_info.livekit_url, &token_info.token)
             .await
@@ -337,7 +342,7 @@ impl RoomManager {
 
             tracing::info!("reconnection attempt {attempt}/{max_attempts}");
 
-            match self.connect(&meet_url, username.as_deref()).await {
+            match self.connect(&meet_url, username.as_deref(), None).await {
                 Ok(()) => {
                     tracing::info!("reconnection successful on attempt {attempt}");
                     return Ok(());

@@ -337,6 +337,8 @@ pub enum VisioError {
     Http { msg: String },
     #[error("Invalid URL: {msg}")]
     InvalidUrl { msg: String },
+    #[error("Session error: {msg}")]
+    Session { msg: String },
 }
 
 impl From<visio_core::VisioError> for VisioError {
@@ -348,6 +350,7 @@ impl From<visio_core::VisioError> for VisioError {
             visio_core::VisioError::Auth(msg) => Self::Auth { msg },
             visio_core::VisioError::Http(msg) => Self::Http { msg },
             visio_core::VisioError::InvalidUrl(msg) => Self::InvalidUrl { msg },
+            visio_core::VisioError::Session(msg) => Self::Session { msg },
         }
     }
 }
@@ -426,7 +429,7 @@ impl VisioClient {
             let res = self.rt.block_on(async {
                 visio_log("VISIO FFI: inside block_on async block");
                 self.room_manager
-                    .connect(&meet_url, username.as_deref())
+                    .connect(&meet_url, username.as_deref(), None)
                     .await
                     .map_err(VisioError::from)
             });
@@ -664,7 +667,7 @@ impl VisioClient {
         if let Err(e) = visio_core::AuthService::extract_slug(&url) {
             return RoomValidationResult::InvalidFormat { message: e.to_string() };
         }
-        match self.rt.block_on(visio_core::AuthService::validate_room(&url, username.as_deref())) {
+        match self.rt.block_on(visio_core::AuthService::validate_room(&url, username.as_deref(), None)) {
             Ok(token_info) => RoomValidationResult::Valid {
                 livekit_url: token_info.livekit_url,
                 token: token_info.token,
