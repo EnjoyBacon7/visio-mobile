@@ -697,6 +697,81 @@ async fn cancel_lobby(state: tauri::State<'_, VisioState>) -> Result<(), String>
 }
 
 // ---------------------------------------------------------------------------
+// Access management commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn search_users(
+    state: tauri::State<'_, VisioState>,
+    query: String,
+) -> Result<serde_json::Value, String> {
+    let session = state.session.lock().await;
+    let cookie = session.cookie().ok_or("Not authenticated")?;
+    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    drop(session);
+
+    let meet_url = format!("https://{}/room", meet_instance);
+    let results = visio_core::AccessService::search_users(&meet_url, &cookie, &query)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&results).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn list_accesses(
+    state: tauri::State<'_, VisioState>,
+    room_id: String,
+) -> Result<serde_json::Value, String> {
+    let session = state.session.lock().await;
+    let cookie = session.cookie().ok_or("Not authenticated")?;
+    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    drop(session);
+
+    let meet_url = format!("https://{}/room", meet_instance);
+    let results = visio_core::AccessService::list_accesses(&meet_url, &cookie, &room_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&results).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_access(
+    state: tauri::State<'_, VisioState>,
+    user_id: String,
+    room_id: String,
+) -> Result<serde_json::Value, String> {
+    let session = state.session.lock().await;
+    let cookie = session.cookie().ok_or("Not authenticated")?;
+    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    drop(session);
+
+    let meet_url = format!("https://{}/room", meet_instance);
+    let result = visio_core::AccessService::add_access(&meet_url, &cookie, &user_id, &room_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&result).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_access(
+    state: tauri::State<'_, VisioState>,
+    access_id: String,
+) -> Result<(), String> {
+    let session = state.session.lock().await;
+    let cookie = session.cookie().ok_or("Not authenticated")?;
+    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    drop(session);
+
+    let meet_url = format!("https://{}/room", meet_instance);
+    visio_core::AccessService::remove_access(&meet_url, &cookie, &access_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // OIDC authentication commands
 // ---------------------------------------------------------------------------
 
@@ -839,6 +914,7 @@ async fn create_room(
     };
 
     Ok(serde_json::json!({
+        "id": result.id,
         "slug": result.slug,
         "name": result.name,
         "access_level": result.access_level,
@@ -1005,6 +1081,10 @@ pub fn run() {
             admit_participant,
             deny_participant,
             cancel_lobby,
+            search_users,
+            list_accesses,
+            add_access,
+            remove_access,
             launch_oidc,
             authenticate,
             logout_session,
