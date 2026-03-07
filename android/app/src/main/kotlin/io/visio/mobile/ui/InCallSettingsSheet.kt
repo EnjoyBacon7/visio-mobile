@@ -37,6 +37,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -107,26 +109,26 @@ fun InCallSettingsSheet(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 TabIcon(
-                    iconRes = R.drawable.ri_mic_line,
-                    label = Strings.t("settings.incall.micro", lang),
+                    icon = Icons.Outlined.Info,
+                    label = Strings.t("settings.incall.roomInfo", lang),
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
                 )
                 TabIcon(
-                    iconRes = R.drawable.ri_video_on_line,
-                    label = Strings.t("settings.incall.camera", lang),
+                    iconRes = R.drawable.ri_mic_line,
+                    label = Strings.t("settings.incall.micro", lang),
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
                 )
                 TabIcon(
-                    icon = Icons.Outlined.Notifications,
-                    label = Strings.t("settings.incall.notifications", lang),
+                    iconRes = R.drawable.ri_video_on_line,
+                    label = Strings.t("settings.incall.camera", lang),
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                 )
                 TabIcon(
-                    icon = Icons.Outlined.Info,
-                    label = Strings.t("settings.incall.roomInfo", lang),
+                    icon = Icons.Outlined.Notifications,
+                    label = Strings.t("settings.incall.notifications", lang),
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                 )
@@ -140,10 +142,10 @@ fun InCallSettingsSheet(
                         .padding(start = 8.dp, end = 8.dp, bottom = 32.dp),
             ) {
                 when (selectedTab) {
-                    0 -> MicroTab(context, lang, onSelectAudioInput, onSelectAudioOutput)
-                    1 -> CameraTab(lang, isFrontCamera, onSwitchCamera)
-                    3 -> RoomInfoTab(roomUrl, lang)
-                    2 ->
+                    0 -> RoomInfoTab(roomUrl, lang)
+                    1 -> MicroTab(context, lang, onSelectAudioInput, onSelectAudioOutput)
+                    2 -> CameraTab(lang, isFrontCamera, onSwitchCamera)
+                    3 ->
                         NotificationsTab(
                             lang = lang,
                             notifParticipant = notifParticipant,
@@ -523,94 +525,98 @@ private fun RoomInfoTab(roomUrl: String, lang: String) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // HTTPS link section
-        SectionHeader(Strings.t("settings.incall.roomLink", lang))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(VisioColors.PrimaryDark50, RoundedCornerShape(8.dp))
-                .padding(12.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Language,
-                contentDescription = null,
-                tint = VisioColors.White,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = displayUrl,
-                color = VisioColors.White,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Language, contentDescription = null, tint = VisioColors.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(Strings.t("settings.incall.roomLink", lang), color = VisioColors.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
             IconButton(onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Room URL", roomUrl))
                 copiedHttp = true
-            }) {
+            }, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = if (copiedHttp) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
                     contentDescription = if (copiedHttp) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),
                     tint = VisioColors.White,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
             }
-        }
-
-        // Deep link section
-        SectionHeader(Strings.t("settings.incall.deepLink", lang))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(VisioColors.PrimaryDark50, RoundedCornerShape(8.dp))
-                .padding(12.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.PhoneAndroid,
-                contentDescription = null,
-                tint = VisioColors.White,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = deepLink,
-                color = VisioColors.White,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            )
             IconButton(onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Deep Link", deepLink))
-                copiedDeep = true
-            }) {
-                Icon(
-                    imageVector = if (copiedDeep) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
-                    contentDescription = if (copiedDeep) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),
-                    tint = VisioColors.White,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-
-        // Share button
-        Button(
-            onClick = {
                 val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(android.content.Intent.EXTRA_TEXT, roomUrl)
                 }
                 context.startActivity(android.content.Intent.createChooser(shareIntent, null))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Share,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(Strings.t("settings.incall.share", lang))
+            }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.Share,
+                    contentDescription = null,
+                    tint = VisioColors.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
+        OutlinedTextField(
+            value = roomUrl,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = VisioColors.White),
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = VisioColors.Primary500,
+                unfocusedBorderColor = VisioColors.White.copy(alpha = 0.3f),
+                cursorColor = VisioColors.Primary500,
+            ),
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // Deep link section
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.PhoneAndroid, contentDescription = null, tint = VisioColors.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(Strings.t("settings.incall.deepLink", lang), color = VisioColors.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            IconButton(onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Deep Link", deepLink))
+                copiedDeep = true
+            }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = if (copiedDeep) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                    contentDescription = if (copiedDeep) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),
+                    tint = VisioColors.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            IconButton(onClick = {
+                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, deepLink)
+                }
+                context.startActivity(android.content.Intent.createChooser(shareIntent, null))
+            }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.Share,
+                    contentDescription = null,
+                    tint = VisioColors.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        OutlinedTextField(
+            value = deepLink,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = VisioColors.White),
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = VisioColors.Primary500,
+                unfocusedBorderColor = VisioColors.White.copy(alpha = 0.3f),
+                cursorColor = VisioColors.Primary500,
+            ),
+        )
     }
 }
 

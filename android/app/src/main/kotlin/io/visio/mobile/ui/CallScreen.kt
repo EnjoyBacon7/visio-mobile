@@ -442,7 +442,7 @@ fun CallScreen(
                     }
                 },
                 onAudioPicker = {
-                    inCallSettingsTab = 0
+                    inCallSettingsTab = 1
                     showInCallSettings = true
                 },
                 onToggleCamera = {

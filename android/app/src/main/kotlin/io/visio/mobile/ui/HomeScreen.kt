@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -29,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +59,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import io.visio.mobile.R
 import io.visio.mobile.VisioManager
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import io.visio.mobile.ui.i18n.Strings
 import io.visio.mobile.ui.theme.VisioColors
 import kotlinx.coroutines.Dispatchers
@@ -406,7 +415,7 @@ fun HomeScreen(
 
     if (showCreateRoom) {
         CreateRoomDialog(
-            meetInstances = meetInstances,
+            meetInstance = VisioManager.authenticatedMeetInstance,
             lang = lang,
             onCreated = { roomUrl ->
                 showCreateRoom = false
@@ -497,97 +506,162 @@ private fun AuthenticatedCard(
 
 @Composable
 private fun CreateRoomDialog(
-    meetInstances: List<String>,
+    meetInstance: String,
     lang: String,
     onCreated: (roomUrl: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val meetInstance = meetInstances.firstOrNull() ?: return
-    var name by remember { mutableStateOf("") }
+    if (meetInstance.isEmpty()) return
     var accessLevel by remember { mutableStateOf("public") }
     var creating by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var createdUrl by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(Strings.t("home.createRoom", lang)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(Strings.t("home.createRoom.name", lang)) },
-                    placeholder = { Text(Strings.t("home.createRoom.namePlaceholder", lang)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text(
-                    text = Strings.t("home.createRoom.access", lang),
-                    style = MaterialTheme.typography.labelMedium,
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = accessLevel == "public",
-                        onClick = { accessLevel = "public" },
-                    )
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
-                        Text(Strings.t("home.createRoom.public", lang), style = MaterialTheme.typography.bodyMedium)
-                        Text(Strings.t("home.createRoom.publicDesc", lang), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = accessLevel == "trusted",
-                        onClick = { accessLevel = "trusted" },
-                    )
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
-                        Text(Strings.t("home.createRoom.trusted", lang), style = MaterialTheme.typography.bodyMedium)
-                        Text(Strings.t("home.createRoom.trustedDesc", lang), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                if (error != null) {
+                if (createdUrl == null) {
                     Text(
-                        text = error!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = Strings.t("home.createRoom.access", lang),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = accessLevel == "public",
+                            onClick = { accessLevel = "public" },
+                        )
+                        Column(modifier = Modifier.padding(start = 4.dp)) {
+                            Text(Strings.t("home.createRoom.public", lang), style = MaterialTheme.typography.bodyMedium)
+                            Text(Strings.t("home.createRoom.publicDesc", lang), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = accessLevel == "trusted",
+                            onClick = { accessLevel = "trusted" },
+                        )
+                        Column(modifier = Modifier.padding(start = 4.dp)) {
+                            Text(Strings.t("home.createRoom.trusted", lang), style = MaterialTheme.typography.bodyMedium)
+                            Text(Strings.t("home.createRoom.trustedDesc", lang), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    if (error != null) {
+                        Text(
+                            text = error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                } else {
+                    val deepLink = "visio://${createdUrl!!.removePrefix("https://")}"
+
+                    Text(
+                        text = Strings.t("settings.incall.roomInfo", lang),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(Strings.t("settings.incall.roomLink", lang), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(createdUrl!!)) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = Strings.t("settings.incall.copied", lang), modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, createdUrl)
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, null))
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Share, contentDescription = Strings.t("settings.incall.share", lang), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    OutlinedTextField(
+                        value = createdUrl!!,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(Strings.t("settings.incall.deepLink", lang), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(deepLink)) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = Strings.t("settings.incall.copied", lang), modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, deepLink)
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, null))
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Share, contentDescription = Strings.t("settings.incall.share", lang), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    OutlinedTextField(
+                        value = deepLink,
+                        onValueChange = {},
+                        readOnly = true,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    creating = true
-                    error = null
-                    coroutineScope.launch(Dispatchers.IO) {
-                        try {
-                            val result = VisioManager.client.createRoom(
-                                "https://$meetInstance",
-                                name.trim(),
-                                accessLevel,
-                            )
-                            withContext(Dispatchers.Main) {
-                                onCreated("https://$meetInstance/${result.slug}")
-                            }
-                        } catch (e: Exception) {
-                            withContext(Dispatchers.Main) {
-                                error = e.message ?: Strings.t("home.createRoom.error", lang)
-                                creating = false
+            if (createdUrl == null) {
+                Button(
+                    onClick = {
+                        creating = true
+                        error = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val result = VisioManager.client.createRoom(
+                                    "https://$meetInstance",
+                                    "",
+                                    accessLevel,
+                                )
+                                withContext(Dispatchers.Main) {
+                                    createdUrl = "https://$meetInstance/${result.slug}"
+                                    creating = false
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    error = e.message ?: Strings.t("home.createRoom.error", lang)
+                                    creating = false
+                                }
                             }
                         }
-                    }
-                },
-                enabled = name.trim().isNotEmpty() && !creating,
-            ) {
-                Text(
-                    if (creating) Strings.t("home.createRoom.creating", lang)
-                    else Strings.t("home.createRoom.create", lang)
-                )
+                    },
+                    enabled = !creating,
+                ) {
+                    Text(
+                        if (creating) Strings.t("home.createRoom.creating", lang)
+                        else Strings.t("home.createRoom.create", lang)
+                    )
+                }
+            } else {
+                Button(onClick = { onCreated(createdUrl!!) }) {
+                    Text(Strings.t("home.join", lang))
+                }
             }
         },
         dismissButton = {

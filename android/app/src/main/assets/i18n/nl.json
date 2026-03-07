@@ -118,5 +118,21 @@
   "home.loggedAs": "Ingelogd als",
   "home.serverPicker.title": "Kies een server",
   "home.serverPicker.custom": "Andere server",
-  "home.serverPicker.cancel": "Annuleren"
+  "home.serverPicker.cancel": "Annuleren",
+  "home.createRoom": "Kamer aanmaken",
+  "home.createRoom.name": "Kamernaam",
+  "home.createRoom.namePlaceholder": "Mijn vergadering",
+  "home.createRoom.access": "Toegangsniveau",
+  "home.createRoom.public": "Openbaar",
+  "home.createRoom.publicDesc": "Iedereen kan deelnemen",
+  "home.createRoom.trusted": "Vertrouwd",
+  "home.createRoom.trustedDesc": "Alleen geauthenticeerde gebruikers kunnen deelnemen",
+  "home.createRoom.create": "Aanmaken",
+  "home.createRoom.creating": "Aanmaken...",
+  "home.createRoom.error": "Kamer aanmaken mislukt",
+  "settings.incall.roomInfo": "Kamerinfo",
+  "settings.incall.roomLink": "Kamerlink",
+  "settings.incall.deepLink": "App-link",
+  "settings.incall.share": "Link delen",
+  "settings.incall.copied": "Gekopieerd!"
 }

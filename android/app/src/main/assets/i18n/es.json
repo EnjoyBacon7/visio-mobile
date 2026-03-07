@@ -118,5 +118,21 @@
   "home.loggedAs": "Conectado como",
   "home.serverPicker.title": "Elegir un servidor",
   "home.serverPicker.custom": "Otro servidor",
-  "home.serverPicker.cancel": "Cancelar"
+  "home.serverPicker.cancel": "Cancelar",
+  "home.createRoom": "Crear una sala",
+  "home.createRoom.name": "Nombre de la sala",
+  "home.createRoom.namePlaceholder": "Mi reunión",
+  "home.createRoom.access": "Nivel de acceso",
+  "home.createRoom.public": "Público",
+  "home.createRoom.publicDesc": "Cualquiera puede unirse",
+  "home.createRoom.trusted": "De confianza",
+  "home.createRoom.trustedDesc": "Solo usuarios autenticados pueden unirse",
+  "home.createRoom.create": "Crear",
+  "home.createRoom.creating": "Creando...",
+  "home.createRoom.error": "Error al crear la sala",
+  "settings.incall.roomInfo": "Info de sala",
+  "settings.incall.roomLink": "Enlace de la sala",
+  "settings.incall.deepLink": "Enlace de app",
+  "settings.incall.share": "Compartir enlace",
+  "settings.incall.copied": "¡Copiado!"
 }
