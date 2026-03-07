@@ -257,6 +257,17 @@ impl VisioEventListener for DesktopEventListener {
                     );
                 }
             }
+            VisioEvent::AdaptiveModeChanged { mode } => {
+                let mode_str = match mode {
+                    visio_core::adaptive::AdaptiveMode::Office => "office",
+                    visio_core::adaptive::AdaptiveMode::Pedestrian => "pedestrian",
+                    visio_core::adaptive::AdaptiveMode::Car => "car",
+                };
+                tracing::info!("adaptive mode changed: {mode_str}");
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("adaptive-mode-changed", mode_str);
+                }
+            }
             VisioEvent::ConnectionLost => {
                 if let Some(app) = APP_HANDLE.get() {
                     let _ = app.emit("connection-lost", ());
