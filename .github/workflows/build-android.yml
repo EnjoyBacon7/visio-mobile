@@ -49,6 +49,8 @@ jobs:
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           cp target/aarch64-linux-android/release/libvisio_ffi.so android/app/src/main/jniLibs/arm64-v8a/
           cp target/aarch64-linux-android/release/libvisio_video.so android/app/src/main/jniLibs/arm64-v8a/
+          LIBCXX=$(find $ANDROID_NDK_HOME -name "libc++_shared.so" -path "*/aarch64-linux-android/*" | head -1)
+          if [ -n "$LIBCXX" ]; then cp "$LIBCXX" android/app/src/main/jniLibs/arm64-v8a/; fi
 
       - name: Copy libwebrtc.jar
         run: |
