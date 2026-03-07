@@ -53,6 +53,33 @@ struct HomeView: View {
                     .font(.subheadline)
                     .foregroundStyle(VisioColors.secondaryText(dark: isDark))
 
+                // Authentication section
+                if manager.isAuthenticated {
+                    VStack(spacing: 4) {
+                        Text("\(Strings.t("home.loggedAs", lang: lang)) \(manager.authenticatedDisplayName)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button(Strings.t("home.logout", lang: lang)) {
+                            manager.logoutSession()
+                        }
+                        .font(.subheadline)
+                    }
+                } else {
+                    Button(action: {
+                        guard let meetInstance = meetInstances.first else { return }
+                        manager.authManager.launchOidcFlow(meetInstance: meetInstance) { cookie in
+                            if let cookie = cookie {
+                                manager.onAuthCookieReceived(cookie)
+                            }
+                        }
+                    }) {
+                        Label(Strings.t("home.connect", lang: lang), systemImage: "person.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal, 32)
+                }
+
                 // Input fields
                 VStack(spacing: 16) {
                     TextField(Strings.t("home.meetUrl.placeholder", lang: lang), text: $roomURL)
@@ -147,13 +174,18 @@ struct HomeView: View {
                 .environmentObject(manager)
         }
         .onAppear {
-            // Pre-fill display name from manager
+            // Pre-fill display name from manager (includes OIDC identity)
             let name = manager.displayName
             if !name.isEmpty && displayName.isEmpty {
                 displayName = name
             }
             // Load meet instances
             meetInstances = manager.client.getMeetInstances()
+        }
+        .onChange(of: manager.authenticatedDisplayName) { newValue in
+            if !newValue.isEmpty && displayName.isEmpty {
+                displayName = newValue
+            }
         }
         .onChange(of: manager.pendingDeepLink) { newValue in
             if let link = newValue {

@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Security
+import UIKit
 
 class OidcAuthManager: NSObject, ASWebAuthenticationPresentationContextProviding {
 
