@@ -14,13 +14,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.visio.mobile.R
+import io.visio.mobile.VisioManager
 import io.visio.mobile.ui.i18n.Strings
 import io.visio.mobile.ui.theme.VisioColors
 import uniffi.visio.ParticipantInfo
@@ -63,6 +70,8 @@ fun ParticipantListSheet(
                 .thenBy { (it.name ?: it.identity).lowercase() },
         )
 
+    val waitingParticipants by VisioManager.waitingParticipants.collectAsState()
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -91,6 +100,48 @@ fun ParticipantListSheet(
                     modifier = Modifier.size(20.dp),
                 )
             }
+        }
+
+        // Waiting room section (host only — visible when there are waiting participants)
+        if (waitingParticipants.isNotEmpty()) {
+            Text(
+                text = "${Strings.t("lobby.waitingParticipants", lang)} (${waitingParticipants.size})",
+                style = MaterialTheme.typography.titleSmall,
+                color = VisioColors.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            waitingParticipants.forEach { participant ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = participant.username,
+                        color = VisioColors.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { VisioManager.admitParticipant(participant.id) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = VisioColors.Primary500,
+                            ),
+                        ) {
+                            Text(Strings.t("lobby.admit", lang))
+                        }
+                        OutlinedButton(
+                            onClick = { VisioManager.denyParticipant(participant.id) },
+                        ) {
+                            Text(Strings.t("lobby.deny", lang))
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         // Participant list

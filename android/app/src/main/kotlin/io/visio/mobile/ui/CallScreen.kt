@@ -31,11 +31,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import android.widget.Toast
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -175,6 +179,29 @@ fun CallScreen(
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+    }
+
+    // Handle lobby denied — show toast and navigate back
+    val lobbyDenied by VisioManager.lobbyDenied.collectAsState()
+    LaunchedEffect(lobbyDenied) {
+        if (lobbyDenied) {
+            Toast.makeText(context, Strings.t("lobby.denied", lang), Toast.LENGTH_LONG).show()
+            VisioManager.lobbyDenied.value = false
+            VisioManager.disconnect()
+            onHangUp()
+        }
+    }
+
+    // WaitingForHost: show waiting screen instead of call UI
+    if (connectionState is ConnectionState.WaitingForHost) {
+        WaitingScreen(
+            onCancel = {
+                VisioManager.cancelLobby()
+                VisioManager.disconnect()
+                onHangUp()
+            },
+        )
+        return
     }
 
     // Connect on first composition
@@ -929,5 +956,43 @@ private fun ConnectionStateBanner(
             }
         }
         // Connected / Disconnected: no banner
+    }
+}
+
+@Composable
+private fun WaitingScreen(onCancel: () -> Unit) {
+    val lang = VisioManager.currentLang
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(VisioColors.PrimaryDark50),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                color = VisioColors.Primary500,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = Strings.t("lobby.waiting", lang),
+                style = MaterialTheme.typography.titleMedium,
+                color = VisioColors.White,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = Strings.t("lobby.waitingDesc", lang),
+                style = MaterialTheme.typography.bodyMedium,
+                color = VisioColors.Greyscale400,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedButton(onClick = onCancel) {
+                Text(Strings.t("lobby.cancel", lang))
+            }
+        }
     }
 }

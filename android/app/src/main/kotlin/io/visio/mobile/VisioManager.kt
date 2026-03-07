@@ -26,6 +26,7 @@ import uniffi.visio.SessionState
 import uniffi.visio.VisioClient
 import uniffi.visio.VisioEvent
 import uniffi.visio.VisioEventListener
+import uniffi.visio.WaitingParticipant
 
 object VisioManager : VisioEventListener {
     // Library loaded and WebRTC initialized by VisioApplication.onCreate()
@@ -69,6 +70,14 @@ object VisioManager : VisioEventListener {
     // Whether local hand is raised
     private val _isHandRaised = MutableStateFlow(false)
     val isHandRaised: StateFlow<Boolean> = _isHandRaised.asStateFlow()
+
+    // Lobby: participants waiting for host approval
+    private val _waitingParticipants = MutableStateFlow<List<WaitingParticipant>>(emptyList())
+    val waitingParticipants: StateFlow<List<WaitingParticipant>> = _waitingParticipants.asStateFlow()
+
+    // Lobby: whether entry was denied by host
+    private val _lobbyDenied = MutableStateFlow(false)
+    val lobbyDenied: MutableStateFlow<Boolean> = _lobbyDenied
 
     // Deep link: pre-fill room URL on HomeScreen
     var pendingDeepLink: String? by mutableStateOf(null)
@@ -306,6 +315,41 @@ object VisioManager : VisioEventListener {
     }
 
     /**
+     * Admit a waiting participant into the room (host action).
+     */
+    fun admitParticipant(participantId: String) {
+        scope.launch {
+            try {
+                client.admitParticipant(participantId)
+                _waitingParticipants.value = _waitingParticipants.value.filter { it.id != participantId }
+            } catch (e: Exception) {
+                Log.e("VisioManager", "admit failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Deny a waiting participant entry (host action).
+     */
+    fun denyParticipant(participantId: String) {
+        scope.launch {
+            try {
+                client.denyParticipant(participantId)
+                _waitingParticipants.value = _waitingParticipants.value.filter { it.id != participantId }
+            } catch (e: Exception) {
+                Log.e("VisioManager", "deny failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Cancel waiting in the lobby and disconnect.
+     */
+    fun cancelLobby() {
+        client.cancelLobby()
+    }
+
+    /**
      * Full teardown: stop captures, playout, cancel pending coroutines, disconnect.
      */
     fun disconnect() {
@@ -386,6 +430,7 @@ object VisioManager : VisioEventListener {
                         _handRaisedMap.value = emptyMap()
                         _unreadCount.value = 0
                         _isHandRaised.value = false
+                        _waitingParticipants.value = emptyList()
                         CallForegroundService.stop(appContext)
                     }
                     else -> {}
@@ -443,6 +488,19 @@ object VisioManager : VisioEventListener {
             is VisioEvent.TrackUnsubscribed -> {
                 Log.d("VISIO", "TrackUnsubscribed: trackSid=${event.trackSid}")
                 refreshParticipants()
+            }
+            is VisioEvent.LobbyParticipantJoined -> {
+                val current = _waitingParticipants.value.toMutableList()
+                if (current.none { it.id == event.id }) {
+                    current.add(WaitingParticipant(event.id, event.username))
+                    _waitingParticipants.value = current
+                }
+            }
+            is VisioEvent.LobbyParticipantLeft -> {
+                _waitingParticipants.value = _waitingParticipants.value.filter { it.id != event.id }
+            }
+            is VisioEvent.LobbyDenied -> {
+                _lobbyDenied.value = true
             }
             is VisioEvent.ConnectionLost -> {
                 scope.launch {
