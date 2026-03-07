@@ -45,6 +45,10 @@ pub enum VisioEvent {
         participant_name: String,
         emoji: String,
     },
+    /// The adaptive context mode changed (e.g. Office → Pedestrian).
+    AdaptiveModeChanged {
+        mode: crate::adaptive::AdaptiveMode,
+    },
     /// Connection lost unexpectedly — native UI should call reconnect().
     ConnectionLost,
 }
