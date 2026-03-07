@@ -143,5 +143,17 @@
   "lobby.admit": "Zulassen",
   "lobby.deny": "Ablehnen",
   "lobby.admitAll": "Alle zulassen",
-  "lobby.badge": "{count} wartend"
+  "lobby.badge": "{count} wartend",
+  "home.createRoom.restricted": "Eingeschränkt",
+  "home.createRoom.restrictedDesc": "Nur auf Einladung — nur eingeladene Mitglieder können beitreten",
+  "restricted.searchUsers": "Benutzer per E-Mail suchen",
+  "restricted.invite": "Mitglieder einladen",
+  "restricted.members": "Mitglieder",
+  "restricted.remove": "Entfernen",
+  "restricted.owner": "Eigentümer",
+  "restricted.admin": "Administrator",
+  "restricted.member": "Mitglied",
+  "restricted.alreadyInvited": "Bereits eingeladen",
+  "restricted.searchUnavailable": "Benutzersuche ist auf diesem Server nicht verfügbar",
+  "restricted.noResults": "Keine Benutzer gefunden"
 }

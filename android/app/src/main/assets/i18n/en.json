@@ -147,5 +147,17 @@
   "lobby.admit": "Admit",
   "lobby.deny": "Deny",
   "lobby.admitAll": "Admit all",
-  "lobby.badge": "{count} waiting"
+  "lobby.badge": "{count} waiting",
+  "home.createRoom.restricted": "Restricted",
+  "home.createRoom.restrictedDesc": "Invitation only — only invited members can join",
+  "restricted.searchUsers": "Search users by email",
+  "restricted.invite": "Invite members",
+  "restricted.members": "Members",
+  "restricted.remove": "Remove",
+  "restricted.owner": "Owner",
+  "restricted.admin": "Admin",
+  "restricted.member": "Member",
+  "restricted.alreadyInvited": "Already invited",
+  "restricted.searchUnavailable": "User search not available on this server",
+  "restricted.noResults": "No users found"
 }

@@ -143,5 +143,17 @@
   "lobby.admit": "Toelaten",
   "lobby.deny": "Weigeren",
   "lobby.admitAll": "Alles toelaten",
-  "lobby.badge": "{count} wachtend"
+  "lobby.badge": "{count} wachtend",
+  "home.createRoom.restricted": "Beperkt",
+  "home.createRoom.restrictedDesc": "Alleen op uitnodiging — alleen uitgenodigde leden kunnen deelnemen",
+  "restricted.searchUsers": "Gebruikers zoeken op e-mail",
+  "restricted.invite": "Leden uitnodigen",
+  "restricted.members": "Leden",
+  "restricted.remove": "Verwijderen",
+  "restricted.owner": "Eigenaar",
+  "restricted.admin": "Beheerder",
+  "restricted.member": "Lid",
+  "restricted.alreadyInvited": "Al uitgenodigd",
+  "restricted.searchUnavailable": "Gebruikers zoeken is niet beschikbaar op deze server",
+  "restricted.noResults": "Geen gebruikers gevonden"
 }
