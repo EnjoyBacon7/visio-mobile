@@ -352,6 +352,7 @@ impl From<visio_core::VisioError> for VisioError {
             visio_core::VisioError::Auth(msg) => Self::Auth { msg },
             visio_core::VisioError::Http(msg) => Self::Http { msg },
             visio_core::VisioError::InvalidUrl(msg) => Self::InvalidUrl { msg },
+            visio_core::VisioError::AuthRequired => Self::Auth { msg: "authentication required".to_string() },
         }
     }
 }
@@ -668,7 +669,7 @@ impl VisioClient {
         if let Err(e) = visio_core::AuthService::extract_slug(&url) {
             return RoomValidationResult::InvalidFormat { message: e.to_string() };
         }
-        match self.rt.block_on(visio_core::AuthService::validate_room(&url, username.as_deref())) {
+        match self.rt.block_on(visio_core::AuthService::validate_room(&url, username.as_deref(), None)) {
             Ok(token_info) => RoomValidationResult::Valid {
                 livekit_url: token_info.livekit_url,
                 token: token_info.token,

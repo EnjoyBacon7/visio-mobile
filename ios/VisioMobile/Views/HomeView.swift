@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject private var manager: VisioManager
 
     @State private var roomURL: String = ""
+    @State private var resolvedRoomURL: String = ""
     @State private var displayName: String = ""
     @State private var navigateToCall: Bool = false
     @State private var showSettings: Bool = false
@@ -22,15 +23,6 @@ struct HomeView: View {
             ? String(trimmed.split(separator: "/").last ?? "")
             : trimmed
         return candidate.wholeMatch(of: Self.slugPattern) != nil ? candidate : nil
-    }
-
-    /// If input is just a slug, prefix with first configured server
-    private func resolveRoomURL(_ input: String) -> String {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.wholeMatch(of: Self.slugPattern) != nil, let server = meetInstances.first {
-            return "https://\(server)/\(trimmed)"
-        }
-        return trimmed
     }
 
     var body: some View {
@@ -81,25 +73,43 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 32)
                 .task(id: roomURL) {
-                    let resolved = resolveRoomURL(roomURL)
-                    guard let _ = extractSlug(resolved) else {
-                        roomStatus = "idle"
-                        return
+                    let trimmed = roomURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let isSlug = trimmed.wholeMatch(of: Self.slugPattern) != nil
+
+                    // Build list of URLs to try
+                    let urlsToTry: [String]
+                    if isSlug, !meetInstances.isEmpty {
+                        urlsToTry = meetInstances.map { "https://\($0)/\(trimmed)" }
+                    } else {
+                        guard extractSlug(trimmed) != nil else {
+                            roomStatus = "idle"
+                            resolvedRoomURL = trimmed
+                            return
+                        }
+                        urlsToTry = [trimmed]
                     }
+
                     roomStatus = "checking"
                     try? await Task.sleep(for: .milliseconds(500))
                     guard !Task.isCancelled else { return }
-                    let result = manager.client.validateRoom(
-                        url: resolved,
-                        username: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? nil : displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    )
-                    guard !Task.isCancelled else { return }
-                    switch result {
-                    case .valid: roomStatus = "valid"
-                    case .notFound: roomStatus = "not_found"
-                    case .invalidFormat: roomStatus = "idle"
-                    case .networkError: roomStatus = "error"
+
+                    let uname = displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? nil : displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    var foundValid = false
+                    for url in urlsToTry {
+                        guard !Task.isCancelled else { return }
+                        let result = manager.client.validateRoom(url: url, username: uname)
+                        if case .valid = result {
+                            roomStatus = "valid"
+                            resolvedRoomURL = url
+                            foundValid = true
+                            break
+                        }
+                    }
+                    if !foundValid {
+                        roomStatus = "not_found"
+                        resolvedRoomURL = urlsToTry.first ?? trimmed
                     }
                 }
 
@@ -138,7 +148,7 @@ struct HomeView: View {
         }
         .navigationDestination(isPresented: $navigateToCall) {
             CallView(
-                roomURL: resolveRoomURL(roomURL),
+                roomURL: resolvedRoomURL,
                 displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }

@@ -8,6 +8,8 @@ pub enum VisioError {
     Room(String),
     #[error("authentication failed: {0}")]
     Auth(String),
+    #[error("authentication required")]
+    AuthRequired,
     #[error("HTTP request failed: {0}")]
     Http(String),
     #[error("invalid URL: {0}")]

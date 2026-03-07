@@ -55,6 +55,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
 ) {
     var roomUrl by remember { mutableStateOf("") }
+    var resolvedRoomUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     val lang = VisioManager.currentLang
     val isDark = VisioManager.currentTheme == "dark"
@@ -71,16 +72,6 @@ fun HomeScreen(
         }
     }
 
-    // Resolve full URL: if input is just a slug, prefix with first configured server
-    fun resolveRoomUrl(input: String): String {
-        val trimmed = input.trim()
-        return if (slugRegex.matches(trimmed) && meetInstances.isNotEmpty()) {
-            "https://${meetInstances.first()}/$trimmed"
-        } else {
-            trimmed
-        }
-    }
-
     LaunchedEffect(VisioManager.pendingDeepLink) {
         val link = VisioManager.pendingDeepLink
         if (link != null) {
@@ -90,27 +81,48 @@ fun HomeScreen(
     }
 
     LaunchedEffect(roomUrl) {
-        val resolved = resolveRoomUrl(roomUrl)
-        val trimmed = resolved.trimEnd('/')
-        val candidate = if ('/' in trimmed) trimmed.substringAfterLast('/') else trimmed
+        val trimmed = roomUrl.trim()
+        val isSlug = slugRegex.matches(trimmed)
+        val candidate = if (isSlug) {
+            trimmed
+        } else {
+            val stripped = trimmed.trimEnd('/')
+            if ('/' in stripped) stripped.substringAfterLast('/') else stripped
+        }
         if (!slugRegex.matches(candidate)) {
             roomStatus = "idle"
+            resolvedRoomUrl = trimmed
             return@LaunchedEffect
         }
         roomStatus = "checking"
         delay(500)
+        // If input is a slug, try each configured server; otherwise validate the full URL
+        val urlsToTry = if (isSlug && meetInstances.isNotEmpty()) {
+            meetInstances.map { server -> "https://$server/$trimmed" }
+        } else {
+            listOf(trimmed)
+        }
         try {
-            val result =
-                withContext(Dispatchers.IO) {
-                    VisioManager.client.validateRoom(resolved, username.trim().ifEmpty { null })
-                }
-            roomStatus =
+            var foundValid = false
+            for (url in urlsToTry) {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        VisioManager.client.validateRoom(url, username.trim().ifEmpty { null })
+                    }
                 when (result) {
-                    is RoomValidationResult.Valid -> "valid"
-                    is RoomValidationResult.NotFound -> "not_found"
-                    is RoomValidationResult.InvalidFormat -> "idle"
-                    is RoomValidationResult.NetworkError -> "error"
+                    is RoomValidationResult.Valid -> {
+                        roomStatus = "valid"
+                        resolvedRoomUrl = url
+                        foundValid = true
+                        break
+                    }
+                    else -> continue
                 }
+            }
+            if (!foundValid) {
+                roomStatus = "not_found"
+                resolvedRoomUrl = urlsToTry.first()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to validate room URL", e)
             roomStatus = "error"
@@ -274,7 +286,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { onJoin(resolveRoomUrl(roomUrl), username.trim()) },
+            onClick = { onJoin(resolvedRoomUrl, username.trim()) },
             enabled = roomStatus == "valid",
             modifier = Modifier.fillMaxWidth(),
             colors =

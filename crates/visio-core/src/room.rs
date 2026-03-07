@@ -36,6 +36,7 @@ pub struct RoomManager {
     /// Stored connection info for application-level reconnection.
     last_meet_url: Arc<Mutex<Option<String>>>,
     last_username: Arc<Mutex<Option<String>>>,
+    session_cookie: Arc<Mutex<Option<String>>>,
 }
 
 impl Default for RoomManager {
@@ -58,6 +59,7 @@ impl RoomManager {
             camera_enabled: Arc::new(Mutex::new(false)),
             last_meet_url: Arc::new(Mutex::new(None)),
             last_username: Arc::new(Mutex::new(None)),
+            session_cookie: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -165,6 +167,11 @@ impl RoomManager {
             .collect()
     }
 
+    /// Set a session cookie for authenticated Meet instances.
+    pub async fn set_session_cookie(&self, cookie: Option<String>) {
+        *self.session_cookie.lock().await = cookie;
+    }
+
     /// Connect to a room using the Meet API.
     ///
     /// Calls the Meet API to get a token, then connects to the LiveKit room.
@@ -175,7 +182,9 @@ impl RoomManager {
 
         self.set_connection_state(ConnectionState::Connecting).await;
 
-        let token_info = AuthService::request_token(meet_url, username).await?;
+        let cookie = self.session_cookie.lock().await;
+        let token_info =
+            AuthService::request_token(meet_url, username, cookie.as_deref()).await?;
 
         self.connect_with_token(&token_info.livekit_url, &token_info.token)
             .await

@@ -266,22 +266,15 @@ function HomeView({
 }) {
   const t = useT();
   const [meetUrl, setMeetUrl] = useState("");
+  const [resolvedUrl, setResolvedUrl] = useState("");
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
-  const [roomStatus, setRoomStatus] = useState<"idle" | "checking" | "valid" | "not_found" | "error">("idle");
+  const [roomStatus, setRoomStatus] = useState<"idle" | "checking" | "valid" | "not_found" | "auth_required" | "authenticating" | "error">("idle");
   const [meetInstances, setMeetInstances] = useState<string[]>([]);
 
   useEffect(() => {
     invoke<string[]>("get_meet_instances").then(setMeetInstances).catch(() => {});
   }, []);
-
-  function resolveUrl(input: string): string {
-    const trimmed = input.trim();
-    if (SLUG_REGEX.test(trimmed) && meetInstances.length > 0) {
-      return `https://${meetInstances[0]}/${trimmed}`;
-    }
-    return trimmed;
-  }
 
   useEffect(() => {
     if (deepLinkUrl) {
@@ -291,23 +284,48 @@ function HomeView({
   }, [deepLinkUrl]);
 
   useEffect(() => {
-    const resolved = resolveUrl(meetUrl);
-    const slug = extractSlug(resolved);
+    const trimmed = meetUrl.trim();
+    const isSlug = SLUG_REGEX.test(trimmed);
+
+    // Build list of URLs to try
+    const urlsToTry: string[] = isSlug && meetInstances.length > 0
+      ? meetInstances.map(server => `https://${server}/${trimmed}`)
+      : [trimmed];
+
+    const slug = extractSlug(urlsToTry[0]);
     if (!slug) {
       setRoomStatus("idle");
+      setResolvedUrl(trimmed);
       return;
     }
     setRoomStatus("checking");
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const result = await invoke<{ status: string; livekit_url?: string; token?: string }>(
-          "validate_room", { url: resolved, username: displayName.trim() || null }
-        );
-        if (controller.signal.aborted) return;
-        if (result.status === "valid") setRoomStatus("valid");
-        else if (result.status === "not_found") setRoomStatus("not_found");
-        else setRoomStatus("error");
+        let foundValid = false;
+        for (const url of urlsToTry) {
+          if (controller.signal.aborted) return;
+          const result = await invoke<{ status: string; livekit_url?: string; token?: string }>(
+            "validate_room", { url, username: displayName.trim() || null }
+          );
+          if (controller.signal.aborted) return;
+          if (result.status === "valid") {
+            setRoomStatus("valid");
+            setResolvedUrl(url);
+            foundValid = true;
+            break;
+          }
+          if (result.status === "auth_required") {
+            setRoomStatus("auth_required");
+            setResolvedUrl(url);
+            foundValid = true; // don't show not_found
+            break;
+          }
+        }
+        if (!foundValid) {
+          setRoomStatus("not_found");
+          setResolvedUrl(urlsToTry[0]);
+        }
       } catch {
         if (!controller.signal.aborted) setRoomStatus("error");
       }
@@ -316,7 +334,7 @@ function HomeView({
   }, [meetUrl]);
 
   const handleJoin = async () => {
-    const url = resolveUrl(meetUrl);
+    const url = resolvedUrl;
     if (!url) {
       setError(t("home.error.noUrl"));
       return;
@@ -331,6 +349,26 @@ function HomeView({
     } catch (e) {
       setError(String(e));
       setJoining(false);
+    }
+  };
+
+  const handleAuth = async () => {
+    try {
+      // Extract the instance hostname from the resolved URL
+      const url = new URL(resolvedUrl.startsWith("http") ? resolvedUrl : `https://${resolvedUrl}`);
+      setRoomStatus("authenticating");
+      await invoke("start_oidc_auth", { meetInstance: url.hostname });
+      // After auth, re-trigger validation by bumping state
+      setRoomStatus("checking");
+      const result = await invoke<{ status: string }>(
+        "validate_room", { url: resolvedUrl, username: displayName.trim() || null }
+      );
+      if (result.status === "valid") setRoomStatus("valid");
+      else if (result.status === "auth_required") setRoomStatus("auth_required");
+      else setRoomStatus("error");
+    } catch (e) {
+      setError(String(e));
+      setRoomStatus("auth_required");
     }
   };
 
@@ -361,6 +399,8 @@ function HomeView({
           {roomStatus === "checking" && <div className="room-status checking">{t("home.room.checking")}</div>}
           {roomStatus === "valid" && <div className="room-status valid">{t("home.room.valid")}</div>}
           {roomStatus === "not_found" && <div className="room-status not-found">{t("home.room.notFound")}</div>}
+          {roomStatus === "auth_required" && <div className="room-status auth-required">{t("home.room.authRequired")}</div>}
+          {roomStatus === "authenticating" && <div className="room-status checking">{t("home.room.authenticating")}</div>}
           {roomStatus === "error" && <div className="room-status error">{t("home.room.error")}</div>}
         </div>
         <div className="form-group">
@@ -375,9 +415,15 @@ function HomeView({
             onKeyDown={handleKeyDown}
           />
         </div>
-        <button className="btn btn-primary" disabled={joining || roomStatus !== "valid"} onClick={handleJoin}>
-          {joining ? t("home.connecting") : t("home.join")}
-        </button>
+        {roomStatus === "auth_required" ? (
+          <button className="btn btn-primary" onClick={handleAuth}>
+            {t("home.signIn")}
+          </button>
+        ) : (
+          <button className="btn btn-primary" disabled={joining || roomStatus !== "valid"} onClick={handleJoin}>
+            {joining ? t("home.connecting") : t("home.join")}
+          </button>
+        )}
         <div className="error-msg">{error}</div>
       </div>
     </div>

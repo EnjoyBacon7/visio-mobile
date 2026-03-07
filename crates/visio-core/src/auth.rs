@@ -30,9 +30,12 @@ impl AuthService {
     ///
     /// `meet_url` should be a full URL like `https://meet.example.com/room-slug`
     /// or just `meet.example.com/room-slug`.
+    ///
+    /// `session_cookie` is an optional `sessionid` cookie for authenticated instances.
     pub async fn request_token(
         meet_url: &str,
         username: Option<&str>,
+        session_cookie: Option<&str>,
     ) -> Result<TokenInfo, VisioError> {
         let (instance, slug) = Self::parse_meet_url(meet_url)?;
 
@@ -44,9 +47,21 @@ impl AuthService {
 
         tracing::info!("requesting token from Meet API: {}", api_url);
 
-        let resp = reqwest::get(&api_url)
-            .await
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
             .map_err(|e| VisioError::Http(e.to_string()))?;
+
+        let mut req = client.get(&api_url);
+        if let Some(cookie) = session_cookie {
+            req = req.header("Cookie", format!("sessionid={cookie}"));
+        }
+
+        let resp = req.send().await.map_err(|e| VisioError::Http(e.to_string()))?;
+
+        if resp.status().is_redirection() || resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(VisioError::AuthRequired);
+        }
 
         if !resp.status().is_success() {
             return Err(VisioError::Auth(format!(
@@ -102,8 +117,15 @@ impl AuthService {
     pub async fn validate_room(
         meet_url: &str,
         username: Option<&str>,
+        session_cookie: Option<&str>,
     ) -> Result<TokenInfo, VisioError> {
-        Self::request_token(meet_url, username).await
+        Self::request_token(meet_url, username, session_cookie).await
+    }
+
+    /// Extract the Meet instance hostname from a room URL.
+    pub fn parse_instance(meet_url: &str) -> Result<String, VisioError> {
+        let (instance, _) = Self::parse_meet_url(meet_url)?;
+        Ok(instance)
     }
 
     /// Parse a Meet URL into (instance, room_slug).
