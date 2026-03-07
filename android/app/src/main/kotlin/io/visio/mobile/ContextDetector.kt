@@ -31,16 +31,10 @@ class ContextDetector(private val context: Context) {
     private var accelerometerListener: SensorEventListener? = null
     private var bluetoothReceiver: BroadcastReceiver? = null
 
-    private var lastAccelTimestamp = 0L
-    private var motionCount = 0
     private var lastReportedMotion = false
-    private var motionSinceMs = 0L          // when continuous motion started
-    private var stillSinceMs = 0L           // when motion last stopped
-    private val MOTION_THRESHOLD = 1.2f
-    private val MOTION_WINDOW_MS = 2000L
-    private val MOTION_COUNT_THRESHOLD = 6
-    private val MOTION_CONFIRM_MS = 3000L   // must move 3s before switching to pedestrian
-    private val MOTION_COOLDOWN_MS = 10000L // stay pedestrian 10s after motion stops
+    private var lastSignificantMotionMs = 0L  // last time we saw a significant accel event
+    private val MOTION_THRESHOLD = 0.8f       // m/s² deviation from gravity to count as motion
+    private val MOTION_COOLDOWN_MS = 10000L   // stay in pedestrian 10s after last motion event
 
     companion object {
         private const val TAG = "ContextDetector"
@@ -116,44 +110,28 @@ class ContextDetector(private val context: Context) {
                 val magnitude = kotlin.math.sqrt((x * x + y * y + z * z).toDouble()).toFloat()
                 val deviation = kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH)
                 val now = System.currentTimeMillis()
-                if (now - lastAccelTimestamp > MOTION_WINDOW_MS) {
-                    motionCount = 0
-                    lastAccelTimestamp = now
-                }
 
+                // Any significant acceleration extends the "moving" window
                 if (deviation > MOTION_THRESHOLD) {
-                    motionCount++
-                }
-
-                val rawMoving = motionCount > MOTION_COUNT_THRESHOLD
-
-                // Debounce: confirm motion for MOTION_CONFIRM_MS before switching ON,
-                // and wait MOTION_COOLDOWN_MS after stopping before switching OFF.
-                if (rawMoving) {
-                    stillSinceMs = 0L
-                    if (motionSinceMs == 0L) motionSinceMs = now
-                } else {
-                    if (motionSinceMs != 0L) {
-                        motionSinceMs = 0L
-                        if (stillSinceMs == 0L) stillSinceMs = now
+                    val wasMoving = lastSignificantMotionMs > 0L &&
+                        now - lastSignificantMotionMs < MOTION_COOLDOWN_MS
+                    lastSignificantMotionMs = now
+                    if (!wasMoving && !lastReportedMotion) {
+                        // First motion event — switch to moving
+                        lastReportedMotion = true
+                        Log.d(TAG, "Motion detected (dev=${"%.2f".format(deviation)})")
+                        try { VisioManager.client.reportMotionDetected(true) } catch (_: Exception) {}
                     }
-                }
-
-                val debouncedMoving = when {
-                    // Currently reported as moving: stay moving until cooldown expires
-                    lastReportedMotion -> rawMoving || (stillSinceMs != 0L && now - stillSinceMs < MOTION_COOLDOWN_MS)
-                    // Currently still: need sustained motion to switch
-                    else -> motionSinceMs != 0L && now - motionSinceMs > MOTION_CONFIRM_MS
+                } else if (lastReportedMotion && lastSignificantMotionMs > 0L &&
+                    now - lastSignificantMotionMs > MOTION_COOLDOWN_MS) {
+                    // Cooldown expired — no significant motion for 10s
+                    lastReportedMotion = false
+                    Log.d(TAG, "Motion stopped (${MOTION_COOLDOWN_MS}ms cooldown expired)")
+                    try { VisioManager.client.reportMotionDetected(false) } catch (_: Exception) {}
                 }
 
                 if (sensorEventCount % 200 == 0L) {
-                    Log.d(TAG, "Accel #$sensorEventCount: dev=${"%.2f".format(deviation)} raw=$rawMoving debounced=$debouncedMoving reported=$lastReportedMotion")
-                }
-
-                if (debouncedMoving != lastReportedMotion) {
-                    lastReportedMotion = debouncedMoving
-                    Log.d(TAG, "Motion state changed: moving=$debouncedMoving")
-                    try { VisioManager.client.reportMotionDetected(debouncedMoving) } catch (_: Exception) {}
+                    Log.d(TAG, "Accel #$sensorEventCount: dev=${"%.2f".format(deviation)} moving=$lastReportedMotion")
                 }
             }
 
