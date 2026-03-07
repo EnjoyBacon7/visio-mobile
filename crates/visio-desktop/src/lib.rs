@@ -729,6 +729,43 @@ async fn logout_session(
 }
 
 #[tauri::command]
+async fn create_room(
+    state: tauri::State<'_, VisioState>,
+    meet_url: String,
+    name: String,
+    access_level: String,
+) -> Result<serde_json::Value, String> {
+    let session = state.session.lock().await;
+    let cookie = session
+        .cookie()
+        .ok_or("Not authenticated")?;
+    drop(session);
+
+    let result = visio_core::SessionManager::create_room(
+        &meet_url,
+        &cookie,
+        &name,
+        &access_level,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let livekit_url = result
+        .livekit
+        .url
+        .replace("https://", "wss://")
+        .replace("http://", "ws://");
+
+    Ok(serde_json::json!({
+        "slug": result.slug,
+        "name": result.name,
+        "access_level": result.access_level,
+        "livekit_url": livekit_url,
+        "livekit_token": result.livekit.token,
+    }))
+}
+
+#[tauri::command]
 async fn get_session_state(
     state: tauri::State<'_, VisioState>,
 ) -> Result<serde_json::Value, String> {
@@ -880,6 +917,7 @@ pub fn run() {
             launch_oidc,
             authenticate,
             logout_session,
+            create_room,
             get_session_state,
         ])
         .run(tauri::generate_context!())
