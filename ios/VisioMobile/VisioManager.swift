@@ -567,7 +567,7 @@ class VisioManager: ObservableObject {
         }
     }
 
-    private func restoreDefaultAudioRoute() {
+    func restoreDefaultAudioRoute() {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setPreferredInput(nil)

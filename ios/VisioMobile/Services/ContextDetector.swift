@@ -70,16 +70,41 @@ class ContextDetector {
 
     @objc private func audioRouteChanged(_ notification: Notification) {
         reportBluetoothCarKit()
-        // Auto-route to Bluetooth when connected during a call
+
+        guard case .connected = VisioManager.shared.connectionState else { return }
+
         let route = AVAudioSession.sharedInstance().currentRoute
         let hasBluetooth = route.outputs.contains { port in
             port.portType == .bluetoothA2DP ||
             port.portType == .bluetoothHFP ||
-            port.portType == .bluetoothLE
+            port.portType == .bluetoothLE ||
+            port.portType == .carAudio
         }
+
         if hasBluetooth {
+            // BT device connected — route audio to it
             DispatchQueue.main.async {
                 VisioManager.shared.routeAudioToBluetooth()
+            }
+        } else {
+            // BT disconnected — check if another BT device is still available
+            let session = AVAudioSession.sharedInstance()
+            let hasRemainingBt = session.availableInputs?.contains { port in
+                port.portType == .bluetoothHFP ||
+                port.portType == .bluetoothA2DP ||
+                port.portType == .bluetoothLE
+            } ?? false
+
+            if hasRemainingBt {
+                // Another BT device available — route to it
+                DispatchQueue.main.async {
+                    VisioManager.shared.routeAudioToBluetooth()
+                }
+            } else {
+                // No BT left — restore phone speaker/mic
+                DispatchQueue.main.async {
+                    VisioManager.shared.restoreDefaultAudioRoute()
+                }
             }
         }
     }
