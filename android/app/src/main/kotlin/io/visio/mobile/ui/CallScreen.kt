@@ -203,6 +203,16 @@ fun CallScreen(
             }
         }
 
+    // Bluetooth permission launcher (needed for car kit detection on Android 12+)
+    val bluetoothPermissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                Log.d(TAG, "BLUETOOTH_CONNECT permission granted")
+            }
+        }
+
     // Keep screen on while connected or reconnecting
     val keepScreenOn =
         connectionState is ConnectionState.Connected ||
@@ -309,6 +319,18 @@ fun CallScreen(
                 }
             }
             cameraEnabled = VisioManager.client.isCameraEnabled()
+        }
+    }
+
+    // Request BLUETOOTH_CONNECT permission on Android 12+ for car kit detection
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hasBtPerm = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.BLUETOOTH_CONNECT,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasBtPerm) {
+                bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
         }
     }
 
