@@ -332,15 +332,19 @@ struct CallView: View {
     // MARK: - Pedestrian Single Tile
 
     private var pedestrianSingleTile: some View {
-        let activeSpeaker = manager.participants.first(where: {
+        // Find if active speaker is a remote participant
+        // (participants[0] is local, so skip it when looking for remote speaker)
+        let remoteParticipants = Array(manager.participants.dropFirst())
+        let remoteSpeaker = remoteParticipants.first(where: {
             manager.activeSpeakers.contains($0.sid)
-        }) ?? manager.participants.first
+        })
+        let displayParticipant = remoteSpeaker ?? manager.participants.first
         return Group {
-            if let speaker = activeSpeaker {
+            if let speaker = displayParticipant {
                 ParticipantTile(
                     participant: speaker,
                     large: true,
-                    isActiveSpeaker: true,
+                    isActiveSpeaker: manager.activeSpeakers.contains(speaker.sid),
                     handRaisePosition: manager.handRaisedMap[speaker.sid] ?? 0,
                     isDark: true
                 )

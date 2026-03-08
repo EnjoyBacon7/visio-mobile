@@ -441,19 +441,36 @@ fun CallScreen(
                     AdaptiveMode.PEDESTRIAN -> {
                         // Pedestrian mode: single active speaker tile
                         val activeSpeakerSid = activeSpeakers.firstOrNull()
-                        val speaker = participants.find { it.sid == activeSpeakerSid } ?: participants.firstOrNull()
-                        if (speaker != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(8.dp)),
-                            ) {
+                        // Find if active speaker is a remote participant
+                        // (participants[0] is local, so skip it when looking for remote speaker)
+                        val remoteSpeaker = if (activeSpeakerSid != null) {
+                            participants.drop(1).find { it.sid == activeSpeakerSid }
+                        } else null
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(8.dp)),
+                        ) {
+                            if (remoteSpeaker != null) {
+                                // Show remote active speaker
                                 ParticipantTile(
-                                    participant = speaker,
-                                    isActiveSpeaker = activeSpeakers.contains(speaker.sid),
-                                    handRaisePosition = handRaisedMap[speaker.sid] ?: 0,
+                                    participant = remoteSpeaker,
+                                    isActiveSpeaker = true,
+                                    handRaisePosition = handRaisedMap[remoteSpeaker.sid] ?: 0,
                                     onClick = {},
                                 )
+                            } else {
+                                // No remote speaker talking — show first remote participant or local preview
+                                val fallback = participants.firstOrNull()
+                                if (fallback != null) {
+                                    ParticipantTile(
+                                        participant = fallback,
+                                        isActiveSpeaker = activeSpeakers.contains(fallback.sid),
+                                        handRaisePosition = handRaisedMap[fallback.sid] ?: 0,
+                                        onClick = {},
+                                    )
+                                }
                             }
                         }
                     }
