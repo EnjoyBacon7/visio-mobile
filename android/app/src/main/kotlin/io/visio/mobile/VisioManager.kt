@@ -110,6 +110,9 @@ object VisioManager : VisioEventListener {
     // Track whether camera was on before CAR mode forced it off
     private var cameraWasEnabledBeforeCar = false
 
+    // Track previous audio device to restore after car mode
+    private var previousAudioDevice: AudioDeviceInfo? = null
+
     // Deep link: pre-fill room URL on HomeScreen
     var pendingDeepLink: String? by mutableStateOf(null)
 
@@ -370,6 +373,41 @@ object VisioManager : VisioEventListener {
             val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             am.setCommunicationDevice(device)
         }
+    }
+
+    private fun routeAudioToBluetooth() {
+        val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            previousAudioDevice = am.communicationDevice
+        }
+        val btOutput = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+        }
+        val btInput = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+        }
+        if (btOutput != null) {
+            Log.i("VisioManager", "Routing audio output to Bluetooth: ${btOutput.productName}")
+            setAudioOutputDevice(btOutput)
+        }
+        if (btInput != null) {
+            Log.i("VisioManager", "Routing audio input to Bluetooth: ${btInput.productName}")
+            setAudioInputDevice(btInput)
+        }
+    }
+
+    private fun restoreDefaultAudioRoute() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.clearCommunicationDevice()
+            Log.i("VisioManager", "Restored default audio routing")
+        }
+        audioCapture?.setPreferredDevice(null)
+        audioPlayout?.setPreferredDevice(null)
+        previousAudioDevice = null
     }
 
     /**
@@ -654,16 +692,20 @@ object VisioManager : VisioEventListener {
                             stopCameraCapture()
                             client.setCameraEnabled(false)
                         }
+                        routeAudioToBluetooth()
                     }
-                } else if (previousMode == uniffi.visio.AdaptiveMode.CAR && cameraWasEnabledBeforeCar) {
+                } else if (previousMode == uniffi.visio.AdaptiveMode.CAR) {
                     scope.launch(Dispatchers.IO) {
-                        try {
-                            client.setCameraEnabled(true)
-                            startCameraCapture()
-                        } catch (e: Exception) {
-                            Log.e("VISIO", "Failed to restore camera after car mode", e)
+                        restoreDefaultAudioRoute()
+                        if (cameraWasEnabledBeforeCar) {
+                            try {
+                                client.setCameraEnabled(true)
+                                startCameraCapture()
+                            } catch (e: Exception) {
+                                Log.e("VISIO", "Failed to restore camera after car mode", e)
+                            }
+                            cameraWasEnabledBeforeCar = false
                         }
-                        cameraWasEnabledBeforeCar = false
                     }
                 }
             }
