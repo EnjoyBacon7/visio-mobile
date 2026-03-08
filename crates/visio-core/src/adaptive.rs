@@ -170,4 +170,27 @@ mod tests {
         engine.update_signal(ContextSignal::MotionDetected(false));
         assert_eq!(engine.current_mode(), AdaptiveMode::Office);
     }
+
+    #[test]
+    fn car_to_pedestrian_when_bluetooth_disconnects_while_moving() {
+        let mut engine = AdaptiveEngine::new();
+        engine.update_signal(ContextSignal::MotionDetected(true));
+        engine.update_signal(ContextSignal::BluetoothCarKit(true));
+        assert_eq!(engine.current_mode(), AdaptiveMode::Car);
+
+        let result = engine.update_signal(ContextSignal::BluetoothCarKit(false));
+        assert_eq!(result, Some(AdaptiveMode::Pedestrian));
+        assert_eq!(engine.current_mode(), AdaptiveMode::Pedestrian);
+    }
+
+    #[test]
+    fn car_to_office_when_bluetooth_disconnects_while_stationary() {
+        let mut engine = AdaptiveEngine::new();
+        engine.update_signal(ContextSignal::BluetoothCarKit(true));
+        assert_eq!(engine.current_mode(), AdaptiveMode::Car);
+
+        let result = engine.update_signal(ContextSignal::BluetoothCarKit(false));
+        assert_eq!(result, Some(AdaptiveMode::Office));
+        assert_eq!(engine.current_mode(), AdaptiveMode::Office);
+    }
 }
