@@ -35,8 +35,8 @@ class ContextDetector(private val context: Context) {
 
     private var lastReportedMotion = false
     private var lastSignificantMotionMs = 0L  // last time we saw a significant accel event
-    private val MOTION_THRESHOLD = 1.5f       // m/s² deviation from gravity to count as motion
-    private val MOTION_COOLDOWN_MS = 10000L   // stay in pedestrian 10s after last motion event
+    private val MOTION_THRESHOLD = 2.5f       // m/s² deviation from gravity to count as motion
+    private val MOTION_COOLDOWN_MS = 15000L   // stay in pedestrian 15s after last motion event
 
     companion object {
         private const val TAG = "ContextDetector"
@@ -126,7 +126,7 @@ class ContextDetector(private val context: Context) {
                     }
                 } else if (lastReportedMotion && lastSignificantMotionMs > 0L &&
                     now - lastSignificantMotionMs > MOTION_COOLDOWN_MS) {
-                    // Cooldown expired — no significant motion for 10s
+                    // Cooldown expired — no significant motion for 15s
                     lastReportedMotion = false
                     Log.d(TAG, "Motion stopped (${MOTION_COOLDOWN_MS}ms cooldown expired)")
                     try { VisioManager.client.reportMotionDetected(false) } catch (_: Exception) {}
