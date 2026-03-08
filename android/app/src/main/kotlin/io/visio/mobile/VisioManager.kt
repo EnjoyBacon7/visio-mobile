@@ -377,9 +377,44 @@ object VisioManager : VisioEventListener {
 
     private fun routeAudioToBluetooth() {
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Save previous state for restore
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             previousAudioDevice = am.communicationDevice
         }
+
+        // Ensure audio mode is set for communication (required for SCO)
+        if (am.mode != AudioManager.MODE_IN_COMMUNICATION) {
+            am.mode = AudioManager.MODE_IN_COMMUNICATION
+            Log.i("VisioManager", "Set audio mode to MODE_IN_COMMUNICATION")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+: use setCommunicationDevice
+            val btDevice = am.availableCommunicationDevices.firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+            if (btDevice != null) {
+                val success = am.setCommunicationDevice(btDevice)
+                Log.i("VisioManager", "setCommunicationDevice(${btDevice.productName}): $success")
+            } else {
+                Log.w("VisioManager", "No Bluetooth device in availableCommunicationDevices")
+                // Fallback: try startBluetoothSco
+                @Suppress("DEPRECATION")
+                am.startBluetoothSco()
+                am.isBluetoothScoOn = true
+                Log.i("VisioManager", "Started Bluetooth SCO (fallback)")
+            }
+        } else {
+            // Pre-Android 12: use legacy SCO
+            @Suppress("DEPRECATION")
+            am.startBluetoothSco()
+            am.isBluetoothScoOn = true
+            Log.i("VisioManager", "Started Bluetooth SCO (legacy)")
+        }
+
+        // Also set preferred devices on audio tracks
         val btOutput = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
             device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
             device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
@@ -389,25 +424,31 @@ object VisioManager : VisioEventListener {
             device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
             device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
         }
-        if (btOutput != null) {
-            Log.i("VisioManager", "Routing audio output to Bluetooth: ${btOutput.productName}")
-            setAudioOutputDevice(btOutput)
+        btOutput?.let {
+            audioPlayout?.setPreferredDevice(it)
+            Log.i("VisioManager", "Set preferred output: ${it.productName}")
         }
-        if (btInput != null) {
-            Log.i("VisioManager", "Routing audio input to Bluetooth: ${btInput.productName}")
-            setAudioInputDevice(btInput)
+        btInput?.let {
+            audioCapture?.setPreferredDevice(it)
+            Log.i("VisioManager", "Set preferred input: ${it.productName}")
         }
     }
 
     private fun restoreDefaultAudioRoute() {
+        val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             am.clearCommunicationDevice()
-            Log.i("VisioManager", "Restored default audio routing")
+        } else {
+            @Suppress("DEPRECATION")
+            if (am.isBluetoothScoOn) {
+                am.isBluetoothScoOn = false
+                am.stopBluetoothSco()
+            }
         }
         audioCapture?.setPreferredDevice(null)
         audioPlayout?.setPreferredDevice(null)
         previousAudioDevice = null
+        Log.i("VisioManager", "Restored default audio routing")
     }
 
     /**

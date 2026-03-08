@@ -190,6 +190,11 @@ class ContextDetector(private val context: Context) {
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             reportBluetoothCarKit()
                         }, 500)
+                        if (intent.action == android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                VisioManager.onBluetoothAudioDeviceConnected()
+                            }, 1000)
+                        }
                     }
                 }
             }
