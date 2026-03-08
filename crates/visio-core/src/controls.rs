@@ -19,33 +19,6 @@ const AUDIO_QUEUE_SIZE_MS: u32 = 100;
 const VIDEO_WIDTH: u32 = 1280;
 const VIDEO_HEIGHT: u32 = 720;
 
-/// Video quality preset with associated resolution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VideoQuality {
-    High,   // 1280x720
-    Medium, // 640x480
-    Low,    // 320x240
-}
-
-impl VideoQuality {
-    pub fn resolution(&self) -> (u32, u32) {
-        match self {
-            VideoQuality::High => (1280, 720),
-            VideoQuality::Medium => (640, 480),
-            VideoQuality::Low => (320, 240),
-        }
-    }
-}
-
-/// Get the recommended video quality for an adaptive mode.
-pub fn quality_for_mode(mode: crate::adaptive::AdaptiveMode) -> VideoQuality {
-    match mode {
-        crate::adaptive::AdaptiveMode::Office => VideoQuality::High,
-        crate::adaptive::AdaptiveMode::Pedestrian => VideoQuality::Medium,
-        crate::adaptive::AdaptiveMode::Car => VideoQuality::Low,
-    }
-}
-
 /// Controls for local media (microphone, camera).
 ///
 /// Manages local track creation, publishing, and mute/unmute.

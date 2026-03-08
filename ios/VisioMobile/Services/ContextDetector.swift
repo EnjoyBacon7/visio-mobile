@@ -4,12 +4,16 @@ import CoreMotion
 import AVFoundation
 import visioFFI
 
-class ContextDetector {
+class ContextDetector: NSObject {
     private let pathMonitor = NWPathMonitor()
     private let motionManager = CMMotionActivityManager()
     private let monitorQueue = DispatchQueue(label: "io.visio.context")
 
     private var isMoving = false
+
+    deinit {
+        stop()
+    }
 
     func start() {
         startNetworkMonitoring()

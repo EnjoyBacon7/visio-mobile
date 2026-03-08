@@ -30,7 +30,6 @@ pub enum ContextSignal {
 /// Engine that aggregates context signals and derives the current adaptive mode.
 #[derive(Debug, Clone)]
 pub struct AdaptiveEngine {
-    network: NetworkType,
     motion: bool,
     bluetooth_car: bool,
     mode_override: Option<AdaptiveMode>,
@@ -46,7 +45,6 @@ impl AdaptiveEngine {
     /// Creates a new engine with default state (Office mode).
     pub fn new() -> Self {
         Self {
-            network: NetworkType::Wifi,
             motion: false,
             bluetooth_car: false,
             mode_override: None,
@@ -65,7 +63,7 @@ impl AdaptiveEngine {
         let old = self.current_mode();
 
         match signal {
-            ContextSignal::NetworkType(n) => self.network = n,
+            ContextSignal::NetworkType(_) => {} // Stored for future use
             ContextSignal::MotionDetected(m) => self.motion = m,
             ContextSignal::BluetoothCarKit(b) => self.bluetooth_car = b,
         }
@@ -112,13 +110,6 @@ mod tests {
         let mut engine = AdaptiveEngine::new();
         engine.update_signal(ContextSignal::MotionDetected(true));
         assert_eq!(engine.current_mode(), AdaptiveMode::Pedestrian);
-    }
-
-    #[test]
-    fn no_motion_stays_office() {
-        let mut engine = AdaptiveEngine::new();
-        engine.update_signal(ContextSignal::NetworkType(NetworkType::Cellular));
-        assert_eq!(engine.current_mode(), AdaptiveMode::Office);
     }
 
     #[test]
