@@ -82,6 +82,40 @@ The feature uses the [MediaPipe Selfie Segmentation](https://ai.google.dev/edge/
 
 Participants can send animated emoji reactions during a call. Reactions are transmitted in real time via LiveKit data channels and displayed as floating animations on all participants' screens. Available from the overflow menu in the call control bar.
 
+## Adaptive context modes
+
+Visio Mobile automatically adapts the meeting interface based on the user's physical context. The app detects three modes — **Office**, **Pedestrian**, and **Car** — and adjusts the UI, video layout, and audio routing accordingly.
+
+### Modes
+
+| Mode | Trigger | UI | Audio |
+|------|---------|-----|-------|
+| **Office** | Default (no motion, no car Bluetooth) | Full video grid, all controls visible | Phone speaker/mic or manual selection |
+| **Pedestrian** | Walking/running detected via accelerometer (Android) or Core Motion (iOS) | Single active speaker tile, large buttons | Auto-routes to connected Bluetooth headset |
+| **Car** | Bluetooth car kit or hands-free device detected | Audio-only view (no video), extra-large mic + hangup buttons | Auto-routes to car Bluetooth (mic + speaker) |
+
+### How it works
+
+1. **Context detection** runs in the background during a call, monitoring three signals:
+   - **Motion** — Accelerometer deviation from gravity (Android, threshold: 2.5 m/s², 15s cooldown) or `CMMotionActivityManager` activity classification (iOS)
+   - **Bluetooth** — Connected audio device type: car systems (HFP, car audio, or uncategorized devices like Tesla) trigger Car mode; headphones/earbuds do not
+   - **Network** — WiFi vs cellular (stored for future adaptive quality)
+
+2. **Mode priority**: Car (Bluetooth) > Pedestrian (motion) > Office (default)
+
+3. **Audio auto-routing**:
+   - When a Bluetooth audio device connects during a call, audio input and output are automatically routed to it
+   - When a Bluetooth device disconnects, audio routes to the next available Bluetooth device, or falls back to phone speaker/mic
+   - Uses `setCommunicationDevice()` (Android 12+) or `startBluetoothSco()` (older) / `AVAudioSession.setPreferredInput()` (iOS)
+
+4. **Manual override**: The overflow menu ("...") allows forcing a specific mode. Auto-detection resumes when the override is cleared.
+
+5. **Camera management**: Entering Car mode automatically disables the camera (saves battery). When leaving Car mode, the camera is restored to its previous state. A 5-second grace period after connection prevents race conditions with camera-on-join settings.
+
+### Audio source selection
+
+The audio device picker (chevron next to the mic button) is available in **all modes** — not just Office. In Pedestrian and Car modes, the chevron and buttons scale up for easier interaction while moving.
+
 ## Platforms
 
 | Platform | UI toolkit | Min version |
@@ -108,6 +142,7 @@ Participants can send animated emoji reactions during a call. Reactions are tran
 │   MeetingControls · ParticipantManager           │
 │   HandRaiseManager · SettingsStore               │
 │   LobbyService · AccessService · SessionManager  │
+│   AdaptiveEngine (Office/Pedestrian/Car modes)   │
 ├──────────────────────────────────────────────────┤
 │                  visio-video                     │
 │   I420 renderer registry · platform renderers    │
@@ -118,7 +153,7 @@ Participants can send animated emoji reactions during a call. Reactions are tran
 
 **4 Rust crates:**
 
-- **`visio-core`** — Room lifecycle, auth (Meet API + OIDC session), chat (Stream API `lk.chat`), participants, media controls, hand raise (Meet interop), active speaker tracking, persistent settings, event system, lobby/waiting room, room access management, reactions
+- **`visio-core`** — Room lifecycle, auth (Meet API + OIDC session), chat (Stream API `lk.chat`), participants, media controls, hand raise (Meet interop), active speaker tracking, persistent settings, event system, lobby/waiting room, room access management, reactions, adaptive context engine
 - **`visio-video`** — Video frame rendering: I420 decode, renderer registry, platform-specific renderers
 - **`visio-ffi`** — UniFFI `.udl` bindings (control plane) + raw C FFI (video/audio zero-copy) + on-device background blur/replacement (ONNX Runtime selfie segmentation)
 - **`visio-desktop`** — Tauri 2.x commands + cpal audio + AVFoundation camera capture (macOS)
@@ -300,6 +335,8 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 - Hand raise with Meet interop (uses `handRaisedAt` attribute, auto-lower after 3s speaking)
 - On-device background blur and background replacement (ONNX Runtime selfie segmentation)
 - Animated emoji reactions via LiveKit data channels
+- Adaptive context modes: automatic Office/Pedestrian/Car detection with UI and audio adaptation
+- Bluetooth audio auto-routing (headset, car kit) with smart fallback on disconnect
 - Persistent settings (display name, language, theme, mic/camera on join)
 - Deep links: `visio://host/slug` opens the app with room pre-filled (all platforms)
 - Configurable Meet instances list in Settings
@@ -357,13 +394,14 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 - **Independent audio routing**: Select input and output audio devices separately (e.g., Bluetooth mic + phone speaker)
 - **In-call settings panel**: Tabbed bottom sheet for microphone/camera/notification/background settings during a call
 - **Network resilience**: Automatic reconnection with UI banner (via LiveKit SDK)
+- **Adaptive context modes**: Automatic Office/Pedestrian/Car detection with adapted UI, active speaker view in pedestrian mode, audio-only car mode, Bluetooth auto-routing, and manual override
 
 ## What's next
 
 - Official App store packaging (APK/IPA/DMG)
 - Live subtitles (on-device Whisper)
-- Adaptive context modes (office/pedestrian/car)
 - Silent catch-up (join summary)
+- Live subtitle translation (on-device NLLB)
 
 ## Configuration
 
