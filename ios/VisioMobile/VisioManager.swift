@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import visioFFI
@@ -544,6 +545,37 @@ class VisioManager: ObservableObject {
         audioPlayout?.stop()
         audioPlayout = nil
     }
+
+    // MARK: - Audio Routing
+
+    private func routeAudioToBluetooth() {
+        let session = AVAudioSession.sharedInstance()
+        if let btInput = session.availableInputs?.first(where: { port in
+            port.portType == .bluetoothHFP || port.portType == .bluetoothA2DP
+        }) {
+            do {
+                try session.setPreferredInput(btInput)
+                print("[VisioManager] Routed audio input to Bluetooth: \(btInput.portName)")
+            } catch {
+                print("[VisioManager] Failed to route audio to Bluetooth: \(error)")
+            }
+        }
+        do {
+            try session.overrideOutputAudioPort(.none)
+        } catch {
+            print("[VisioManager] Failed to set output override: \(error)")
+        }
+    }
+
+    private func restoreDefaultAudioRoute() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setPreferredInput(nil)
+            print("[VisioManager] Restored default audio input")
+        } catch {
+            print("[VisioManager] Failed to restore audio input: \(error)")
+        }
+    }
 }
 
 // MARK: - VisioEventListener
@@ -661,10 +693,14 @@ extension VisioManager: VisioEventListener {
                     if self.isCameraEnabled {
                         self.toggleCamera()
                     }
-                } else if previousMode == .car && self.cameraWasEnabledBeforeCar {
-                    self.cameraWasEnabledBeforeCar = false
-                    if !self.isCameraEnabled {
-                        self.toggleCamera()
+                    self.routeAudioToBluetooth()
+                } else if previousMode == .car {
+                    self.restoreDefaultAudioRoute()
+                    if self.cameraWasEnabledBeforeCar {
+                        self.cameraWasEnabledBeforeCar = false
+                        if !self.isCameraEnabled {
+                            self.toggleCamera()
+                        }
                     }
                 }
 
