@@ -144,6 +144,8 @@
   "lobby.deny": "Weigeren",
   "lobby.admitAll": "Alles toelaten",
   "lobby.badge": "{count} wachtend",
+  "lobby.joinRequest": "{{name}} wil deelnemen aan de vergadering",
+  "lobby.view": "Bekijken",
   "home.createRoom.restricted": "Beperkt",
   "home.createRoom.restrictedDesc": "Alleen op uitnodiging — alleen uitgenodigde leden kunnen deelnemen",
   "restricted.searchUsers": "Gebruikers zoeken op e-mail",

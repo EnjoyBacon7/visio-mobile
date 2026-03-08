@@ -144,6 +144,8 @@
   "lobby.deny": "Rifiuta",
   "lobby.admitAll": "Ammetti tutti",
   "lobby.badge": "{count} in attesa",
+  "lobby.joinRequest": "{{name}} vuole partecipare alla riunione",
+  "lobby.view": "Vedi",
   "home.createRoom.restricted": "Riservata",
   "home.createRoom.restrictedDesc": "Solo su invito — solo i membri invitati possono partecipare",
   "restricted.searchUsers": "Cerca utenti per email",

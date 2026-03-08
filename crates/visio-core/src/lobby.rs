@@ -21,6 +21,12 @@ pub struct WaitingParticipant {
     pub username: String,
 }
 
+/// Wrapper for the waiting-participants API response.
+#[derive(Debug, Deserialize)]
+struct WaitingParticipantsResponse {
+    participants: Vec<WaitingParticipant>,
+}
+
 /// Result of polling the lobby for entry status.
 #[derive(Debug, Clone)]
 pub enum LobbyPollResult {
@@ -187,8 +193,10 @@ impl LobbyService {
             .await
             .map_err(|e| VisioError::Http(e.to_string()))?;
 
-        serde_json::from_str(&body)
-            .map_err(|e| VisioError::Auth(format!("invalid waiting-participants response: {e}")))
+        let resp: WaitingParticipantsResponse = serde_json::from_str(&body)
+            .map_err(|e| VisioError::Auth(format!("invalid waiting-participants response: {e}")))?;
+
+        Ok(resp.participants)
     }
 
     /// Allow or deny a waiting participant (host only).
@@ -313,12 +321,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_waiting_participants_list() {
-        let list: Vec<WaitingParticipant> = serde_json::from_str(
-            r#"[{"id": "p-1", "username": "Alice"}, {"id": "p-2", "username": "Bob"}]"#,
+    fn parse_waiting_participants_response() {
+        let resp: WaitingParticipantsResponse = serde_json::from_str(
+            r#"{"participants": [{"id": "p-1", "username": "Alice"}, {"id": "p-2", "username": "Bob"}]}"#,
         )
         .unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(resp.participants.len(), 2);
     }
 
     #[tokio::test]

@@ -1,39 +1,29 @@
-import AuthenticationServices
 import Security
+import SwiftUI
 import UIKit
+import WebKit
 
-class OidcAuthManager: NSObject, ASWebAuthenticationPresentationContextProviding {
+// MARK: - OidcAuthManager
 
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            return ASPresentationAnchor()
-        }
-        return window
-    }
+class OidcAuthManager: NSObject, ObservableObject {
+
+    /// Set to trigger the OIDC sheet presentation from SwiftUI.
+    @Published var pendingInstance: String? = nil
+
+    /// Called when the OIDC flow completes (cookie or nil).
+    var onComplete: ((String?) -> Void)?
 
     func launchOidcFlow(meetInstance: String, completion: @escaping (String?) -> Void) {
-        let returnTo = "https://\(meetInstance)/"
-        let encodedReturnTo = returnTo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? returnTo
-        guard let authURL = URL(string: "https://\(meetInstance)/api/v1.0/authenticate/?returnTo=\(encodedReturnTo)") else {
-            completion(nil)
-            return
+        onComplete = completion
+        DispatchQueue.main.async {
+            self.pendingInstance = meetInstance
         }
+    }
 
-        let session = ASWebAuthenticationSession(url: authURL, callbackURLScheme: "visio") { callbackURL, error in
-            guard error == nil else {
-                completion(nil)
-                return
-            }
-            // After OIDC flow, try to get the session cookie from shared cookie store
-            let cookies = HTTPCookieStorage.shared.cookies(for: URL(string: "https://\(meetInstance)")!) ?? []
-            let sessionCookie = cookies.first(where: { $0.name == "sessionid" })?.value
-            completion(sessionCookie)
-        }
-
-        session.presentationContextProvider = self
-        session.prefersEphemeralWebBrowserSession = false
-        session.start()
+    func handleResult(_ cookie: String?) {
+        pendingInstance = nil
+        onComplete?(cookie)
+        onComplete = nil
     }
 
     // MARK: - Keychain Storage
@@ -71,5 +61,87 @@ class OidcAuthManager: NSObject, ASWebAuthenticationPresentationContextProviding
             kSecAttrService as String: "io.visio.mobile",
         ]
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+// MARK: - SwiftUI WKWebView Wrapper
+
+struct OidcWebView: UIViewRepresentable {
+    let meetInstance: String
+    let onCookieExtracted: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(meetInstance: meetInstance, onCookieExtracted: onCookieExtracted)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+
+        let returnTo = "https://\(meetInstance)/"
+        let encodedReturnTo = returnTo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? returnTo
+        if let url = URL(string: "https://\(meetInstance)/api/v1.0/authenticate/?returnTo=\(encodedReturnTo)") {
+            webView.load(URLRequest(url: url))
+        }
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        let meetInstance: String
+        let onCookieExtracted: (String) -> Void
+        private var extracted = false
+
+        init(meetInstance: String, onCookieExtracted: @escaping (String) -> Void) {
+            self.meetInstance = meetInstance
+            self.onCookieExtracted = onCookieExtracted
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let url = webView.url, !extracted else { return }
+            let returnTo = "https://\(meetInstance)/"
+            if url.absoluteString.hasPrefix(returnTo)
+                && !url.absoluteString.contains("/api/v1.0/authenticate") {
+                let store = webView.configuration.websiteDataStore.httpCookieStore
+                store.getAllCookies { [weak self] cookies in
+                    guard let self, !self.extracted else { return }
+                    if let cookie = cookies.first(where: {
+                        $0.name == "sessionid" && $0.domain.contains(self.meetInstance)
+                    })?.value, !cookie.isEmpty {
+                        self.extracted = true
+                        DispatchQueue.main.async {
+                            self.onCookieExtracted(cookie)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Sheet View
+
+struct OidcLoginSheet: View {
+    let meetInstance: String
+    let onResult: (String?) -> Void
+
+    var body: some View {
+        NavigationStack {
+            OidcWebView(meetInstance: meetInstance) { cookie in
+                onResult(cookie)
+            }
+            .navigationTitle(meetInstance)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onResult(nil)
+                    }
+                }
+            }
+        }
     }
 }

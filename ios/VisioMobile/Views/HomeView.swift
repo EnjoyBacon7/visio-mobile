@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var showServerPicker: Bool = false
     @State private var customServer: String = ""
     @State private var showCreateRoom: Bool = false
+    @State private var pendingOidcInstance: String? = nil
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -227,67 +228,99 @@ struct HomeView: View {
             .environmentObject(manager)
         }
         .sheet(isPresented: $showServerPicker) {
-            ServerPickerView(
+            ServerPickerWithOidc(
                 instances: meetInstances,
                 customServer: $customServer,
                 lang: lang,
-                onSelect: { instance in
+                onComplete: { cookie, instance in
                     showServerPicker = false
-                    launchOidc(meetInstance: instance)
+                    if let cookie {
+                        manager.onAuthCookieReceived(cookie, meetInstance: instance)
+                    }
                 },
                 onDismiss: { showServerPicker = false }
             )
         }
+        .sheet(isPresented: Binding(
+            get: { pendingOidcInstance != nil },
+            set: { if !$0 { pendingOidcInstance = nil } }
+        )) {
+            if let instance = pendingOidcInstance {
+                OidcLoginSheet(meetInstance: instance) { cookie in
+                    let inst = instance
+                    pendingOidcInstance = nil
+                    if let cookie {
+                        manager.onAuthCookieReceived(cookie, meetInstance: inst)
+                    }
+                }
+            }
+        }
     }
 
     private func launchOidc(meetInstance: String) {
-        manager.authManager.launchOidcFlow(meetInstance: meetInstance) { cookie in
-            if let cookie = cookie {
-                manager.onAuthCookieReceived(cookie, meetInstance: meetInstance)
-            }
-        }
+        pendingOidcInstance = meetInstance
     }
 }
 
 // MARK: - Server Picker
 
-private struct ServerPickerView: View {
+/// Server picker that navigates to the OIDC web view within the same sheet.
+private struct ServerPickerWithOidc: View {
     let instances: [String]
     @Binding var customServer: String
     let lang: String
-    let onSelect: (String) -> Void
+    let onComplete: (String?, String) -> Void  // (cookie?, meetInstance)
     let onDismiss: () -> Void
+
+    @State private var selectedInstance: String? = nil
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    ForEach(instances, id: \.self) { instance in
-                        Button(instance) {
-                            onSelect(instance)
+            if let instance = selectedInstance {
+                // OIDC web view — pushed in same sheet
+                OidcWebView(meetInstance: instance) { cookie in
+                    onComplete(cookie, instance)
+                }
+                .navigationTitle(instance)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
+                            onDismiss()
                         }
                     }
                 }
-                Section {
-                    TextField(Strings.t("home.serverPicker.custom", lang: lang), text: $customServer)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    Button(Strings.t("home.connect", lang: lang)) {
-                        let trimmed = customServer.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            onSelect(trimmed)
+            } else {
+                // Server picker list
+                List {
+                    Section {
+                        ForEach(instances, id: \.self) { instance in
+                            Button(instance) {
+                                selectedInstance = instance
+                            }
                         }
                     }
-                    .disabled(customServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Section {
+                        TextField(Strings.t("home.serverPicker.custom", lang: lang), text: $customServer)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        Button(Strings.t("home.connect", lang: lang)) {
+                            let trimmed = customServer.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty {
+                                selectedInstance = trimmed
+                            }
+                        }
+                        .disabled(customServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
-            }
-            .navigationTitle(Strings.t("home.serverPicker.title", lang: lang))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
-                        onDismiss()
+                .navigationTitle(Strings.t("home.serverPicker.title", lang: lang))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
+                            onDismiss()
+                        }
                     }
                 }
             }

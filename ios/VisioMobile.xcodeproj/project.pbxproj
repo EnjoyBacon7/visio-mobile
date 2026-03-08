@@ -30,6 +30,7 @@
 		A1000100000000000000000B /* libvisio_ffi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000200000000000000000B /* libvisio_ffi.a */; };
 		A1000100000000000000000C /* libvisio_video.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000200000000000000000C /* libvisio_video.a */; };
 		A1000100000000000000000D /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000200000000000000000D /* libresolv.tbd */; };
+		A10001000000000000000019 /* OidcAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200000000000000001D /* OidcAuthManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		A1000200000000000000001A /* ToolbarFix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolbarFix.swift; sourceTree = "<group>"; };
 		A1000200000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000200000000000000001C /* InCallSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InCallSettingsSheet.swift; sourceTree = "<group>"; };
+		A1000200000000000000001D /* OidcAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OidcAuthManager.swift; sourceTree = "<group>"; };
 		A10003000000000000000001 /* VisioMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VisioMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -99,6 +101,7 @@
 				A10005000000000000000007 /* i18n */,
 				A10005000000000000000004 /* Views */,
 				A10005000000000000000008 /* Services */,
+				A10005000000000000000009 /* Auth */,
 				A10005000000000000000006 /* Generated */,
 				A1000200000000000000001B /* Assets.xcassets */,
 				A1000200000000000000000E /* Info.plist */,
@@ -165,6 +168,14 @@
 				A10002000000000000000019 /* PiPManager.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		A10005000000000000000009 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				A1000200000000000000001D /* OidcAuthManager.swift */,
+			);
+			path = Auth;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -284,6 +295,7 @@
 				A10001000000000000000015 /* PiPManager.swift in Sources */,
 				A10001000000000000000016 /* ToolbarFix.swift in Sources */,
 				A10001000000000000000018 /* InCallSettingsSheet.swift in Sources */,
+				A10001000000000000000019 /* OidcAuthManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

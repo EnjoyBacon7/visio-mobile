@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -44,6 +45,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,6 +80,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.visio.ConnectionState
 import uniffi.visio.ParticipantInfo
+import uniffi.visio.WaitingParticipant
 import kotlin.math.absoluteValue
 
 private const val TAG = "CallScreen"
@@ -101,6 +108,8 @@ fun CallScreen(
     val handRaisedMap by VisioManager.handRaisedMap.collectAsState()
     val unreadCount by VisioManager.unreadCount.collectAsState()
     val isHandRaised by VisioManager.isHandRaised.collectAsState()
+    val lobbyNotification by VisioManager.lobbyNotification.collectAsState()
+    val waitingParticipants by VisioManager.waitingParticipants.collectAsState()
 
     val context = LocalContext.current
     val lang = VisioManager.currentLang
@@ -532,6 +541,92 @@ fun CallScreen(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Lobby: persistent banner when participants are waiting
+        LobbyWaitingBanner(
+            waitingParticipants = waitingParticipants,
+            lang = lang,
+            onAdmit = { participant ->
+                VisioManager.admitParticipant(participant.id)
+            },
+            onView = {
+                showParticipantList = true
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun LobbyWaitingBanner(
+    waitingParticipants: List<WaitingParticipant>,
+    lang: String,
+    onAdmit: (WaitingParticipant) -> Unit,
+    onView: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = waitingParticipants.isNotEmpty(),
+        enter = slideInVertically { -it } + fadeIn(),
+        exit = slideOutVertically { -it } + fadeOut(),
+        modifier = modifier,
+    ) {
+        if (waitingParticipants.isNotEmpty()) {
+            val first = waitingParticipants.first()
+            val message = if (waitingParticipants.size == 1) {
+                Strings.t("lobby.joinRequest", lang).replace("{{name}}", first.username)
+            } else {
+                Strings.t("lobby.joinRequest", lang).replace("{{name}}", first.username) +
+                    " (+${waitingParticipants.size - 1})"
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(12.dp))
+                    .background(VisioColors.PrimaryDark75, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = message,
+                    color = VisioColors.White,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { onAdmit(first) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = VisioColors.Primary500,
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = Strings.t("lobby.admit", lang),
+                        fontSize = 12.sp,
+                    )
+                }
+                OutlinedButton(
+                    onClick = onView,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = Strings.t("lobby.view", lang),
+                        fontSize = 12.sp,
+                        color = VisioColors.White,
+                    )
+                }
+            }
         }
     }
 }

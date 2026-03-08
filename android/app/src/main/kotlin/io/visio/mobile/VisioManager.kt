@@ -77,6 +77,10 @@ object VisioManager : VisioEventListener {
     private val _waitingParticipants = MutableStateFlow<List<WaitingParticipant>>(emptyList())
     val waitingParticipants: StateFlow<List<WaitingParticipant>> = _waitingParticipants.asStateFlow()
 
+    // Lobby: notification banner for newly joined waiting participant
+    private val _lobbyNotification = MutableStateFlow<WaitingParticipant?>(null)
+    val lobbyNotification: StateFlow<WaitingParticipant?> = _lobbyNotification.asStateFlow()
+
     // Lobby: whether entry was denied by host
     private val _lobbyDenied = MutableStateFlow(false)
     val lobbyDenied: MutableStateFlow<Boolean> = _lobbyDenied
@@ -355,6 +359,13 @@ object VisioManager : VisioEventListener {
     }
 
     /**
+     * Clear the lobby join notification banner.
+     */
+    fun clearLobbyNotification() {
+        _lobbyNotification.value = null
+    }
+
+    /**
      * Cancel waiting in the lobby and disconnect.
      */
     fun cancelLobby() {
@@ -478,6 +489,7 @@ object VisioManager : VisioEventListener {
                         _unreadCount.value = 0
                         _isHandRaised.value = false
                         _waitingParticipants.value = emptyList()
+                        _lobbyNotification.value = null
                         CallForegroundService.stop(appContext)
                     }
                     else -> {}
@@ -537,11 +549,13 @@ object VisioManager : VisioEventListener {
                 refreshParticipants()
             }
             is VisioEvent.LobbyParticipantJoined -> {
+                val participant = WaitingParticipant(event.id, event.username)
                 val current = _waitingParticipants.value.toMutableList()
                 if (current.none { it.id == event.id }) {
-                    current.add(WaitingParticipant(event.id, event.username))
+                    current.add(participant)
                     _waitingParticipants.value = current
                 }
+                _lobbyNotification.value = participant
             }
             is VisioEvent.LobbyParticipantLeft -> {
                 _waitingParticipants.value = _waitingParticipants.value.filter { it.id != event.id }

@@ -16,6 +16,7 @@ struct CallView: View {
     @State private var inCallSettingsTab: Int = 0
     @State private var showParticipantList: Bool = false
     @State private var focusedParticipant: String? = nil
+    // lobbyNotificationDismissTask removed — banner is now persistent while participants wait
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -25,6 +26,9 @@ struct CallView: View {
             VisioColors.background(dark: isDark).ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // Lobby join notification banner
+                lobbyNotificationBanner
+
                 // Connection state banner
                 connectionBanner
 
@@ -145,6 +149,7 @@ struct CallView: View {
                 dismiss()
             }
         }
+        // Lobby banner is now persistent — driven by waitingParticipants list
     }
 
     // MARK: - Grid Layout
@@ -206,6 +211,65 @@ struct CallView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 focusedParticipant = nil
             }
+        }
+    }
+
+    // MARK: - Lobby Waiting Banner
+
+    @ViewBuilder
+    private var lobbyNotificationBanner: some View {
+        if !manager.waitingParticipants.isEmpty {
+            let first = manager.waitingParticipants[0]
+            let message: String = {
+                let base = Strings.t("lobby.joinRequest", lang: lang)
+                    .replacingOccurrences(of: "{{name}}", with: first.username)
+                if manager.waitingParticipants.count > 1 {
+                    return base + " (+\(manager.waitingParticipants.count - 1))"
+                }
+                return base
+            }()
+            HStack(spacing: 12) {
+                Text(message)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+
+                Spacer()
+
+                Button {
+                    manager.admitParticipant(first.id)
+                } label: {
+                    Text(Strings.t("lobby.admit", lang: lang))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(VisioColors.primary500)
+                        .clipShape(Capsule())
+                }
+
+                Button {
+                    showParticipantList = true
+                } label: {
+                    Text(Strings.t("lobby.view", lang: lang))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(VisioColors.primaryDark300)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(VisioColors.primaryDark100)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 

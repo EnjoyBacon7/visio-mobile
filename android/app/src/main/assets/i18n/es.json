@@ -144,6 +144,8 @@
   "lobby.deny": "Denegar",
   "lobby.admitAll": "Admitir a todos",
   "lobby.badge": "{count} esperando",
+  "lobby.joinRequest": "{{name}} quiere unirse a la reunión",
+  "lobby.view": "Ver",
   "home.createRoom.restricted": "Restringida",
   "home.createRoom.restrictedDesc": "Solo por invitación — solo los miembros invitados pueden unirse",
   "restricted.searchUsers": "Buscar usuarios por correo electrónico",

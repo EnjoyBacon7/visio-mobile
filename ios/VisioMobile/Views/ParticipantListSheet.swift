@@ -48,7 +48,7 @@ struct ParticipantListSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(VisioColors.background(dark: isDark))
-            .navigationTitle("\(Strings.t("participants.title", lang: lang)) (\(manager.participants.count + 1))")
+            .navigationTitle("\(Strings.t("participants.title", lang: lang)) (\(manager.participants.count))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
             .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
@@ -211,7 +211,10 @@ struct ParticipantListSheet: View {
     // MARK: - Sorting
 
     private var sortedParticipants: [ParticipantInfo] {
-        manager.participants.sorted { a, b in
+        // The first participant is the local one (prepended by visio-core),
+        // skip it since we render localParticipantRow separately.
+        let remote = manager.participants.dropFirst()
+        return Array(remote).sorted { a, b in
             let aRaised = manager.handRaisedMap[a.sid]
             let bRaised = manager.handRaisedMap[b.sid]
 

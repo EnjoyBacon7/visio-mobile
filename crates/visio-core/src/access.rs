@@ -27,6 +27,13 @@ struct PaginatedResponse<T> {
     results: Vec<T>,
 }
 
+/// Room detail response — only the fields we need.
+#[derive(Debug, Deserialize)]
+struct RoomDetailResponse {
+    #[serde(default)]
+    accesses: Vec<RoomAccess>,
+}
+
 /// Service for managing room access (restricted rooms).
 pub struct AccessService;
 
@@ -74,7 +81,7 @@ impl AccessService {
         Ok(page.results)
     }
 
-    /// List accesses for a room.
+    /// List accesses for a room by fetching the room detail.
     pub async fn list_accesses(
         meet_url: &str,
         session_cookie: &str,
@@ -83,9 +90,8 @@ impl AccessService {
         let (instance, _slug) = AuthService::parse_meet_url(meet_url)?;
 
         let api_url = format!(
-            "https://{}/api/v1.0/resource-accesses/?resource={}",
-            instance,
-            urlencoding::encode(room_id)
+            "https://{}/api/v1.0/rooms/{}/",
+            instance, room_id
         );
 
         let client = reqwest::Client::new();
@@ -101,7 +107,7 @@ impl AccessService {
 
         if !resp.status().is_success() {
             return Err(VisioError::Auth(format!(
-                "list-accesses returned status {}",
+                "room detail returned status {}",
                 resp.status()
             )));
         }
@@ -111,10 +117,10 @@ impl AccessService {
             .await
             .map_err(|e| VisioError::Http(e.to_string()))?;
 
-        let page: PaginatedResponse<RoomAccess> = serde_json::from_str(&body)
-            .map_err(|e| VisioError::Auth(format!("invalid accesses response: {e}")))?;
+        let room: RoomDetailResponse = serde_json::from_str(&body)
+            .map_err(|e| VisioError::Auth(format!("invalid room detail response: {e}")))?;
 
-        Ok(page.results)
+        Ok(room.accesses)
     }
 
     /// Add a user as member of a room.
@@ -259,6 +265,47 @@ mod tests {
     }
 
     #[test]
+    fn parse_room_access_with_extra_user_fields() {
+        // The rooms endpoint returns user objects with extra fields (timezone, language)
+        // that we ignore via serde.
+        let json = r#"{
+            "id": "ra-1",
+            "user": {"id": "u-1", "email": "bob@example.com", "full_name": null, "short_name": null, "timezone": "Europe/Paris", "language": "fr-fr"},
+            "resource": "room-123",
+            "role": "owner"
+        }"#;
+        let access: RoomAccess = serde_json::from_str(json).unwrap();
+        assert_eq!(access.user.id, "u-1");
+        assert_eq!(access.role, "owner");
+    }
+
+    #[test]
+    fn parse_room_detail_with_accesses() {
+        let json = r#"{
+            "id": "room-1",
+            "name": "Test Room",
+            "slug": "test-room",
+            "access_level": "restricted",
+            "accesses": [
+                {"id": "ra-1", "user": {"id": "u-1", "email": "a@b.com", "full_name": null, "short_name": null}, "resource": "room-1", "role": "owner"},
+                {"id": "ra-2", "user": {"id": "u-2", "email": "c@d.com", "full_name": "C D", "short_name": null}, "resource": "room-1", "role": "member"}
+            ]
+        }"#;
+        let room: RoomDetailResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(room.accesses.len(), 2);
+        assert_eq!(room.accesses[0].role, "owner");
+        assert_eq!(room.accesses[1].user.email, "c@d.com");
+    }
+
+    #[test]
+    fn parse_room_detail_without_accesses() {
+        // Non-admin users won't see the accesses field
+        let json = r#"{"id": "room-1", "name": "Test", "slug": "test"}"#;
+        let room: RoomDetailResponse = serde_json::from_str(json).unwrap();
+        assert!(room.accesses.is_empty());
+    }
+
+    #[test]
     fn parse_paginated_users() {
         let json = r#"{"count": 2, "next": null, "previous": null, "results": [
             {"id": "u-1", "email": "a@b.com", "full_name": "A", "short_name": null},
@@ -266,16 +313,6 @@ mod tests {
         ]}"#;
         let page: PaginatedResponse<UserSearchResult> = serde_json::from_str(json).unwrap();
         assert_eq!(page.results.len(), 2);
-    }
-
-    #[test]
-    fn parse_paginated_accesses() {
-        let json = r#"{"count": 1, "next": null, "previous": null, "results": [
-            {"id": "ra-1", "user": {"id": "u-1", "email": "a@b.com", "full_name": null, "short_name": null}, "resource": "room-id", "role": "owner"}
-        ]}"#;
-        let page: PaginatedResponse<RoomAccess> = serde_json::from_str(json).unwrap();
-        assert_eq!(page.results.len(), 1);
-        assert_eq!(page.results[0].role, "owner");
     }
 
     #[tokio::test]

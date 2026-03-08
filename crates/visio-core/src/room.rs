@@ -191,7 +191,17 @@ impl RoomManager {
         match AuthService::request_token(meet_url, username, session_cookie).await {
             Ok(token_info) => {
                 self.connect_with_token(&token_info.livekit_url, &token_info.token)
-                    .await
+                    .await?;
+
+                // Start lobby polling for host (authenticated users)
+                if session_cookie.is_some() {
+                    tracing::info!("LOBBY: cookie present, starting host polling");
+                    self.start_lobby_host_polling().await;
+                } else {
+                    tracing::info!("LOBBY: no cookie, skipping host polling");
+                }
+
+                Ok(())
             }
             Err(VisioError::Auth(ref msg)) if msg.contains("waiting for host approval") => {
                 tracing::info!("room requires host approval, entering lobby");
@@ -612,6 +622,74 @@ impl RoomManager {
     pub async fn cancel_lobby(&self) {
         self.lobby_cancel.notify_one();
         *self.lobby_cookie.lock().await = None;
+    }
+
+    /// Start polling the Meet API for waiting lobby participants (host side).
+    /// Emits LobbyParticipantJoined/Left events when changes are detected.
+    async fn start_lobby_host_polling(&self) {
+        let meet_url = self.last_meet_url.lock().await.clone();
+        let cookie = self.session_cookie.lock().await.clone();
+
+        let (meet_url, cookie) = match (meet_url, cookie) {
+            (Some(u), Some(c)) => (u, c),
+            _ => return, // Not authenticated, skip
+        };
+
+        let emitter = self.emitter.clone();
+        // Use the room reference to detect disconnection instead of lobby_cancel
+        // (lobby_cancel is shared with the guest lobby polling and may already be notified)
+        let connection_state = self.connection_state.clone();
+
+        tracing::info!("starting lobby host polling for {}", meet_url);
+
+        tokio::spawn(async move {
+            use std::collections::HashSet;
+            let mut known_ids: HashSet<String> = HashSet::new();
+
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+                // Stop polling if disconnected
+                let state = connection_state.lock().await.clone();
+                if matches!(state, ConnectionState::Disconnected) {
+                    tracing::info!("lobby host polling stopped (disconnected)");
+                    break;
+                }
+
+                match crate::lobby::LobbyService::list_waiting(&meet_url, &cookie).await {
+                    Ok(participants) => {
+                        let current_ids: HashSet<String> =
+                            participants.iter().map(|p| p.id.clone()).collect();
+
+                        // Detect new participants
+                        for p in &participants {
+                            if !known_ids.contains(&p.id) {
+                                tracing::info!("lobby: new waiting participant: {} ({})", p.username, p.id);
+                                emitter.emit(VisioEvent::LobbyParticipantJoined {
+                                    id: p.id.clone(),
+                                    username: p.username.clone(),
+                                });
+                            }
+                        }
+
+                        // Detect departed participants
+                        for id in &known_ids {
+                            if !current_ids.contains(id) {
+                                tracing::info!("lobby: participant left: {}", id);
+                                emitter.emit(VisioEvent::LobbyParticipantLeft {
+                                    id: id.clone(),
+                                });
+                            }
+                        }
+
+                        known_ids = current_ids;
+                    }
+                    Err(e) => {
+                        tracing::debug!("lobby host poll error (will retry): {e}");
+                    }
+                }
+            }
+        });
     }
 
     async fn set_connection_state(&self, state: ConnectionState) {

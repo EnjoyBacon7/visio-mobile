@@ -148,6 +148,8 @@
   "lobby.deny": "Deny",
   "lobby.admitAll": "Admit all",
   "lobby.badge": "{count} waiting",
+  "lobby.joinRequest": "{{name}} wants to join the meeting",
+  "lobby.view": "View",
   "home.createRoom.restricted": "Restricted",
   "home.createRoom.restrictedDesc": "Invitation only — only invited members can join",
   "restricted.searchUsers": "Search users by email",

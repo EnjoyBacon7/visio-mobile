@@ -518,6 +518,8 @@ impl VisioClient {
             session.cookie()
         };
 
+        visio_log(&format!("VISIO FFI: connect() cookie present={}", cookie.is_some()));
+
         // Wrap in catch_unwind to prevent panics from crossing FFI boundary (UB → SIGSEGV).
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             visio_log("VISIO FFI: about to call block_on");
@@ -539,6 +541,7 @@ impl VisioClient {
                 {
                     *CLIENT_FOR_VIDEO.lock().unwrap() = self as *const VisioClient as usize;
                 }
+
                 Ok(())
             }
             Ok(Err(e)) => Err(e),

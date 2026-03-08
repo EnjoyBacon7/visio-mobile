@@ -144,6 +144,8 @@
   "lobby.deny": "Ablehnen",
   "lobby.admitAll": "Alle zulassen",
   "lobby.badge": "{count} wartend",
+  "lobby.joinRequest": "{{name}} möchte dem Meeting beitreten",
+  "lobby.view": "Ansehen",
   "home.createRoom.restricted": "Eingeschränkt",
   "home.createRoom.restrictedDesc": "Nur auf Einladung — nur eingeladene Mitglieder können beitreten",
   "restricted.searchUsers": "Benutzer per E-Mail suchen",

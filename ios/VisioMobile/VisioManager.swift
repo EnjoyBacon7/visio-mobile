@@ -30,6 +30,7 @@ class VisioManager: ObservableObject {
     @Published var pendingDeepLink: String? = nil
     @Published var isFrontCamera: Bool = true
     @Published var waitingParticipants: [WaitingParticipant] = []
+    @Published var lobbyNotification: WaitingParticipant? = nil
     @Published var lobbyDenied: Bool = false
     @Published var roomAccesses: [RoomAccess] = []
     var currentRoomId: String?
@@ -157,6 +158,7 @@ class VisioManager: ObservableObject {
                 self.videoTrackSids = []
                 self.isChatOpen = false
                 self.waitingParticipants = []
+                self.lobbyNotification = nil
                 self.lobbyDenied = false
             }
         }
@@ -280,6 +282,10 @@ class VisioManager: ObservableObject {
                 NSLog("VisioManager: deny failed: \(error)")
             }
         }
+    }
+
+    func clearLobbyNotification() {
+        lobbyNotification = nil
     }
 
     func cancelLobby() {
@@ -586,7 +592,9 @@ extension VisioManager: VisioEventListener {
 
             case .lobbyParticipantJoined(let id, let username):
                 if !self.waitingParticipants.contains(where: { $0.id == id }) {
-                    self.waitingParticipants.append(WaitingParticipant(id: id, username: username))
+                    let participant = WaitingParticipant(id: id, username: username)
+                    self.waitingParticipants.append(participant)
+                    self.lobbyNotification = participant
                 }
 
             case .lobbyParticipantLeft(let id):
