@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use livekit::webrtc::audio_frame::AudioFrame;
 use livekit::webrtc::audio_source::native::NativeAudioSource;
-use visio_core::AudioPlayoutBuffer;
+use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer, CapturedFrame};
 
 /// Internal sample rate used by LiveKit (48kHz mono i16).
 const LK_SAMPLE_RATE: u32 = 48_000;
@@ -115,7 +115,13 @@ impl CpalAudioCapture {
         let device = host
             .default_input_device()
             .ok_or("no input audio device available")?;
+        Self::start_with_device(device, audio_source)
+    }
 
+    pub fn start_with_device(
+        device: cpal::Device,
+        audio_source: NativeAudioSource,
+    ) -> Result<Self, String> {
         let default_cfg = device
             .default_input_config()
             .map_err(|e| format!("default input config: {e}"))?;
@@ -138,11 +144,10 @@ impl CpalAudioCapture {
         let running = Arc::new(AtomicBool::new(true));
         let running_flag = running.clone();
 
-        // capture_frame is async — use a dedicated single-thread runtime
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| format!("audio capture runtime: {e}"))?;
+        // Bounded queue: cpal callback pushes, drain thread pops.
+        // 50 frames ≈ 500ms at 10ms per callback — plenty of headroom.
+        let capture_buffer = Arc::new(AudioCaptureBuffer::new(50));
+        let capture_buffer_cb = capture_buffer.clone();
 
         let stream = device
             .build_input_stream(
@@ -170,7 +175,8 @@ impl CpalAudioCapture {
                     };
 
                     // Convert f32 mono to i16
-                    let mono_i16: Vec<i16> = mono.iter()
+                    let mono_i16: Vec<i16> = mono
+                        .iter()
                         .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
                         .collect();
 
@@ -181,14 +187,15 @@ impl CpalAudioCapture {
                         linear_resample(&mono_i16, lk_frames)
                     };
 
-                    let frame = AudioFrame {
-                        data: pcm.into(),
+                    let frame = CapturedFrame {
+                        pcm,
                         sample_rate: LK_SAMPLE_RATE,
                         num_channels: LK_CHANNELS,
                         samples_per_channel: lk_frames as u32,
                     };
 
-                    let _ = rt.block_on(audio_source.capture_frame(&frame));
+                    // Non-blocking push — drops oldest if queue is full
+                    capture_buffer_cb.push(frame);
                 },
                 |err| {
                     tracing::error!("audio capture stream error: {err}");
@@ -198,6 +205,31 @@ impl CpalAudioCapture {
             .map_err(|e| format!("build input stream: {e}"))?;
 
         stream.play().map_err(|e| format!("play input stream: {e}"))?;
+
+        // Drain thread: pops frames from the buffer and submits them to LiveKit
+        let running_drain = running.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("audio drain runtime");
+            rt.block_on(async move {
+                while running_drain.load(Ordering::Relaxed) {
+                    if let Some(frame) = capture_buffer.pop() {
+                        let lk_frame = AudioFrame {
+                            data: frame.pcm.into(),
+                            sample_rate: frame.sample_rate,
+                            num_channels: frame.num_channels,
+                            samples_per_channel: frame.samples_per_channel,
+                        };
+                        let _ = audio_source.capture_frame(&lk_frame).await;
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+                    }
+                }
+            });
+        });
+
         tracing::info!("cpal audio capture started");
 
         Ok(Self {

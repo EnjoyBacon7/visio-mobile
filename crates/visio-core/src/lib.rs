@@ -4,6 +4,7 @@
 //! Consumed by native UI shells via UniFFI bindings.
 
 pub mod access;
+pub mod audio_capture_buffer;
 pub mod audio_playout;
 pub mod auth;
 pub mod chat;
@@ -18,6 +19,7 @@ pub mod session;
 pub mod settings;
 
 pub use access::{AccessService, RoomAccess, UserSearchResult};
+pub use audio_capture_buffer::{AudioCaptureBuffer, CapturedFrame};
 pub use audio_playout::AudioPlayoutBuffer;
 pub use auth::{AuthService, TokenInfo};
 pub use chat::ChatService;
