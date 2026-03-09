@@ -114,9 +114,10 @@ impl VisioEventListener for DesktopEventListener {
                 }
             }
             VisioEvent::TrackSubscribed(TrackInfo {
-                sid: track_sid,
+                sid: ref track_sid,
+                ref participant_sid,
                 kind: TrackKind::Video,
-                ..
+                ref source,
             }) => {
                 let room = self.room.clone();
                 let sid = track_sid.clone();
@@ -132,11 +133,24 @@ impl VisioEventListener for DesktopEventListener {
                         );
                     }
                 });
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit(
+                        "track-subscribed",
+                        serde_json::json!({
+                            "trackSid": track_sid,
+                            "participantSid": participant_sid,
+                            "source": source_to_str(source),
+                        }),
+                    );
+                }
             }
             VisioEvent::TrackSubscribed(_) => {}
             VisioEvent::TrackUnsubscribed(track_sid) => {
                 tracing::info!("auto-stopping video renderer for track {track_sid}");
                 visio_video::stop_track_renderer(&track_sid);
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("track-unsubscribed", &track_sid);
+                }
             }
             VisioEvent::TrackMuted {
                 participant_sid,
@@ -362,6 +376,8 @@ async fn get_participants(
                 "has_video": p.has_video,
                 "video_track_sid": p.video_track_sid,
                 "connection_quality": format!("{:?}", p.connection_quality),
+                "has_screen_share": p.has_screen_share,
+                "screen_share_track_sid": p.screen_share_track_sid,
             })
         })
         .collect();
@@ -383,6 +399,8 @@ async fn get_local_participant(
             "has_video": p.has_video,
             "video_track_sid": p.video_track_sid,
             "connection_quality": format!("{:?}", p.connection_quality),
+            "has_screen_share": p.has_screen_share,
+            "screen_share_track_sid": p.screen_share_track_sid,
         })
     }))
 }
