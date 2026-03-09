@@ -29,7 +29,9 @@ jobs:
           key: ios-arm64
 
       - name: Compile Rust native libraries
-        run: cargo build --target aarch64-apple-ios -p visio-ffi -p visio-video --release
+        run: |
+          cargo build --target aarch64-apple-ios -p visio-ffi -p visio-video --release
+          rm -f target/aarch64-apple-ios/release/*.dylib
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
