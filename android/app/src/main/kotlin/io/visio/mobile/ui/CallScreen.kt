@@ -97,6 +97,47 @@ import kotlin.math.absoluteValue
 
 private const val TAG = "CallScreen"
 
+data class FocusItem(val participantSid: String, val source: String)
+
+data class DisplayItem(
+    val key: String,
+    val participant: ParticipantInfo,
+    val source: String,
+    val trackSid: String?,
+    val isScreenShare: Boolean,
+    val label: String,
+)
+
+fun buildDisplayItems(participants: List<ParticipantInfo>): List<DisplayItem> {
+    val items = mutableListOf<DisplayItem>()
+    for (p in participants) {
+        val name = p.name ?: p.identity
+        items.add(
+            DisplayItem(
+                key = "${p.sid}-camera",
+                participant = p,
+                source = "camera",
+                trackSid = p.videoTrackSid,
+                isScreenShare = false,
+                label = name,
+            ),
+        )
+        if (p.hasScreenShare && p.screenShareTrackSid != null) {
+            items.add(
+                DisplayItem(
+                    key = "${p.sid}-screen",
+                    participant = p,
+                    source = "screen_share",
+                    trackSid = p.screenShareTrackSid,
+                    isScreenShare = true,
+                    label = name,
+                ),
+            )
+        }
+    }
+    return items
+}
+
 private val REACTION_EMOJIS =
     listOf(
         "thumbs-up" to "\uD83D\uDC4D",
@@ -144,9 +185,29 @@ fun CallScreen(
     var showInCallSettings by remember { mutableStateOf(false) }
     var inCallSettingsTab by remember { mutableIntStateOf(0) }
     var showParticipantList by remember { mutableStateOf(false) }
-    var focusedParticipantSid by remember { mutableStateOf<String?>(null) }
+    var focusedItem by remember { mutableStateOf<FocusItem?>(null) }
     var showReactionPicker by remember { mutableStateOf(false) }
     val reactions by VisioManager.reactions.collectAsState()
+    val screenShareSubscribed by VisioManager.screenShareSubscribed.collectAsState()
+
+    // Auto-focus on screen share arrival
+    LaunchedEffect(screenShareSubscribed) {
+        val sid = screenShareSubscribed
+        if (sid != null) {
+            focusedItem = FocusItem(sid, "screen_share")
+            VisioManager.clearScreenShareSubscribed()
+        }
+    }
+
+    // Auto-unfocus when screen share ends
+    LaunchedEffect(participants, focusedItem) {
+        if (focusedItem?.source == "screen_share") {
+            val p = participants.find { it.sid == focusedItem?.participantSid }
+            if (p?.hasScreenShare != true) {
+                focusedItem = null
+            }
+        }
+    }
 
     var lastMode by remember { mutableStateOf(adaptiveMode) }
 
@@ -498,27 +559,107 @@ fun CallScreen(
                     }
 
                     AdaptiveMode.OFFICE -> {
-                        // Office mode: full grid (existing behavior)
-                        val focusedP = focusedParticipantSid?.let { sid -> participants.find { it.sid == sid } }
+                        // Office mode: full grid with screen share support
+                        val displayItems = buildDisplayItems(participants)
+                        val focusedDisplayItem = focusedItem?.let { fi ->
+                            displayItems.find { it.participant.sid == fi.participantSid && it.source == fi.source }
+                        }
 
-                        if (focusedP != null) {
-                            // Focus mode — full-screen focused participant
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(8.dp)),
-                            ) {
-                                ParticipantTile(
-                                    participant = focusedP,
-                                    isActiveSpeaker = activeSpeakers.contains(focusedP.sid),
-                                    handRaisePosition = handRaisedMap[focusedP.sid] ?: 0,
-                                    onClick = { focusedParticipantSid = null },
-                                )
+                        if (focusedDisplayItem != null) {
+                            // Focus layout: main item + thumbnail bar
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Main focused item
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(VisioColors.PrimaryDark50)
+                                            .clickable { focusedItem = null },
+                                ) {
+                                    val hasTrack = focusedDisplayItem.trackSid != null &&
+                                        if (focusedDisplayItem.isScreenShare) {
+                                            focusedDisplayItem.participant.hasScreenShare
+                                        } else {
+                                            focusedDisplayItem.participant.hasVideo
+                                        }
+                                    if (hasTrack) {
+                                        AndroidView(
+                                            factory = { ctx -> VideoSurfaceView(ctx, focusedDisplayItem.trackSid!!) },
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else {
+                                        ParticipantTile(
+                                            participant = focusedDisplayItem.participant,
+                                            isActiveSpeaker = activeSpeakers.contains(focusedDisplayItem.participant.sid),
+                                            handRaisePosition = handRaisedMap[focusedDisplayItem.participant.sid] ?: 0,
+                                            onClick = { focusedItem = null },
+                                        )
+                                    }
+                                    // Overlay: name + screen share icon
+                                    Row(
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.BottomStart)
+                                                .padding(12.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        if (focusedDisplayItem.isScreenShare) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_screen_share),
+                                                contentDescription = null,
+                                                tint = Color(0xFF4FC3F7),
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                        Text(
+                                            text = focusedDisplayItem.label,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                        )
+                                    }
+                                }
+
+                                // Thumbnail bar
+                                val thumbnailItems = displayItems.filter { it.key != focusedDisplayItem.key }
+                                if (thumbnailItems.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .height(100.dp),
+                                    ) {
+                                        for (item in thumbnailItems) {
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .weight(1f)
+                                                        .fillMaxHeight()
+                                                        .clip(RoundedCornerShape(8.dp)),
+                                            ) {
+                                                ParticipantTile(
+                                                    participant = item.participant,
+                                                    isActiveSpeaker = activeSpeakers.contains(item.participant.sid),
+                                                    handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
+                                                    isScreenShare = item.isScreenShare,
+                                                    onClick = {
+                                                        focusedItem = FocusItem(item.participant.sid, item.source)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         } else {
-                            // Grid mode — space-filling tiles
-                            val count = participants.size
+                            // Grid mode — space-filling tiles using DisplayItems
+                            val count = displayItems.size
                             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                                 val isLandscape = maxWidth > maxHeight
                                 val columnCount =
@@ -545,7 +686,7 @@ fun CallScreen(
                                                     .height(tileHeight),
                                         ) {
                                             for (idx in rowStart until rowEnd) {
-                                                val p = participants[idx]
+                                                val item = displayItems[idx]
                                                 Box(
                                                     modifier =
                                                         Modifier
@@ -554,10 +695,13 @@ fun CallScreen(
                                                             .clip(RoundedCornerShape(8.dp)),
                                                 ) {
                                                     ParticipantTile(
-                                                        participant = p,
-                                                        isActiveSpeaker = activeSpeakers.contains(p.sid),
-                                                        handRaisePosition = handRaisedMap[p.sid] ?: 0,
-                                                        onClick = { focusedParticipantSid = p.sid },
+                                                        participant = item.participant,
+                                                        isActiveSpeaker = activeSpeakers.contains(item.participant.sid),
+                                                        handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
+                                                        isScreenShare = item.isScreenShare,
+                                                        onClick = {
+                                                            focusedItem = FocusItem(item.participant.sid, item.source)
+                                                        },
                                                     )
                                                 }
                                             }
@@ -1235,6 +1379,7 @@ fun ParticipantTile(
     participant: ParticipantInfo,
     isActiveSpeaker: Boolean,
     handRaisePosition: Int,
+    isScreenShare: Boolean = false,
     onClick: () -> Unit,
 ) {
     val lang = VisioManager.currentLang
@@ -1261,6 +1406,14 @@ fun ParticipantTile(
             Modifier
         }
 
+    // For screen share tiles, use screenShareTrackSid; for camera tiles, use videoTrackSid
+    val hasTrack = if (isScreenShare) {
+        participant.hasScreenShare && participant.screenShareTrackSid != null
+    } else {
+        participant.hasVideo && participant.videoTrackSid != null
+    }
+    val trackSid = if (isScreenShare) participant.screenShareTrackSid else participant.videoTrackSid
+
     Box(
         modifier =
             Modifier
@@ -1271,8 +1424,7 @@ fun ParticipantTile(
                 .clickable(onClick = onClick),
     ) {
         // Video surface or avatar fallback
-        if (participant.hasVideo && participant.videoTrackSid != null) {
-            val trackSid = participant.videoTrackSid!!
+        if (hasTrack && trackSid != null) {
             AndroidView(
                 factory = { ctx -> VideoSurfaceView(ctx, trackSid) },
                 modifier = Modifier.fillMaxSize(),
@@ -1311,6 +1463,16 @@ fun ParticipantTile(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // Screen share indicator
+            if (isScreenShare) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_screen_share),
+                    contentDescription = null,
+                    tint = Color(0xFF4FC3F7),
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+
             // Mic muted indicator
             if (participant.isMuted) {
                 Icon(

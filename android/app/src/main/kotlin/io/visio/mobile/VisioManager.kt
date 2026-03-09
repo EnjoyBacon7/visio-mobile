@@ -25,6 +25,8 @@ import uniffi.visio.ConnectionState
 import uniffi.visio.ParticipantInfo
 import uniffi.visio.RoomAccess
 import uniffi.visio.SessionState
+import uniffi.visio.TrackKind
+import uniffi.visio.TrackSource
 import uniffi.visio.VisioClient
 import uniffi.visio.VisioEvent
 import uniffi.visio.VisioEventListener
@@ -94,6 +96,14 @@ object VisioManager : VisioEventListener {
 
     private var _currentAccessLevel: String = ""
     val currentAccessLevel: String get() = _currentAccessLevel
+
+    // Screen share auto-focus: emits participant SID when a screen share track is subscribed
+    private val _screenShareSubscribed = MutableStateFlow<String?>(null)
+    val screenShareSubscribed: StateFlow<String?> = _screenShareSubscribed.asStateFlow()
+
+    fun clearScreenShareSubscribed() {
+        _screenShareSubscribed.value = null
+    }
 
     // Emoji reactions
     private var reactionIdCounter = 0L
@@ -737,6 +747,9 @@ object VisioManager : VisioEventListener {
                     "VISIO",
                     "TrackSubscribed: participant=${info.participantSid} kind=${info.kind} source=${info.source} trackSid=${info.sid}",
                 )
+                if (info.source == TrackSource.SCREEN_SHARE && info.kind == TrackKind.VIDEO) {
+                    _screenShareSubscribed.value = info.participantSid
+                }
                 refreshParticipants()
             }
             is VisioEvent.TrackUnsubscribed -> {
