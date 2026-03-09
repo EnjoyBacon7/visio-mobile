@@ -34,7 +34,7 @@
     "resources": {
       "../../i18n/*.json": "i18n/",
       "../../assets/backgrounds/*.jpg": "backgrounds/",
-      "../../models/selfie_segmentation.onnx": "models/"
+      "../../models/*.onnx": "models/"
     },
     "icon": [
         "icons/icon.png",
