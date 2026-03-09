@@ -172,6 +172,8 @@ pub struct ParticipantInfo {
     pub is_muted: bool,
     pub has_video: bool,
     pub video_track_sid: Option<String>,
+    pub has_screen_share: bool,
+    pub screen_share_track_sid: Option<String>,
     pub connection_quality: ConnectionQuality,
 }
 
@@ -184,6 +186,8 @@ impl From<CoreParticipantInfo> for ParticipantInfo {
             is_muted: p.is_muted,
             has_video: p.has_video,
             video_track_sid: p.video_track_sid,
+            has_screen_share: p.has_screen_share,
+            screen_share_track_sid: p.screen_share_track_sid,
             connection_quality: p.connection_quality.into(),
         }
     }

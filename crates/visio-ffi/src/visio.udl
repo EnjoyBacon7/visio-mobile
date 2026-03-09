@@ -37,6 +37,8 @@ dictionary ParticipantInfo {
     boolean is_muted;
     boolean has_video;
     string? video_track_sid;
+    boolean has_screen_share;
+    string? screen_share_track_sid;
     ConnectionQuality connection_quality;
 };
 
