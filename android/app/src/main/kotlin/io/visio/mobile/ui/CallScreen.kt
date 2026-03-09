@@ -1396,9 +1396,9 @@ fun ParticipantTile(
     val hue = name.fold(0) { acc, c -> acc + c.code }.absoluteValue % 360
     val avatarColor = Color.hsl(hue.toFloat(), 0.5f, 0.35f)
 
-    val borderColor = if (isActiveSpeaker) VisioColors.Primary500 else Color.Transparent
+    val borderColor = if (isActiveSpeaker && !isScreenShare) VisioColors.Primary500 else Color.Transparent
     val borderMod =
-        if (isActiveSpeaker) {
+        if (isActiveSpeaker && !isScreenShare) {
             Modifier
                 .border(2.dp, borderColor, RoundedCornerShape(8.dp))
                 .shadow(8.dp, RoundedCornerShape(8.dp), ambientColor = VisioColors.Primary500)
@@ -1473,8 +1473,8 @@ fun ParticipantTile(
                 )
             }
 
-            // Mic muted indicator
-            if (participant.isMuted) {
+            // Mic muted indicator (not shown on screen share tiles)
+            if (participant.isMuted && !isScreenShare) {
                 Icon(
                     painter = painterResource(R.drawable.ri_mic_off_fill),
                     contentDescription = Strings.t("accessibility.muted", lang),
@@ -1483,8 +1483,8 @@ fun ParticipantTile(
                 )
             }
 
-            // Hand raise badge
-            if (handRaisePosition > 0) {
+            // Hand raise badge (not shown on screen share tiles)
+            if (handRaisePosition > 0 && !isScreenShare) {
                 Row(
                     modifier =
                         Modifier

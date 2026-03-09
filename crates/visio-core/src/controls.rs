@@ -31,6 +31,7 @@ pub struct MeetingControls {
     camera_enabled: Arc<Mutex<bool>>,
     audio_source: Arc<Mutex<Option<NativeAudioSource>>>,
     video_source: Arc<Mutex<Option<NativeVideoSource>>>,
+    screen_share_source: Arc<Mutex<Option<NativeVideoSource>>>,
 }
 
 impl MeetingControls {
@@ -46,6 +47,7 @@ impl MeetingControls {
             camera_enabled,
             audio_source: Arc::new(Mutex::new(None)),
             video_source: Arc::new(Mutex::new(None)),
+            screen_share_source: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -242,6 +244,9 @@ impl MeetingControls {
     }
 
     /// Publish a screen share track to the room.
+    ///
+    /// Returns the `NativeVideoSource` that the caller must feed with
+    /// captured screen frames (platform-specific capture code).
     pub async fn publish_screen_share(&self) -> Result<NativeVideoSource, VisioError> {
         let room = self.room.lock().await;
         let room = room
@@ -272,6 +277,7 @@ impl MeetingControls {
             .await
             .map_err(|e| VisioError::Room(format!("publish screen share: {e}")))?;
 
+        *self.screen_share_source.lock().await = Some(source.clone());
         tracing::info!("screen share track published");
         Ok(source)
     }
@@ -290,11 +296,17 @@ impl MeetingControls {
                     .unpublish_track(&pub_.sid())
                     .await
                     .map_err(|e| VisioError::Room(format!("unpublish screen share: {e}")))?;
+                *self.screen_share_source.lock().await = None;
                 tracing::info!("screen share track unpublished");
                 break;
             }
         }
         Ok(())
+    }
+
+    /// Get the screen share video source for feeding captured frames.
+    pub async fn screen_share_source(&self) -> Option<NativeVideoSource> {
+        self.screen_share_source.lock().await.clone()
     }
 }
 

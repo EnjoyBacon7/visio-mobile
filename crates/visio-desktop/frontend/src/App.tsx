@@ -308,7 +308,7 @@ function ParticipantTile({
     : undefined;
 
   return (
-    <div className={`tile ${isActiveSpeaker ? "tile-active-speaker" : ""}`}>
+    <div className={`tile ${isActiveSpeaker && !isScreenShare ? "tile-active-speaker" : ""}`}>
       {videoSrc ? (
         <img
           className="tile-video"
@@ -333,7 +333,7 @@ function ParticipantTile({
             <RiMicOffFill size={14} />
           </span>
         ) : null}
-        {handRaisePosition != null && handRaisePosition > 0 && (
+        {!isScreenShare && handRaisePosition != null && handRaisePosition > 0 && (
           <span className="tile-hand-badge">
             <RiHand size={12} /> {handRaisePosition}
           </span>

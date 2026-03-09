@@ -662,6 +662,8 @@ extension VisioManager: VisioEventListener {
                         self?.client.startVideoRenderer(trackSid: sid)
                     }
                     if info.source == .screenShare {
+                        // Clear first so re-sharing by the same participant triggers onChange
+                        self.lastScreenShareParticipantSid = nil
                         self.lastScreenShareParticipantSid = info.participantSid
                     }
                 }

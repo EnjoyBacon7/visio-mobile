@@ -700,16 +700,27 @@ async fn send_reaction(state: tauri::State<'_, VisioState>, emoji: String) -> Re
     room.send_reaction(&emoji).await.map_err(|e| e.to_string())
 }
 
+// TODO: Implement platform-specific screen capture:
+//   - macOS: CGDisplayStream or ScreenCaptureKit (macOS 12.3+)
+//   - Linux: PipeWire / XDG Desktop Portal
+//   - Windows: DXGI Desktop Duplication
+// The NativeVideoSource is published and stored in MeetingControls.
+// Platform capture code should call screen_share_source() to get it
+// and feed I420 frames, similar to camera_macos::MacCameraCapture.
 #[tauri::command]
 async fn start_screen_share(
     state: tauri::State<'_, VisioState>,
 ) -> Result<(), String> {
     let controls = state.controls.lock().await;
-    controls
+    let _source = controls
         .publish_screen_share()
         .await
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // TODO: Start platform screen capture feeding frames into _source
+    tracing::warn!("screen share track published but no capture yet — remote participants will see a black screen");
+
+    Ok(())
 }
 
 #[tauri::command]
