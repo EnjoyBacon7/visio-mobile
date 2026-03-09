@@ -4,7 +4,74 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use livekit::webrtc::audio_frame::AudioFrame;
 use livekit::webrtc::audio_source::native::NativeAudioSource;
+use serde::Serialize;
 use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer, CapturedFrame};
+
+#[derive(Serialize, Clone)]
+pub struct AudioDeviceInfo {
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// List available audio input devices via cpal.
+pub fn list_input_devices() -> Vec<AudioDeviceInfo> {
+    let host = cpal::default_host();
+    let default_name = host
+        .default_input_device()
+        .and_then(|d| d.name().ok());
+
+    host.input_devices()
+        .map(|devices| {
+            devices
+                .filter_map(|d| {
+                    let name = d.name().ok()?;
+                    Some(AudioDeviceInfo {
+                        is_default: default_name.as_deref() == Some(&name),
+                        name,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// List available audio output devices via cpal.
+pub fn list_output_devices() -> Vec<AudioDeviceInfo> {
+    let host = cpal::default_host();
+    let default_name = host
+        .default_output_device()
+        .and_then(|d| d.name().ok());
+
+    host.output_devices()
+        .map(|devices| {
+            devices
+                .filter_map(|d| {
+                    let name = d.name().ok()?;
+                    Some(AudioDeviceInfo {
+                        is_default: default_name.as_deref() == Some(&name),
+                        name,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Find an input device by name.
+pub fn find_input_device(name: &str) -> Option<cpal::Device> {
+    let host = cpal::default_host();
+    host.input_devices().ok()?.find(|d| {
+        d.name().map(|n| n == name).unwrap_or(false)
+    })
+}
+
+/// Find an output device by name.
+pub fn find_output_device(name: &str) -> Option<cpal::Device> {
+    let host = cpal::default_host();
+    host.output_devices().ok()?.find(|d| {
+        d.name().map(|n| n == name).unwrap_or(false)
+    })
+}
 
 /// Internal sample rate used by LiveKit (48kHz mono i16).
 const LK_SAMPLE_RATE: u32 = 48_000;

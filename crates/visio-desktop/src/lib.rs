@@ -714,6 +714,16 @@ fn load_background_image(id: u8, jpeg_path: String) -> Result<(), String> {
     visio_ffi::blur::BlurProcessor::load_replacement_image(id, &jpeg_bytes, 640, 480)
 }
 
+#[tauri::command]
+fn list_audio_input_devices() -> Vec<audio_cpal::AudioDeviceInfo> {
+    audio_cpal::list_input_devices()
+}
+
+#[tauri::command]
+fn list_audio_output_devices() -> Vec<audio_cpal::AudioDeviceInfo> {
+    audio_cpal::list_output_devices()
+}
+
 // ---------------------------------------------------------------------------
 // Lobby commands
 // ---------------------------------------------------------------------------
@@ -1162,6 +1172,8 @@ pub fn run() {
             get_background_mode,
             load_blur_model,
             load_background_image,
+            list_audio_input_devices,
+            list_audio_output_devices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
