@@ -32,6 +32,8 @@ import {
   RiAccountCircleLine,
   RiMore2Fill,
   RiEmotionLine,
+  RiFullscreenLine,
+  RiFullscreenExitLine,
 } from "@remixicon/react";
 
 // ---------------------------------------------------------------------------
@@ -293,6 +295,7 @@ interface ParticipantTileProps {
   isActiveSpeaker?: boolean;
   handRaisePosition?: number;
   displayItem?: DisplayItem;
+  onExpand?: () => void;
 }
 
 function ParticipantTile({
@@ -301,6 +304,7 @@ function ParticipantTile({
   isActiveSpeaker,
   handRaisePosition,
   displayItem,
+  onExpand,
 }: ParticipantTileProps) {
   const t = useT();
   const isScreenShare = displayItem?.isScreenShare ?? false;
@@ -335,6 +339,11 @@ function ParticipantTile({
         >
           <span className="tile-initials">{initials}</span>
         </div>
+      )}
+      {isScreenShare && onExpand && (
+        <button className="tile-expand-btn" onClick={(e) => { e.stopPropagation(); onExpand(); }} title="Plein écran">
+          <RiFullscreenLine size={20} />
+        </button>
       )}
       <div className="tile-metadata">
         {isScreenShare ? (
@@ -1277,6 +1286,7 @@ function CallView({
 }) {
   const t = useT();
   const [focusedItem, setFocusedItem] = useState<FocusItem>(null);
+  const [showFocusThumbnails, setShowFocusThumbnails] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [screenSources, setScreenSources] = useState<ScreenSource[]>([]);
@@ -1464,7 +1474,7 @@ function CallView({
         <div className="call-content">
           {focusedDisplayItem ? (
             <div className="focus-layout">
-              <div className="focus-main" onClick={() => setFocusedItem(null)}>
+              <div className="focus-main">
                 <ParticipantTile
                   participant={focusedDisplayItem.participant}
                   videoFrames={videoFrames}
@@ -1472,20 +1482,30 @@ function CallView({
                   handRaisePosition={handRaisedMap[focusedDisplayItem.participant.sid]}
                   displayItem={focusedDisplayItem}
                 />
+                <div className="focus-toolbar">
+                  <button className="focus-toolbar-btn" onClick={() => setShowFocusThumbnails(v => !v)} title={showFocusThumbnails ? "Masquer les vignettes" : "Afficher les vignettes"}>
+                    {showFocusThumbnails ? <RiFullscreenLine size={18} /> : <RiFullscreenExitLine size={18} />}
+                  </button>
+                  <button className="focus-toolbar-btn" onClick={() => { setFocusedItem(null); setShowFocusThumbnails(true); }} title="Retour à la grille">
+                    <RiCloseLine size={18} />
+                  </button>
+                </div>
               </div>
-              <div className="focus-thumbnails">
-                {thumbnailItems.map((d) => (
-                  <div key={d.key} className="tile" onClick={() => setFocusedItem({ participantSid: d.participant.sid, source: d.source })}>
-                    <ParticipantTile
-                      participant={d.participant}
-                      videoFrames={videoFrames}
-                      isActiveSpeaker={activeSpeakers.includes(d.participant.sid)}
-                      handRaisePosition={handRaisedMap[d.participant.sid]}
-                      displayItem={d}
-                    />
-                  </div>
-                ))}
-              </div>
+              {showFocusThumbnails && thumbnailItems.length > 0 && (
+                <div className="focus-thumbnails">
+                  {thumbnailItems.map((d) => (
+                    <div key={d.key} className="tile" onClick={() => setFocusedItem({ participantSid: d.participant.sid, source: d.source })}>
+                      <ParticipantTile
+                        participant={d.participant}
+                        videoFrames={videoFrames}
+                        isActiveSpeaker={activeSpeakers.includes(d.participant.sid)}
+                        handRaisePosition={handRaisedMap[d.participant.sid]}
+                        displayItem={d}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className={`video-grid video-grid-${gridCount}`}>
@@ -1500,6 +1520,7 @@ function CallView({
                       isActiveSpeaker={activeSpeakers.includes(d.participant.sid)}
                       handRaisePosition={handRaisedMap[d.participant.sid]}
                       displayItem={d}
+                      onExpand={d.isScreenShare ? () => setFocusedItem({ participantSid: d.participant.sid, source: d.source }) : undefined}
                     />
                   </div>
                 ))

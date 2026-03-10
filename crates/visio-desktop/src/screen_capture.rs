@@ -178,9 +178,22 @@ fn rgba_to_i420(rgba: &[u8], width: u32, height: u32) -> I420Buffer {
     buf
 }
 
+/// Capture + convert on a blocking thread, return the I420 buffer.
+fn capture_and_convert(capturer: &(dyn Fn() -> Result<image::DynamicImage, String> + Send + Sync)) -> Result<(I420Buffer, u32, u32), String> {
+    let img = capturer()?;
+    let rgba_img = img.to_rgba8();
+    let width = rgba_img.width() & !1;
+    let height = rgba_img.height() & !1;
+    if width == 0 || height == 0 {
+        return Err("zero dimensions".into());
+    }
+    let i420 = rgba_to_i420(&rgba_img, width, height);
+    Ok((i420, width, height))
+}
+
 /// The main capture loop.
 async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Arc<AtomicBool>) {
-    let capturer: Box<dyn Fn() -> Result<image::DynamicImage, String> + Send> =
+    let capturer: Arc<dyn Fn() -> Result<image::DynamicImage, String> + Send + Sync> =
         if let Some(idx_str) = source_id.strip_prefix("monitor-") {
             let idx: usize = match idx_str.parse() {
                 Ok(i) => i,
@@ -189,7 +202,7 @@ async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Ar
                     return;
                 }
             };
-            Box::new(move || {
+            Arc::new(move || {
                 let monitors = xcap::Monitor::all().map_err(|e| e.to_string())?;
                 let monitor = monitors
                     .into_iter()
@@ -206,7 +219,7 @@ async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Ar
                     return;
                 }
             };
-            Box::new(move || {
+            Arc::new(move || {
                 let windows = xcap::Window::all().map_err(|e| e.to_string())?;
                 let window = windows
                     .into_iter()
@@ -229,21 +242,13 @@ async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Ar
             break;
         }
 
-        match capturer() {
-            Ok(img) => {
-                let rgba_img = img.to_rgba8();
-                let width = rgba_img.width();
-                let height = rgba_img.height();
+        // Run capture + RGBA→I420 conversion on a blocking thread
+        // so we don't starve the tokio runtime (audio playout, etc.)
+        let cap = capturer.clone();
+        let result = tokio::task::spawn_blocking(move || capture_and_convert(cap.as_ref())).await;
 
-                let width = width & !1;
-                let height = height & !1;
-
-                if width == 0 || height == 0 {
-                    continue;
-                }
-
-                let i420 = rgba_to_i420(&rgba_img, width, height);
-
+        match result {
+            Ok(Ok((i420, _w, _h))) => {
                 let frame = VideoFrame {
                     rotation: VideoRotation::VideoRotation0,
                     timestamp_us: 0,
@@ -251,8 +256,12 @@ async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Ar
                 };
                 video_source.capture_frame(&frame);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 tracing::warn!("screen capture failed: {e}");
+            }
+            Err(e) => {
+                tracing::warn!("capture task panicked: {e}");
+                break;
             }
         }
     }

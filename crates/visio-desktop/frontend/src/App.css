@@ -495,7 +495,35 @@ main {
 .focus-main {
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.focus-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+
+.focus-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
   cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background 150ms;
+}
+
+.focus-toolbar-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
 }
 
 .focus-strip {
@@ -524,6 +552,33 @@ main {
   min-width: 160px;
   height: 100%;
   cursor: pointer;
+}
+
+.tile-expand-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  cursor: pointer;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.tile:hover .tile-expand-btn {
+  opacity: 1;
+}
+
+.tile-expand-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
 }
 
 .tile-screen-icon {
