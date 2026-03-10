@@ -400,8 +400,9 @@ object VisioManager : VisioEventListener {
      * Route audio input to a specific device.
      */
     fun setAudioInputDevice(device: AudioDeviceInfo) {
+        val capture = audioCapture ?: return // no-op if not capturing
         // Restart AudioRecord with new device to ensure routing takes effect
-        audioCapture?.stop()
+        capture.stop()
         audioCapture = AudioCapture().also { it.start(device) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -413,8 +414,9 @@ object VisioManager : VisioEventListener {
      * Route audio output to a specific device.
      */
     fun setAudioOutputDevice(device: AudioDeviceInfo) {
+        val playout = audioPlayout ?: return // no-op if not playing
         // Restart AudioTrack with new device to ensure routing takes effect
-        audioPlayout?.stop()
+        playout.stop()
         audioPlayout = AudioPlayout().also { it.start(device) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
