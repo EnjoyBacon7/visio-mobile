@@ -956,6 +956,9 @@ impl RoomManager {
                                 TrackSource::ScreenShare => {
                                     p.has_screen_share = true;
                                     p.screen_share_track_sid = Some(track_sid.clone());
+                                    tracing::info!(
+                                        "screen share track subscribed: participant={psid}, track_sid={track_sid}"
+                                    );
                                 }
                                 _ => {
                                     p.has_video = true;
@@ -973,6 +976,10 @@ impl RoomManager {
                             .lock()
                             .await
                             .insert(track_sid.clone(), video_track.clone());
+                        tracing::info!(
+                            "video track stored in registry: track_sid={}, source={:?}",
+                            track_sid, source
+                        );
                     }
 
                     // Start audio playout: create NativeAudioStream and feed
