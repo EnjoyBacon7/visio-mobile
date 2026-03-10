@@ -380,6 +380,8 @@ impl RoomManager {
         self.subscribed_tracks.lock().await.clear();
         self.messages.lock().await.clear();
         self.playout_buffer.clear();
+        // Reset bandwidth controller
+        self.bandwidth.lock().unwrap().reset();
         // Clear hand raise state
         if let Some(hm) = self.hand_raise.lock().await.take() {
             hm.clear().await;

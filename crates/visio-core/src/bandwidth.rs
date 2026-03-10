@@ -47,6 +47,13 @@ impl BandwidthController {
         self.mode
     }
 
+    /// Reset to initial state (call on disconnect).
+    pub fn reset(&mut self) {
+        self.mode = BandwidthMode::Full;
+        self.poor_since = None;
+        self.upgrade_candidate = None;
+    }
+
     /// Convenience wrapper that uses `Instant::now()`.
     pub fn update(&mut self, quality: ConnectionQuality) -> Option<BandwidthMode> {
         self.update_with_time(quality, Instant::now())
