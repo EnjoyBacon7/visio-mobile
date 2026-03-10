@@ -180,5 +180,7 @@
   "adaptive.audioOnly": "Solo audio",
   "call.selectSource": "Compartir pantalla",
   "call.monitors": "Pantallas",
-  "call.windows": "Ventanas"
+  "call.windows": "Ventanas",
+  "bandwidth.reducedVideo": "Ancho de banda bajo — video reducido",
+  "bandwidth.audioOnly": "Ancho de banda muy bajo — solo audio"
 }

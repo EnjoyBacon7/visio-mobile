@@ -10,6 +10,7 @@ use visio_core::{
         AdaptiveMode as CoreAdaptiveMode, ContextSignal as CoreContextSignal,
         NetworkType as CoreNetworkType,
     },
+    bandwidth::BandwidthMode as CoreBandwidthMode,
     events::{
         ChatMessage as CoreChatMessage, ConnectionQuality as CoreConnectionQuality,
         ConnectionState as CoreConnectionState, ParticipantInfo as CoreParticipantInfo,
@@ -191,6 +192,23 @@ impl From<AdaptiveMode> for CoreAdaptiveMode {
             AdaptiveMode::Office => Self::Office,
             AdaptiveMode::Pedestrian => Self::Pedestrian,
             AdaptiveMode::Car => Self::Car,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum BandwidthMode {
+    Full,
+    ReducedVideo,
+    AudioOnly,
+}
+
+impl From<CoreBandwidthMode> for BandwidthMode {
+    fn from(m: CoreBandwidthMode) -> Self {
+        match m {
+            CoreBandwidthMode::Full => Self::Full,
+            CoreBandwidthMode::ReducedVideo => Self::ReducedVideo,
+            CoreBandwidthMode::AudioOnly => Self::AudioOnly,
         }
     }
 }
@@ -412,6 +430,7 @@ pub enum VisioEvent {
     LobbyDenied,
     ReactionReceived { participant_sid: String, participant_name: String, emoji: String },
     AdaptiveModeChanged { mode: AdaptiveMode },
+    BandwidthModeChanged { mode: BandwidthMode },
     ConnectionLost,
 }
 
@@ -466,6 +485,9 @@ impl From<CoreVisioEvent> for VisioEvent {
             }
             CoreVisioEvent::AdaptiveModeChanged { mode } => {
                 Self::AdaptiveModeChanged { mode: mode.into() }
+            }
+            CoreVisioEvent::BandwidthModeChanged { mode } => {
+                Self::BandwidthModeChanged { mode: mode.into() }
             }
             CoreVisioEvent::ConnectionLost => Self::ConnectionLost,
         }

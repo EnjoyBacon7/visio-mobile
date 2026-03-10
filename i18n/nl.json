@@ -180,5 +180,7 @@
   "adaptive.audioOnly": "Alleen audio",
   "call.selectSource": "Scherm delen",
   "call.monitors": "Schermen",
-  "call.windows": "Vensters"
+  "call.windows": "Vensters",
+  "bandwidth.reducedVideo": "Lage bandbreedte — verminderde video",
+  "bandwidth.audioOnly": "Zeer lage bandbreedte — alleen audio"
 }

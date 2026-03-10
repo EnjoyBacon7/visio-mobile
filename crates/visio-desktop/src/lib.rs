@@ -285,6 +285,17 @@ impl VisioEventListener for DesktopEventListener {
                     let _ = app.emit("adaptive-mode-changed", mode_str);
                 }
             }
+            VisioEvent::BandwidthModeChanged { mode } => {
+                let mode_str = match mode {
+                    visio_core::bandwidth::BandwidthMode::Full => "full",
+                    visio_core::bandwidth::BandwidthMode::ReducedVideo => "reduced_video",
+                    visio_core::bandwidth::BandwidthMode::AudioOnly => "audio_only",
+                };
+                tracing::info!("bandwidth mode changed: {mode_str}");
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("bandwidth-mode-changed", mode_str);
+                }
+            }
             VisioEvent::ConnectionLost => {
                 if let Some(app) = APP_HANDLE.get() {
                     let _ = app.emit("connection-lost", ());

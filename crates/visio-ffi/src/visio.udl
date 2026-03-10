@@ -36,6 +36,12 @@ enum AdaptiveMode {
     "Car",
 };
 
+enum BandwidthMode {
+    "Full",
+    "ReducedVideo",
+    "AudioOnly",
+};
+
 enum NetworkType {
     "Wifi",
     "Cellular",
@@ -101,6 +107,7 @@ interface VisioEvent {
     LobbyDenied();
     ReactionReceived(string participant_sid, string participant_name, string emoji);
     AdaptiveModeChanged(AdaptiveMode mode);
+    BandwidthModeChanged(BandwidthMode mode);
     ConnectionLost();
 };
 

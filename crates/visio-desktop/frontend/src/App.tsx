@@ -2197,6 +2197,7 @@ export default function App() {
   const [emailFromOidc, setEmailFromOidc] = useState("");
   const [authenticatedMeetInstance, setAuthenticatedMeetInstance] = useState("");
   const [meetInstances, setMeetInstances] = useState<string[]>([]);
+  const [bandwidthMode, setBandwidthMode] = useState<string>("full");
 
   const t = useCallback(
     (key: string) => translations[lang]?.[key] ?? translations.en[key] ?? key,
@@ -2416,6 +2417,7 @@ export default function App() {
     let unlistenHand: UnlistenFn | null = null;
     let unlistenUnread: UnlistenFn | null = null;
     let unlistenSpeakers: UnlistenFn | null = null;
+    let unlistenBandwidth: UnlistenFn | null = null;
 
     listen<{ participantSid: string; raised: boolean; position: number }>(
       "hand-raised-changed",
@@ -2450,10 +2452,17 @@ export default function App() {
       unlistenSpeakers = fn;
     });
 
+    listen<string>("bandwidth-mode-changed", (event) => {
+      setBandwidthMode(event.payload);
+    }).then((fn) => {
+      unlistenBandwidth = fn;
+    });
+
     return () => {
       if (unlistenHand) unlistenHand();
       if (unlistenUnread) unlistenUnread();
       if (unlistenSpeakers) unlistenSpeakers();
+      if (unlistenBandwidth) unlistenBandwidth();
     };
   }, [view]);
 
@@ -2547,6 +2556,7 @@ export default function App() {
     setActiveSpeakers([]);
     setLocalParticipant(null);
     setCurrentMeetUrl("");
+    setBandwidthMode("full");
   };
 
   const handleToggleHandRaise = async () => {
@@ -2617,6 +2627,13 @@ export default function App() {
           <h1>{t("app.title")}</h1>
           <StatusBadge state={connectionState} />
         </header>
+      )}
+      {view === "call" && bandwidthMode !== "full" && (
+        <div className="bandwidth-indicator">
+          {bandwidthMode === "reduced_video"
+            ? t("bandwidth.reducedVideo")
+            : t("bandwidth.audioOnly")}
+        </div>
       )}
       <main>
         {view === "home" && (

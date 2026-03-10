@@ -89,6 +89,20 @@ header h1 {
   color: var(--warning);
 }
 
+.bandwidth-indicator {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 100, 0, 0.9);
+  color: #fff;
+  padding: 4px 16px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 /* -- Main ------------------------------------------------------------------ */
 
 main {
