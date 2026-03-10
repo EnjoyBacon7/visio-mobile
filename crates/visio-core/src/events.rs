@@ -49,6 +49,10 @@ pub enum VisioEvent {
     AdaptiveModeChanged {
         mode: crate::adaptive::AdaptiveMode,
     },
+    /// Bandwidth mode changed due to network quality.
+    BandwidthModeChanged {
+        mode: crate::bandwidth::BandwidthMode,
+    },
     /// Connection lost unexpectedly — native UI should call reconnect().
     ConnectionLost,
 }

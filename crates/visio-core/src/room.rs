@@ -2,7 +2,7 @@ use futures_util::StreamExt;
 use livekit::data_stream::StreamReader;
 use livekit::participant::ConnectionQuality as LkConnectionQuality;
 use livekit::prelude::{DataPacket, RemoteParticipant, Room, RoomEvent, RoomOptions};
-use livekit::track::{RemoteVideoTrack, TrackKind as LkTrackKind, TrackSource as LkTrackSource};
+use livekit::track::{RemoteVideoTrack, TrackKind as LkTrackKind, TrackSource as LkTrackSource, VideoQuality};
 use livekit::webrtc::audio_stream::native::NativeAudioStream;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::sync::Mutex;
 
 use crate::adaptive;
+use crate::bandwidth;
 use crate::audio_playout::AudioPlayoutBuffer;
 use crate::auth::AuthService;
 use crate::chat::MessageStore;
@@ -47,6 +48,8 @@ pub struct RoomManager {
     unread_count: Arc<AtomicU32>,
     /// Adaptive context engine (sync Mutex — methods are non-async).
     adaptive: Arc<std::sync::Mutex<adaptive::AdaptiveEngine>>,
+    /// Bandwidth degradation controller (sync Mutex — methods are non-async).
+    bandwidth: Arc<std::sync::Mutex<bandwidth::BandwidthController>>,
 }
 
 impl Default for RoomManager {
@@ -75,6 +78,7 @@ impl RoomManager {
             chat_open: Arc::new(AtomicBool::new(false)),
             unread_count: Arc::new(AtomicU32::new(0)),
             adaptive: Arc::new(std::sync::Mutex::new(adaptive::AdaptiveEngine::new())),
+            bandwidth: Arc::new(std::sync::Mutex::new(bandwidth::BandwidthController::new())),
         }
     }
 
@@ -331,6 +335,7 @@ impl RoomManager {
         let last_meet_url = self.last_meet_url.clone();
         let chat_open = self.chat_open.clone();
         let unread_count = self.unread_count.clone();
+        let bandwidth_ctrl = self.bandwidth.clone();
 
         tokio::spawn(async move {
             Self::event_loop(
@@ -346,6 +351,7 @@ impl RoomManager {
                 last_meet_url,
                 chat_open,
                 unread_count,
+                bandwidth_ctrl,
             )
             .await;
         });
@@ -538,6 +544,7 @@ impl RoomManager {
         let last_meet_url = self.last_meet_url.clone();
         let chat_open = self.chat_open.clone();
         let unread_count = self.unread_count.clone();
+        let bandwidth_ctrl = self.bandwidth.clone();
 
         tokio::spawn(async move {
             loop {
@@ -617,6 +624,7 @@ impl RoomManager {
                                         let ev_last_meet_url = last_meet_url.clone();
                                         let ev_chat_open = chat_open.clone();
                                         let ev_unread_count = unread_count.clone();
+                                        let ev_bandwidth_ctrl = bandwidth_ctrl.clone();
 
                                         tokio::spawn(async move {
                                             RoomManager::event_loop(
@@ -632,6 +640,7 @@ impl RoomManager {
                                                 ev_last_meet_url,
                                                 ev_chat_open,
                                                 ev_unread_count,
+                                                ev_bandwidth_ctrl,
                                             )
                                             .await;
                                         });
@@ -844,6 +853,7 @@ impl RoomManager {
         last_meet_url: Arc<Mutex<Option<String>>>,
         chat_open: Arc<AtomicBool>,
         unread_count: Arc<AtomicU32>,
+        bandwidth_ctrl: Arc<std::sync::Mutex<bandwidth::BandwidthController>>,
     ) {
         let mut reconnect_attempt: u32 = 0;
         // Track active audio stream tasks so they get cancelled on disconnect
@@ -1130,9 +1140,54 @@ impl RoomManager {
                     }
 
                     emitter.emit(VisioEvent::ConnectionQualityChanged {
-                        participant_sid: psid,
-                        quality: q,
+                        participant_sid: psid.clone(),
+                        quality: q.clone(),
                     });
+
+                    // --- Bandwidth adaptation (only for local participant) ---
+                    {
+                        let local_sid_opt = participants.lock().await.local_sid().map(|s| s.to_string());
+                        if local_sid_opt.as_deref() == Some(&psid) {
+                            let new_mode = {
+                                let mut bw = bandwidth_ctrl.lock().unwrap();
+                                bw.update(q)
+                            };
+                            if let Some(new_mode) = new_mode {
+                                tracing::info!("bandwidth mode changed to {:?}", new_mode);
+                                emitter.emit(VisioEvent::BandwidthModeChanged { mode: new_mode });
+
+                                // Apply video track changes
+                                if let Some(lk_room) = room_ref.lock().await.as_ref() {
+                                    let remote_participants = lk_room.remote_participants();
+                                    let active = participants.lock().await.active_speakers().first().cloned();
+
+                                    for (_identity, rp) in &remote_participants {
+                                        for (_sid, pub_) in rp.track_publications() {
+                                            if pub_.kind() != LkTrackKind::Video {
+                                                continue;
+                                            }
+                                            match new_mode {
+                                                bandwidth::BandwidthMode::Full => {
+                                                    pub_.set_enabled(true);
+                                                    pub_.set_video_quality(VideoQuality::High);
+                                                }
+                                                bandwidth::BandwidthMode::ReducedVideo => {
+                                                    let is_active_speaker = active.as_deref() == Some(&rp.sid().to_string());
+                                                    pub_.set_enabled(is_active_speaker);
+                                                    if is_active_speaker {
+                                                        pub_.set_video_quality(VideoQuality::Low);
+                                                    }
+                                                }
+                                                bandwidth::BandwidthMode::AudioOnly => {
+                                                    pub_.set_enabled(false);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 RoomEvent::ChatMessage {
