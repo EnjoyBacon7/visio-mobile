@@ -92,14 +92,14 @@ fn encode_and_deliver(
         }
     }
 
-    // Encode as JPEG (quality 85 — good visual quality for video).
+    // Encode as JPEG (quality 95 — near-lossless for crisp video).
     let Some(img) = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(width, height, rgb) else {
         tracing::warn!("buffer size mismatch for track {track_sid}");
         return;
     };
 
-    let mut jpeg_buf = Vec::with_capacity(w * h / 4);
-    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, 85);
+    let mut jpeg_buf = Vec::with_capacity(w * h / 2);
+    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_buf, 95);
     if encoder.encode_image(&img).is_err() {
         tracing::warn!("JPEG encode failed for track {track_sid}");
         return;
