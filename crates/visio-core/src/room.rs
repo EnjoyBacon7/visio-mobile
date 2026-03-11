@@ -50,6 +50,9 @@ pub struct RoomManager {
     adaptive: Arc<std::sync::Mutex<adaptive::AdaptiveEngine>>,
     /// Bandwidth degradation controller (sync Mutex — methods are non-async).
     bandwidth: Arc<std::sync::Mutex<bandwidth::BandwidthController>>,
+    /// When true, disables adaptive streaming and bandwidth degradation
+    /// to always receive the highest quality video layers.
+    high_quality_mode: Arc<AtomicBool>,
 }
 
 impl Default for RoomManager {
@@ -79,7 +82,15 @@ impl RoomManager {
             unread_count: Arc::new(AtomicU32::new(0)),
             adaptive: Arc::new(std::sync::Mutex::new(adaptive::AdaptiveEngine::new())),
             bandwidth: Arc::new(std::sync::Mutex::new(bandwidth::BandwidthController::new())),
+            high_quality_mode: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Enable high-quality mode: disables adaptive streaming and bandwidth
+    /// degradation to always receive the highest quality video.
+    /// Intended for desktop clients with reliable connectivity.
+    pub fn set_high_quality_mode(&self, enabled: bool) {
+        self.high_quality_mode.store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get a reference to the audio playout buffer.
@@ -283,9 +294,11 @@ impl RoomManager {
     ) -> Result<(), VisioError> {
         self.set_connection_state(ConnectionState::Connecting).await;
 
+        let high_quality = self.high_quality_mode.load(std::sync::atomic::Ordering::Relaxed);
+
         let mut options = RoomOptions::default();
         options.auto_subscribe = true;
-        options.adaptive_stream = true;
+        options.adaptive_stream = !high_quality;
         options.dynacast = true;
 
         let (room, events) = Room::connect(livekit_url, token, options)
@@ -336,6 +349,7 @@ impl RoomManager {
         let chat_open = self.chat_open.clone();
         let unread_count = self.unread_count.clone();
         let bandwidth_ctrl = self.bandwidth.clone();
+        let high_quality_mode = self.high_quality_mode.clone();
 
         tokio::spawn(async move {
             Self::event_loop(
@@ -352,6 +366,7 @@ impl RoomManager {
                 chat_open,
                 unread_count,
                 bandwidth_ctrl,
+                high_quality_mode,
             )
             .await;
         });
@@ -547,6 +562,7 @@ impl RoomManager {
         let chat_open = self.chat_open.clone();
         let unread_count = self.unread_count.clone();
         let bandwidth_ctrl = self.bandwidth.clone();
+        let high_quality_mode = self.high_quality_mode.clone();
 
         tokio::spawn(async move {
             loop {
@@ -627,6 +643,7 @@ impl RoomManager {
                                         let ev_chat_open = chat_open.clone();
                                         let ev_unread_count = unread_count.clone();
                                         let ev_bandwidth_ctrl = bandwidth_ctrl.clone();
+                                        let ev_high_quality_mode = high_quality_mode.clone();
 
                                         tokio::spawn(async move {
                                             RoomManager::event_loop(
@@ -643,6 +660,7 @@ impl RoomManager {
                                                 ev_chat_open,
                                                 ev_unread_count,
                                                 ev_bandwidth_ctrl,
+                                                ev_high_quality_mode,
                                             )
                                             .await;
                                         });
@@ -856,6 +874,7 @@ impl RoomManager {
         chat_open: Arc<AtomicBool>,
         unread_count: Arc<AtomicU32>,
         bandwidth_ctrl: Arc<std::sync::Mutex<bandwidth::BandwidthController>>,
+        high_quality_mode: Arc<AtomicBool>,
     ) {
         let mut reconnect_attempt: u32 = 0;
         // Track active audio stream tasks so they get cancelled on disconnect
@@ -1154,7 +1173,8 @@ impl RoomManager {
                     });
 
                     // --- Bandwidth adaptation (only for local participant) ---
-                    {
+                    // Skip degradation in high-quality mode (desktop).
+                    if !high_quality_mode.load(std::sync::atomic::Ordering::Relaxed) {
                         let local_sid_opt = participants.lock().await.local_sid().map(|s| s.to_string());
                         if local_sid_opt.as_deref() == Some(&psid) {
                             let new_mode = {

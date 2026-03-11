@@ -1,4 +1,4 @@
-use livekit::options::TrackPublishOptions;
+use livekit::options::{TrackPublishOptions, VideoEncoding};
 use livekit::prelude::*;
 use livekit::track::TrackSource as LkTrackSource;
 use livekit::webrtc::audio_source::native::NativeAudioSource;
@@ -271,6 +271,10 @@ impl MeetingControls {
                 LocalTrack::Video(track),
                 TrackPublishOptions {
                     source: LkTrackSource::Screenshare,
+                    video_encoding: Some(VideoEncoding {
+                        max_bitrate: 3_000_000,
+                        max_framerate: 15.0,
+                    }),
                     ..Default::default()
                 },
             )

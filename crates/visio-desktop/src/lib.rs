@@ -1239,6 +1239,7 @@ pub fn run() {
     let settings = SettingsStore::new(data_dir.to_str().unwrap());
 
     let room_manager = RoomManager::new();
+    room_manager.set_high_quality_mode(true);
     let playout_buffer = room_manager.playout_buffer();
     let controls = room_manager.controls();
     let chat = room_manager.chat();
