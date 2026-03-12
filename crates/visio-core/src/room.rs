@@ -1206,7 +1206,7 @@ impl RoomManager {
                                         .first()
                                         .cloned();
 
-                                    for (_identity, rp) in &remote_participants {
+                                    for rp in remote_participants.values() {
                                         for (_sid, pub_) in rp.track_publications() {
                                             if pub_.kind() != LkTrackKind::Video {
                                                 continue;
