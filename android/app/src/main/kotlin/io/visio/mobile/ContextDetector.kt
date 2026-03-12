@@ -1,6 +1,5 @@
 package io.visio.mobile
 
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -21,7 +20,6 @@ import android.util.Log
 import uniffi.visio.NetworkType
 
 class ContextDetector(private val context: Context) {
-
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val sensorManager =
@@ -35,9 +33,9 @@ class ContextDetector(private val context: Context) {
     private var bluetoothReceiver: android.content.BroadcastReceiver? = null
 
     private var lastReportedMotion = false
-    private var lastSignificantMotionMs = 0L  // last time we saw a significant accel event
-    private val MOTION_THRESHOLD = 2.5f       // m/s² deviation from gravity to count as motion
-    private val MOTION_COOLDOWN_MS = 15000L   // stay in pedestrian 15s after last motion event
+    private var lastSignificantMotionMs = 0L // last time we saw a significant accel event
+    private val motionThreshold = 2.5f // m/s² deviation from gravity to count as motion
+    private val motionCooldownMs = 15000L // stay in pedestrian 15s after last motion event
 
     companion object {
         private const val TAG = "ContextDetector"
@@ -65,34 +63,50 @@ class ContextDetector(private val context: Context) {
 
     private fun startNetworkMonitoring() {
         val request = NetworkRequest.Builder().build()
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                val type = when {
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
-                    else -> NetworkType.UNKNOWN
+        val callback =
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    caps: NetworkCapabilities,
+                ) {
+                    val type =
+                        when {
+                            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
+                            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
+                            else -> NetworkType.UNKNOWN
+                        }
+                    Log.d(TAG, "Network type: $type")
+                    try {
+                        VisioManager.client.reportNetworkType(type)
+                    } catch (_: Exception) {
+                    }
                 }
-                Log.d(TAG, "Network type: $type")
-                try { VisioManager.client.reportNetworkType(type) } catch (_: Exception) {}
+
+                override fun onLost(network: Network) {
+                    Log.d(TAG, "Network lost")
+                    try {
+                        VisioManager.client.reportNetworkType(NetworkType.UNKNOWN)
+                    } catch (_: Exception) {
+                    }
+                }
             }
-            override fun onLost(network: Network) {
-                Log.d(TAG, "Network lost")
-                try { VisioManager.client.reportNetworkType(NetworkType.UNKNOWN) } catch (_: Exception) {}
-            }
-        }
         connectivityManager.registerNetworkCallback(request, callback)
         networkCallback = callback
     }
 
     private fun reportCurrentNetworkType() {
         val caps = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
-        val type = when {
-            caps == null -> NetworkType.UNKNOWN
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
-            else -> NetworkType.UNKNOWN
+        val type =
+            when {
+                caps == null -> NetworkType.UNKNOWN
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkType.WIFI
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.CELLULAR
+                else -> NetworkType.UNKNOWN
+            }
+        try {
+            VisioManager.client.reportNetworkType(type)
+        } catch (_: Exception) {
         }
-        try { VisioManager.client.reportNetworkType(type) } catch (_: Exception) {}
     }
 
     private fun startMotionDetection() {
@@ -102,108 +116,132 @@ class ContextDetector(private val context: Context) {
             return
         }
         Log.d(TAG, "Accelerometer found: ${accelerometer.name}")
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                val x = event.values[0]
-                val y = event.values[1]
-                val z = event.values[2]
-                val magnitude = kotlin.math.sqrt((x * x + y * y + z * z).toDouble()).toFloat()
-                val deviation = kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH)
-                val now = System.currentTimeMillis()
+        val listener =
+            object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    val x = event.values[0]
+                    val y = event.values[1]
+                    val z = event.values[2]
+                    val magnitude = kotlin.math.sqrt((x * x + y * y + z * z).toDouble()).toFloat()
+                    val deviation = kotlin.math.abs(magnitude - SensorManager.GRAVITY_EARTH)
+                    val now = System.currentTimeMillis()
 
-                // Any significant acceleration extends the "moving" window
-                if (deviation > MOTION_THRESHOLD) {
-                    val wasMoving = lastSignificantMotionMs > 0L &&
-                        now - lastSignificantMotionMs < MOTION_COOLDOWN_MS
-                    lastSignificantMotionMs = now
-                    if (!wasMoving && !lastReportedMotion) {
-                        // First motion event — switch to moving
-                        lastReportedMotion = true
-                        Log.d(TAG, "Motion detected (dev=${"%.2f".format(deviation)})")
-                        try { VisioManager.client.reportMotionDetected(true) } catch (_: Exception) {}
+                    // Any significant acceleration extends the "moving" window
+                    if (deviation > motionThreshold) {
+                        val wasMoving =
+                            lastSignificantMotionMs > 0L &&
+                                now - lastSignificantMotionMs < motionCooldownMs
+                        lastSignificantMotionMs = now
+                        if (!wasMoving && !lastReportedMotion) {
+                            // First motion event — switch to moving
+                            lastReportedMotion = true
+                            Log.d(TAG, "Motion detected (dev=${"%.2f".format(deviation)})")
+                            try {
+                                VisioManager.client.reportMotionDetected(true)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    } else if (
+                        lastReportedMotion &&
+                        lastSignificantMotionMs > 0L &&
+                        now - lastSignificantMotionMs > motionCooldownMs
+                    ) {
+                        // Cooldown expired — no significant motion for 15s
+                        lastReportedMotion = false
+                        Log.d(TAG, "Motion stopped (${motionCooldownMs}ms cooldown expired)")
+                        try {
+                            VisioManager.client.reportMotionDetected(false)
+                        } catch (_: Exception) {
+                        }
                     }
-                } else if (lastReportedMotion && lastSignificantMotionMs > 0L &&
-                    now - lastSignificantMotionMs > MOTION_COOLDOWN_MS) {
-                    // Cooldown expired — no significant motion for 15s
-                    lastReportedMotion = false
-                    Log.d(TAG, "Motion stopped (${MOTION_COOLDOWN_MS}ms cooldown expired)")
-                    try { VisioManager.client.reportMotionDetected(false) } catch (_: Exception) {}
                 }
 
+                override fun onAccuracyChanged(
+                    sensor: Sensor?,
+                    accuracy: Int,
+                ) {}
             }
-
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-        }
         sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
         accelerometerListener = listener
     }
 
     private fun startBluetoothMonitoring() {
-        val callback = object : AudioDeviceCallback() {
-            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
-                Log.d(TAG, "Audio devices added: ${addedDevices.map { "${it.productName}(${it.type})" }}")
-                reportBluetoothCarKit()
-                // Auto-route to newly connected Bluetooth audio device
-                val btDevice = addedDevices.firstOrNull { device ->
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+        val callback =
+            object : AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                    Log.d(TAG, "Audio devices added: ${addedDevices.map { "${it.productName}(${it.type})" }}")
+                    reportBluetoothCarKit()
+                    // Auto-route to newly connected Bluetooth audio device
+                    val btDevice =
+                        addedDevices.firstOrNull { device ->
+                            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                        }
+                    if (btDevice != null) {
+                        Log.i(TAG, "Bluetooth audio device connected: ${btDevice.productName}, auto-routing")
+                        VisioManager.onBluetoothAudioDeviceConnected()
+                    }
                 }
-                if (btDevice != null) {
-                    Log.i(TAG, "Bluetooth audio device connected: ${btDevice.productName}, auto-routing")
-                    VisioManager.onBluetoothAudioDeviceConnected()
+
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                    Log.d(TAG, "Audio devices removed: ${removedDevices.map { "${it.productName}(${it.type})" }}")
+                    reportBluetoothCarKit()
+                    // Check if removed device was Bluetooth audio
+                    val wasBt =
+                        removedDevices.any { device ->
+                            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                        }
+                    if (wasBt) {
+                        Log.i(TAG, "Bluetooth audio device disconnected, restoring default routing")
+                        VisioManager.onBluetoothAudioDeviceDisconnected()
+                    }
                 }
             }
-            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
-                Log.d(TAG, "Audio devices removed: ${removedDevices.map { "${it.productName}(${it.type})" }}")
-                reportBluetoothCarKit()
-                // Check if removed device was Bluetooth audio
-                val wasBt = removedDevices.any { device ->
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-                }
-                if (wasBt) {
-                    Log.i(TAG, "Bluetooth audio device disconnected, restoring default routing")
-                    VisioManager.onBluetoothAudioDeviceDisconnected()
-                }
-            }
-        }
         audioManager.registerAudioDeviceCallback(callback, android.os.Handler(android.os.Looper.getMainLooper()))
         audioDeviceCallback = callback
 
         // BroadcastReceiver for reliable Bluetooth disconnect detection
-        val receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
-                when (intent?.action) {
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
-                    android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                        val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            intent.getParcelableExtra(
-                                android.bluetooth.BluetoothDevice.EXTRA_DEVICE,
-                                android.bluetooth.BluetoothDevice::class.java
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
-                        }
-                        Log.d(TAG, "Bluetooth ACL ${intent.action}: ${device?.name}")
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            reportBluetoothCarKit()
-                        }, 500)
-                        if (intent.action == android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED) {
+        val receiver =
+            object : android.content.BroadcastReceiver() {
+                override fun onReceive(
+                    ctx: android.content.Context?,
+                    intent: android.content.Intent?,
+                ) {
+                    when (intent?.action) {
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
+                        -> {
+                            val device =
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    intent.getParcelableExtra(
+                                        android.bluetooth.BluetoothDevice.EXTRA_DEVICE,
+                                        android.bluetooth.BluetoothDevice::class.java,
+                                    )
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    intent.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
+                                }
+                            Log.d(TAG, "Bluetooth ACL ${intent.action}: ${device?.name}")
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                VisioManager.onBluetoothAudioDeviceConnected()
-                            }, 1000)
+                                reportBluetoothCarKit()
+                            }, 500)
+                            if (intent.action == android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    VisioManager.onBluetoothAudioDeviceConnected()
+                                }, 1000)
+                            }
                         }
                     }
                 }
             }
-        }
-        val filter = android.content.IntentFilter().apply {
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
-            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
-        }
+        val filter =
+            android.content.IntentFilter().apply {
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+            }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -217,7 +255,10 @@ class ContextDetector(private val context: Context) {
         val adapter = btManager?.adapter
         if (adapter == null) {
             Log.d(TAG, "No Bluetooth adapter")
-            try { VisioManager.client.reportBluetoothCarKit(false) } catch (_: Exception) {}
+            try {
+                VisioManager.client.reportBluetoothCarKit(false)
+            } catch (_: Exception) {
+            }
             return
         }
 
@@ -227,47 +268,71 @@ class ContextDetector(private val context: Context) {
 
         try {
             for (profileType in profilesToCheck) {
-                adapter.getProfileProxy(context, object : BluetoothProfile.ServiceListener {
-                    override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                        try {
-                            val devices = proxy.connectedDevices
-                            for (device in devices) {
-                                val deviceClass = device.bluetoothClass?.deviceClass ?: 0
-                                val name = device.name ?: "unknown"
-                                Log.d(TAG, "BT device: name=$name class=0x${deviceClass.toString(16)} profile=$profile")
+                adapter.getProfileProxy(
+                    context,
+                    object : BluetoothProfile.ServiceListener {
+                        override fun onServiceConnected(
+                            profile: Int,
+                            proxy: BluetoothProfile,
+                        ) {
+                            try {
+                                val devices = proxy.connectedDevices
+                                for (device in devices) {
+                                    val deviceClass = device.bluetoothClass?.deviceClass ?: 0
+                                    val name = device.name ?: "unknown"
+                                    Log.d(
+                                        TAG,
+                                        "BT device: name=$name class=0x${deviceClass.toString(16)} profile=$profile",
+                                    )
 
-                                val isWearable = deviceClass == BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET ||
-                                    deviceClass == BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES
-                                if (!isWearable) {
-                                    foundCarKit.set(true)
-                                    Log.d(TAG, "Car audio device detected: $name")
+                                    val isWearable =
+                                        deviceClass == BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET ||
+                                            deviceClass == BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES
+                                    if (!isWearable) {
+                                        foundCarKit.set(true)
+                                        Log.d(TAG, "Car audio device detected: $name")
+                                    }
+                                }
+                            } catch (e: SecurityException) {
+                                Log.w(TAG, "BLUETOOTH_CONNECT permission not granted: ${e.message}")
+                            } catch (_: Exception) {
+                            }
+
+                            try {
+                                adapter.closeProfileProxy(profile, proxy)
+                            } catch (_: Exception) {
+                            }
+
+                            // Only report after ALL profiles have been checked
+                            if (pendingProfiles.decrementAndGet() == 0) {
+                                val result = foundCarKit.get()
+                                Log.d(TAG, "Bluetooth car kit (aggregated): $result")
+                                try {
+                                    VisioManager.client.reportBluetoothCarKit(result)
+                                } catch (_: Exception) {
                                 }
                             }
-                        } catch (e: SecurityException) {
-                            Log.w(TAG, "BLUETOOTH_CONNECT permission not granted: ${e.message}")
-                        } catch (_: Exception) {}
-
-                        try { adapter.closeProfileProxy(profile, proxy) } catch (_: Exception) {}
-
-                        // Only report after ALL profiles have been checked
-                        if (pendingProfiles.decrementAndGet() == 0) {
-                            val result = foundCarKit.get()
-                            Log.d(TAG, "Bluetooth car kit (aggregated): $result")
-                            try { VisioManager.client.reportBluetoothCarKit(result) } catch (_: Exception) {}
                         }
-                    }
 
-                    override fun onServiceDisconnected(profile: Int) {
-                        // If proxy disconnects before callback, still decrement
-                        if (pendingProfiles.decrementAndGet() == 0) {
-                            try { VisioManager.client.reportBluetoothCarKit(foundCarKit.get()) } catch (_: Exception) {}
+                        override fun onServiceDisconnected(profile: Int) {
+                            // If proxy disconnects before callback, still decrement
+                            if (pendingProfiles.decrementAndGet() == 0) {
+                                try {
+                                    VisioManager.client.reportBluetoothCarKit(foundCarKit.get())
+                                } catch (_: Exception) {
+                                }
+                            }
                         }
-                    }
-                }, profileType)
+                    },
+                    profileType,
+                )
             }
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing BLUETOOTH_CONNECT permission: ${e.message}")
-            try { VisioManager.client.reportBluetoothCarKit(false) } catch (_: Exception) {}
+            try {
+                VisioManager.client.reportBluetoothCarKit(false)
+            } catch (_: Exception) {
+            }
         }
     }
 }

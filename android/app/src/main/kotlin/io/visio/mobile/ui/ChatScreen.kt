@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -220,11 +219,12 @@ private fun ChatBubble(
             timeFormat.format(Date(message.timestampMs.toLong()))
         }
 
-    val bubbleShape = if (isOwn) {
-        RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
-    } else {
-        RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
-    }
+    val bubbleShape =
+        if (isOwn) {
+            RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+        } else {
+            RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+        }
 
     Column(
         modifier =

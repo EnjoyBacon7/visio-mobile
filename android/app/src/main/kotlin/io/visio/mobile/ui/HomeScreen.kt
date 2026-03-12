@@ -447,20 +447,24 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(8.dp))
             roomHistory.forEach { url ->
                 val slug = if ('/' in url) url.substringAfterLast('/') else url
-                val host = try {
-                    java.net.URI(url).host ?: ""
-                } catch (_: Exception) { "" }
+                val host =
+                    try {
+                        java.net.URI(url).host ?: ""
+                    } catch (_: Exception) {
+                        ""
+                    }
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            roomUrl = url
-                        }
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(8.dp),
-                        )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                roomUrl = url
+                            }
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                RoundedCornerShape(8.dp),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
