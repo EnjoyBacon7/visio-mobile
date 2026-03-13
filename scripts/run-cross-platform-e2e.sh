@@ -338,12 +338,6 @@ if [ -f "$BOT_LOG" ]; then
         warn "No tracks received from remote (mic/camera not auto-enabled)"
     fi
 
-    if grep -q "Audio quality OK" "$BOT_LOG" 2>/dev/null; then
-        ok "Audio quality: OK"
-    elif grep -q "NO audio frames received" "$BOT_LOG" 2>/dev/null; then
-        warn "Audio quality: no frames (expected if no remote audio published)"
-    fi
-
     # Chat verification
     CHATS="$(grep -c "\[EVENT\] ChatMessage:" "$BOT_LOG" 2>/dev/null)" || CHATS=0
     if [ "$CHATS" -gt 1 ]; then
@@ -382,6 +376,52 @@ if [ -f "$BOT_LOG" ]; then
             fail "iOS: NOT detected by bot"
             EXIT_CODE=1
         fi
+    fi
+
+    # =========================================================================
+    # Quality Gates
+    # =========================================================================
+
+    # Audio quality gate
+    AUDIO_FRAMES="$(grep -o 'frames=[0-9]*' "$BOT_LOG" 2>/dev/null | tail -1 | cut -d= -f2)" || AUDIO_FRAMES=0
+    AUDIO_MAX_GAP="$(grep -o 'max_gap=[0-9]*ms' "$BOT_LOG" 2>/dev/null | tail -1 | grep -o '[0-9]*')" || AUDIO_MAX_GAP=0
+
+    if [ "$AUDIO_FRAMES" -gt 0 ] 2>/dev/null; then
+        ok "Audio: $AUDIO_FRAMES frames received"
+        if [ "$AUDIO_MAX_GAP" -gt 200 ] 2>/dev/null; then
+            fail "Audio: max gap ${AUDIO_MAX_GAP}ms (threshold: 200ms) — choppy audio detected"
+            EXIT_CODE=1
+        else
+            ok "Audio: max gap ${AUDIO_MAX_GAP}ms — smooth"
+        fi
+    else
+        warn "Audio: 0 frames received (expected if no remote audio)"
+    fi
+
+    # Video quality gate
+    VIDEO_FRAMES="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'frames=[0-9]*' | cut -d= -f2)" || VIDEO_FRAMES=0
+    VIDEO_FPS="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'avg_fps=[0-9.]*' | cut -d= -f2)" || VIDEO_FPS="0"
+    VIDEO_MAX_GAP="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'max_gap=[0-9]*ms' | grep -o '[0-9]*')" || VIDEO_MAX_GAP=0
+
+    if [ "$VIDEO_FRAMES" -gt 0 ] 2>/dev/null; then
+        ok "Video: $VIDEO_FRAMES frames, ${VIDEO_FPS} fps avg"
+        if [ "$VIDEO_MAX_GAP" -gt 2000 ] 2>/dev/null; then
+            fail "Video: max gap ${VIDEO_MAX_GAP}ms — freeze detected"
+            EXIT_CODE=1
+        else
+            ok "Video: max gap ${VIDEO_MAX_GAP}ms — smooth"
+        fi
+    else
+        warn "Video: 0 frames received"
+    fi
+
+    # Screen share rotation
+    SCREEN_SHARE_STOPS="$(grep -c 'Stopping screen share' "$BOT_LOG" 2>/dev/null)" || SCREEN_SHARE_STOPS=0
+    SCREEN_SHARE_RESUMES="$(grep -c 'Resuming bot screen share' "$BOT_LOG" 2>/dev/null)" || SCREEN_SHARE_RESUMES=0
+    if [ "$SCREEN_SHARE_STOPS" -gt 0 ] && [ "$SCREEN_SHARE_RESUMES" -gt 0 ]; then
+        ok "Screen share: rotation tested (stopped=$SCREEN_SHARE_STOPS, resumed=$SCREEN_SHARE_RESUMES)"
+    else
+        warn "Screen share: no rotation detected"
     fi
 fi
 
