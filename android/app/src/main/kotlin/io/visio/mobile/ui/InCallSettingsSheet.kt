@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import io.visio.mobile.R
@@ -136,24 +137,28 @@ fun InCallSettingsSheet(
                     label = Strings.t("settings.incall.roomInfo", lang),
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
+                    modifier = Modifier.testTag("incall_tab_info"),
                 )
                 TabIcon(
                     iconRes = R.drawable.ri_mic_line,
                     label = Strings.t("settings.incall.micro", lang),
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
+                    modifier = Modifier.testTag("incall_tab_microphone"),
                 )
                 TabIcon(
                     iconRes = R.drawable.ri_video_on_line,
                     label = Strings.t("settings.incall.camera", lang),
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
+                    modifier = Modifier.testTag("incall_tab_camera"),
                 )
                 TabIcon(
                     icon = Icons.Outlined.Notifications,
                     label = Strings.t("settings.incall.notifications", lang),
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
+                    modifier = Modifier.testTag("incall_tab_notifications"),
                 )
                 if (VisioManager.currentAccessLevel == "restricted") {
                     TabIcon(
@@ -208,11 +213,12 @@ private fun TabIcon(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = onClick,
         modifier =
-            Modifier
+            modifier
                 .size(48.dp)
                 .background(
                     if (selected) VisioColors.Primary500 else VisioColors.PrimaryDark100,
@@ -234,11 +240,12 @@ private fun TabIcon(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     IconButton(
         onClick = onClick,
         modifier =
-            Modifier
+            modifier
                 .size(48.dp)
                 .background(
                     if (selected) VisioColors.Primary500 else VisioColors.PrimaryDark100,
@@ -337,13 +344,14 @@ private fun MicroTab(
 
     // Audio Input section
     SectionHeader(Strings.t("settings.incall.audioInput", lang))
-    inputDevices.forEach { device ->
+    inputDevices.forEachIndexed { index, device ->
         val label = audioDeviceLabel(device, lang)
         val isActive = isInputActive(device)
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .testTag("incall_audio_input_$index")
                     .clickable {
                         onSelectAudioInput(device)
                         activeInputDeviceId = device.id
@@ -376,13 +384,14 @@ private fun MicroTab(
 
     // Audio Output section
     SectionHeader(Strings.t("settings.incall.audioOutput", lang))
-    outputDevices.forEach { device ->
+    outputDevices.forEachIndexed { index, device ->
         val label = audioDeviceLabel(device, lang)
         val isActive = activeOutputDeviceId == device.id
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .testTag("incall_audio_output_$index")
                     .clickable {
                         onSelectAudioOutput(device)
                         activeOutputDeviceId = device.id
@@ -433,6 +442,7 @@ private fun CameraTab(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .testTag("incall_camera_front")
                 .clickable {
                     selectedFront = true
                     onSwitchCamera(true)
@@ -463,6 +473,7 @@ private fun CameraTab(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .testTag("incall_camera_back")
                 .clickable {
                     selectedFront = false
                     onSwitchCamera(false)
@@ -705,7 +716,7 @@ private fun RoomInfoTab(
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Room URL", roomUrl))
                 copiedHttp = true
-            }, modifier = Modifier.size(32.dp)) {
+            }, modifier = Modifier.size(32.dp).testTag("incall_room_url_copy")) {
                 Icon(
                     imageVector = if (copiedHttp) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
                     contentDescription = if (copiedHttp) Strings.t("settings.incall.copied", lang) else Strings.t("info.copy", lang),

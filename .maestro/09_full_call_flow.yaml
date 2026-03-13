@@ -1,0 +1,103 @@
+appId: io.visio.mobile
+tags:
+  - requires-server
+---
+# Start from home
+- launchApp
+
+# Enter room URL
+- tapOn:
+    id: "home_room_url_input"
+- inputText: "https://meet.example.com/abc-defg-hij"
+
+# Enter display name
+- tapOn:
+    id: "home_display_name_input"
+- inputText: "Maestro E2E"
+
+# Join room
+- tapOn:
+    id: "home_join_button"
+
+# Wait for call screen
+- extendedWaitUntil:
+    visible:
+      id: "call_mic_button"
+    timeout: 15000
+
+# === MEDIA CONTROLS ===
+
+# Toggle mic off/on
+- tapOn:
+    id: "call_mic_button"
+- tapOn:
+    id: "call_mic_button"
+
+# Toggle camera off/on
+- tapOn:
+    id: "call_camera_button"
+- tapOn:
+    id: "call_camera_button"
+
+# Raise hand
+- tapOn:
+    id: "call_hand_raise_button"
+    optional: true
+
+# === DEVICE SELECTION ===
+
+# Open settings
+- tapOn:
+    id: "call_settings_button"
+    optional: true
+
+# Try microphone tab
+- tapOn:
+    id: "incall_tab_microphone"
+    optional: true
+
+# Close settings
+- pressKey: back
+
+# === CHAT ===
+
+# Open chat
+- tapOn:
+    id: "call_chat_button"
+
+# Send message
+- tapOn:
+    id: "chat_message_input"
+- inputText: "Full flow test message"
+- tapOn:
+    id: "chat_send_button"
+
+# Verify message
+- assertVisible:
+    text: "Full flow test message"
+
+# Return to call
+- tapOn:
+    id: "chat_back_button"
+
+# === PARTICIPANTS ===
+
+# Open participant list
+- tapOn:
+    id: "call_participants_button"
+    optional: true
+
+# Close (back)
+- pressKey: back
+
+# === DISCONNECT ===
+
+# Hang up
+- tapOn:
+    id: "call_hangup_button"
+
+# Should return to home
+- extendedWaitUntil:
+    visible:
+      id: "home_room_url_input"
+    timeout: 10000

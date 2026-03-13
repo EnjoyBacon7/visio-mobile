@@ -3,3 +3,10 @@ appId: io.visio.mobile
 - runFlow: 01_app_launch.yaml
 - runFlow: 02_enter_room_url.yaml
 - runFlow: 03_settings_navigation.yaml
+# Flows below require an active call or server — run separately:
+# - runFlow: 04_join_room_with_bot.yaml  # requires-server
+# - runFlow: 05_chat_flow.yaml           # requires-call
+# - runFlow: 06_call_controls.yaml       # requires-call
+# - runFlow: 07_device_selection.yaml    # requires-call
+# - runFlow: 08_chat_comprehensive.yaml  # requires-call
+# - runFlow: 09_full_call_flow.yaml      # requires-server

@@ -1,0 +1,63 @@
+appId: io.visio.mobile
+tags:
+  - requires-call
+---
+# Open chat
+- tapOn:
+    id: "call_chat_button"
+
+# Assert chat screen elements visible
+- assertVisible:
+    id: "chat_message_input"
+- assertVisible:
+    id: "chat_send_button"
+- assertVisible:
+    id: "chat_message_list"
+
+# Send first message
+- tapOn:
+    id: "chat_message_input"
+- inputText: "Hello from Maestro test!"
+- tapOn:
+    id: "chat_send_button"
+
+# Verify input was cleared
+- assertNotVisible:
+    text: "Hello from Maestro test!"
+    id: "chat_message_input"
+
+# Wait for message to appear in list
+- assertVisible:
+    text: "Hello from Maestro test!"
+
+# Send a second message
+- tapOn:
+    id: "chat_message_input"
+- inputText: "Second message for E2E"
+- tapOn:
+    id: "chat_send_button"
+
+# Verify both messages are visible
+- assertVisible:
+    text: "Hello from Maestro test!"
+- assertVisible:
+    text: "Second message for E2E"
+
+# Send an emoji message
+- tapOn:
+    id: "chat_message_input"
+- inputText: "👍🎉"
+- tapOn:
+    id: "chat_send_button"
+
+# Verify emoji message visible
+- assertVisible:
+    text: "👍🎉"
+
+# Return to call
+- tapOn:
+    id: "chat_back_button"
+
+# Verify we're back on call screen
+- assertVisible:
+    id: "call_mic_button"

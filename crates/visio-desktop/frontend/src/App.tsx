@@ -1150,7 +1150,7 @@ function SourcePickerModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="settings-modal source-picker" onClick={e => e.stopPropagation()}>
+      <div className="settings-modal source-picker" data-testid="screen-share-source-picker" onClick={e => e.stopPropagation()}>
         <div className="settings-header">
           <span>{t("call.selectSource")}</span>
           <button onClick={onClose}><RiCloseLine size={20} /></button>
@@ -1161,10 +1161,11 @@ function SourcePickerModal({
               <h4 style={{ margin: "0 0 8px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 {t("call.monitors")}
               </h4>
-              {monitors.map(s => (
+              {monitors.map((s, i) => (
                 <button
                   key={s.id}
                   className="source-item"
+                  data-testid={`screen-share-source-${i}`}
                   onClick={() => onSelect(s.id)}
                 >
                   <ScreenShareIcon size={18} />
@@ -1179,10 +1180,11 @@ function SourcePickerModal({
               <h4 style={{ margin: "16px 0 8px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 {t("call.windows")}
               </h4>
-              {windows.map(s => (
+              {windows.map((s, i) => (
                 <button
                   key={s.id}
                   className="source-item"
+                  data-testid={`screen-share-source-${monitors.length + i}`}
                   onClick={() => onSelect(s.id)}
                 >
                   <RiApps2Line size={18} />
@@ -1535,20 +1537,20 @@ function CallView({
           <div className="chat-sidebar" data-testid="call-chat-sidebar">
             <div className="chat-header">
               <span>{t("chat")}</span>
-              <button className="chat-close" onClick={onToggleChat}>
+              <button className="chat-close" data-testid="chat-close-button" onClick={onToggleChat}>
                 <RiCloseLine size={20} />
               </button>
             </div>
             <div className="chat-messages" ref={chatScrollRef} data-testid="chat-message-list">
               {messages.length === 0 ? (
-                <div className="chat-empty">{t("chat.noMessages")}</div>
+                <div className="chat-empty" data-testid="chat-empty">{t("chat.noMessages")}</div>
               ) : (
                 messages.map((m, i) => {
                   const isOwn = localParticipant && m.sender_sid === localParticipant.sid;
                   const showName =
                     !isOwn && (i === 0 || messages[i - 1].sender_sid !== m.sender_sid);
                   return (
-                    <div key={m.id} className={`chat-bubble ${isOwn ? "chat-bubble-own" : ""}`}>
+                    <div key={m.id} className={`chat-bubble ${isOwn ? "chat-bubble-own" : ""}`} data-testid={`chat-bubble-${i}`}>
                       {showName && (
                         <div className="chat-sender">
                           {m.sender_name || t("unknown")}
@@ -1756,6 +1758,7 @@ function CallView({
             onClick={onShowMicPicker}
             title={t("control.audioDevices")}
             style={{ borderRadius: "0 8px 8px 0" }}
+            data-testid="call-mic-chevron"
           >
             <RiArrowUpSLine size={16} />
           </button>
@@ -1781,6 +1784,7 @@ function CallView({
             onClick={onShowCamPicker}
             title={t("control.camDevices")}
             style={{ borderRadius: "0 8px 8px 0" }}
+            data-testid="call-camera-chevron"
           >
             <RiArrowUpSLine size={16} />
           </button>
@@ -1835,7 +1839,7 @@ function CallView({
         >
           <RiChat1Line size={20} />
           {unreadCount > 0 && (
-            <span className="unread-badge">
+            <span className="unread-badge" data-testid="chat-unread-badge">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -1863,11 +1867,11 @@ function CallView({
 
       {/* Mic device picker */}
       {showMicPicker && (
-        <div className="device-picker">
+        <div className="device-picker" data-testid="device-picker-audio">
           <div className="device-section">
             <div className="device-section-title">{t("device.microphone")}</div>
-            {audioInputs.map((d) => (
-              <label key={d.name} className="device-option">
+            {audioInputs.map((d, i) => (
+              <label key={d.name} className="device-option" data-testid={`device-option-input-${i}`}>
                 <input
                   type="radio"
                   name="audioInput"
@@ -1886,8 +1890,8 @@ function CallView({
           </div>
           <div className="device-section">
             <div className="device-section-title">{t("device.speaker")}</div>
-            {audioOutputs.map((d) => (
-              <label key={d.name} className="device-option">
+            {audioOutputs.map((d, i) => (
+              <label key={d.name} className="device-option" data-testid={`device-option-output-${i}`}>
                 <input
                   type="radio"
                   name="audioOutput"
@@ -1909,11 +1913,11 @@ function CallView({
 
       {/* Camera device picker */}
       {showCamPicker && (
-        <div className="device-picker" style={{ minWidth: 300 }}>
+        <div className="device-picker" data-testid="device-picker-video" style={{ minWidth: 300 }}>
           <div className="device-section">
             <div className="device-section-title">{t("device.camera")}</div>
-            {videoInputs.map((d) => (
-              <label key={d.unique_id} className="device-option">
+            {videoInputs.map((d, i) => (
+              <label key={d.unique_id} className="device-option" data-testid={`device-option-camera-${i}`}>
                 <input
                   type="radio"
                   name="videoInput"

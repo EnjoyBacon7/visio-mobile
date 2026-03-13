@@ -1173,7 +1173,8 @@ private fun ControlBar(
                         modifier =
                             Modifier
                                 .size(38.dp)
-                                .background(VisioColors.PrimaryDark100, RoundedCornerShape(8.dp)),
+                                .background(VisioColors.PrimaryDark100, RoundedCornerShape(8.dp))
+                                .testTag("call_settings_button"),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ri_settings_3_line),

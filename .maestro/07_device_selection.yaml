@@ -1,0 +1,46 @@
+appId: io.visio.mobile
+tags:
+  - requires-call
+---
+# Open in-call settings
+- tapOn:
+    id: "call_settings_button"
+
+# Navigate to microphone tab
+- tapOn:
+    id: "incall_tab_microphone"
+
+# Assert audio input devices are visible
+- assertVisible:
+    id: "incall_audio_input_0"
+
+# Select second audio input if available
+- tapOn:
+    id: "incall_audio_input_1"
+    optional: true
+
+# Assert audio output devices are visible
+- assertVisible:
+    id: "incall_audio_output_0"
+
+# Select second audio output
+- tapOn:
+    id: "incall_audio_output_1"
+    optional: true
+
+# Navigate to camera tab
+- tapOn:
+    id: "incall_tab_camera"
+
+# Switch to back camera
+- tapOn:
+    id: "incall_camera_back"
+    optional: true
+
+# Switch back to front camera
+- tapOn:
+    id: "incall_camera_front"
+    optional: true
+
+# Close settings (swipe down or back)
+- pressKey: back
