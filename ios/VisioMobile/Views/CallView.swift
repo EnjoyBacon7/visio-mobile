@@ -930,6 +930,7 @@ struct CallView: View {
                         .background(VisioColors.error500)
                         .clipShape(RoundedRectangle(cornerRadius: buttonCornerRadius))
                 }
+                .accessibilityIdentifier("hangup")
                 .accessibilityLabel(Strings.t("control.leave", lang: lang))
             }
             .padding(isLargeButtons ? 12 : 8)
