@@ -104,6 +104,10 @@ struct Args {
     /// Expected number of remote participants to wait for before reporting.
     #[arg(long, default_value_t = 0)]
     expect_participants: usize,
+
+    /// Print the generated token and exit (don't connect).
+    #[arg(long, default_value_t = false)]
+    token_only: bool,
 }
 
 /// Tracks received audio frame statistics for quality monitoring.
@@ -541,6 +545,11 @@ async fn main() {
     }
 
     let token = args.token.clone().unwrap_or_else(|| generate_token(&args));
+
+    if args.token_only {
+        println!("{token}");
+        return;
+    }
 
     let media_label = if args.media_file.is_some() { "file" } else { "synthetic" };
     tracing::info!(

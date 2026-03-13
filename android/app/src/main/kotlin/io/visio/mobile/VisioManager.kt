@@ -135,6 +135,9 @@ object VisioManager : VisioEventListener {
     // Deep link: pre-fill room URL on HomeScreen
     var pendingDeepLink: String? by mutableStateOf(null)
 
+    // Test deep link: connect directly with LiveKit URL + token (debug builds only)
+    var pendingTestConnect: Pair<String, String>? = null  // (livekitUrl, token)
+
     // Observable state for language, theme, display name
     var currentLang by mutableStateOf("fr")
         private set

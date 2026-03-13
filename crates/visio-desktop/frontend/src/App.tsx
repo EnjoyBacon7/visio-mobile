@@ -2279,6 +2279,21 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // Auto-connect listener (CLI args: --livekit-url <url> --token <token>)
+  useEffect(() => {
+    const unlisten = listen<{ livekit_url: string; token: string }>("auto-connect", async (event) => {
+      const { livekit_url, token } = event.payload;
+      try {
+        await invoke("connect_with_token", { livekitUrl: livekit_url, token });
+        setCurrentMeetUrl(livekit_url);
+        setView("call");
+      } catch (err) {
+        console.error("Auto-connect failed:", err);
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   // Apply theme to document
   useEffect(() => {
     document.documentElement.dataset.theme = theme;

@@ -797,6 +797,52 @@ impl VisioClient {
         }
     }
 
+    pub fn connect_with_token(
+        &self,
+        livekit_url: String,
+        token: String,
+    ) -> Result<(), VisioError> {
+        visio_log(&format!(
+            "VISIO FFI: connect_with_token() entered, url={livekit_url}"
+        ));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.rt.block_on(async {
+                self.room_manager
+                    .connect_with_token(&livekit_url, &token)
+                    .await
+                    .map_err(VisioError::from)
+            })
+        }));
+
+        match result {
+            Ok(Ok(())) => {
+                #[cfg(target_os = "android")]
+                {
+                    *CLIENT_FOR_VIDEO.lock().unwrap() = self as *const VisioClient as usize;
+                }
+
+                Ok(())
+            }
+            Ok(Err(e)) => Err(e),
+            Err(panic_info) => {
+                let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic".to_string()
+                };
+                visio_log(&format!(
+                    "VISIO FFI: connect_with_token() PANIC caught: {msg}"
+                ));
+                Err(VisioError::Connection {
+                    msg: format!("panic in connect_with_token: {msg}"),
+                })
+            }
+        }
+    }
+
     pub fn disconnect(&self) {
         // Clear the client pointer BEFORE disconnecting so no JNI call
         // can dereference a stale pointer while teardown is in progress.

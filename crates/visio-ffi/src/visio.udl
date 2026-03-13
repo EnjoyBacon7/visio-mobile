@@ -174,6 +174,9 @@ interface VisioClient {
     [Throws=VisioError]
     void connect(string meet_url, string? username);
 
+    [Throws=VisioError]
+    void connect_with_token(string livekit_url, string token);
+
     void disconnect();
 
     [Throws=VisioError]

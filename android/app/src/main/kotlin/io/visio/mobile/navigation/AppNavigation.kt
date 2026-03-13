@@ -1,11 +1,13 @@
 package io.visio.mobile.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import io.visio.mobile.VisioManager
 import io.visio.mobile.ui.CallScreen
 import io.visio.mobile.ui.ChatScreen
 import io.visio.mobile.ui.HomeScreen
@@ -16,6 +18,15 @@ import java.net.URLEncoder
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+
+    // Auto-navigate to call screen for test deep links (debug only)
+    LaunchedEffect(Unit) {
+        if (VisioManager.pendingTestConnect != null) {
+            // Navigate to call with a placeholder URL; CallScreen will use pendingTestConnect
+            val encoded = URLEncoder.encode("test://direct-connect", "UTF-8")
+            navController.navigate("call/$encoded?username=test-user")
+        }
+    }
 
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {

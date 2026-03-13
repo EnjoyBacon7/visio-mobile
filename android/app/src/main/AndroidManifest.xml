@@ -38,6 +38,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="visio" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="visio-test" android:host="connect" />
+            </intent-filter>
         </activity>
 
         <activity

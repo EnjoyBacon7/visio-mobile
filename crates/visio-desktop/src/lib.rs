@@ -366,6 +366,24 @@ async fn connect(
 }
 
 #[tauri::command]
+async fn connect_with_token(
+    state: tauri::State<'_, VisioState>,
+    livekit_url: String,
+    token: String,
+) -> Result<(), String> {
+    tracing::info!("connect_with_token called: url={}", livekit_url);
+    let room = state.room.lock().await;
+    room.connect_with_token(&livekit_url, &token)
+        .await
+        .map_err(|e| {
+            tracing::error!("connect_with_token failed: {}", e);
+            e.to_string()
+        })?;
+    tracing::info!("connect_with_token succeeded");
+    Ok(())
+}
+
+#[tauri::command]
 async fn disconnect(state: tauri::State<'_, VisioState>) -> Result<(), String> {
     let room = state.room.lock().await;
     room.disconnect().await;
@@ -484,7 +502,7 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
     if enabled {
         // Publish camera track if not yet published
         if controls.video_source().await.is_none() {
-            let _source = controls.publish_camera().await.map_err(|e| e.to_string())?;
+            let source = controls.publish_camera().await.map_err(|e| e.to_string())?;
             tracing::info!("camera track published via toggle_camera");
 
             // Start native camera capture
@@ -1315,10 +1333,33 @@ pub fn run() {
         screen_capture: std::sync::Mutex::new(None),
     };
 
+    // Parse CLI args for auto-connect (--livekit-url <url> --token <token>)
+    let mut cli_livekit_url: Option<String> = None;
+    let mut cli_token: Option<String> = None;
+    {
+        let args: Vec<String> = std::env::args().collect();
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--livekit-url" if i + 1 < args.len() => {
+                    cli_livekit_url = Some(args[i + 1].clone());
+                    i += 2;
+                }
+                "--token" if i + 1 < args.len() => {
+                    cli_token = Some(args[i + 1].clone());
+                    i += 2;
+                }
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .manage(state)
-        .setup(|app| {
+        .setup(move |app| {
             // Store handle globally for the C video callback
             let _ = APP_HANDLE.set(app.handle().clone());
 
@@ -1339,6 +1380,23 @@ pub fn run() {
             app.listen("deep-link://new-url", |event: tauri::Event| {
                 tracing::info!("Deep link received (Rust): {:?}", event.payload());
             });
+
+            // Emit auto-connect event if CLI args were provided
+            if let (Some(url), Some(token)) = (cli_livekit_url, cli_token) {
+                tracing::info!("Auto-connect requested via CLI: {}", url);
+                let handle = app.handle().clone();
+                // Emit after a short delay to let the frontend mount
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(2000));
+                    let _ = handle.emit(
+                        "auto-connect",
+                        serde_json::json!({
+                            "livekit_url": url,
+                            "token": token,
+                        }),
+                    );
+                });
+            }
 
             Ok(())
         })
@@ -1387,6 +1445,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             validate_room,
             connect,
+            connect_with_token,
             disconnect,
             get_connection_state,
             get_participants,

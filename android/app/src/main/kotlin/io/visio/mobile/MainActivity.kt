@@ -39,6 +39,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Parse a visio-test://connect?livekit_url=...&token=... deep link for E2E testing.
+     * Only available in debug builds.
+     * Returns true if a test deep link was handled.
+     */
+    private fun parseTestDeepLink(intent: Intent?): Boolean {
+        if (!BuildConfig.DEBUG) return false
+        val uri = intent?.data ?: return false
+        if (uri.scheme != "visio-test" || uri.host != "connect") return false
+
+        val livekitUrl = uri.getQueryParameter("livekit_url")
+        val token = uri.getQueryParameter("token")
+        if (livekitUrl.isNullOrBlank() || token.isNullOrBlank()) {
+            Log.w(TAG, "visio-test://connect missing livekit_url or token parameters")
+            return false
+        }
+
+        Log.i(TAG, "Test deep link: connecting to $livekitUrl")
+        VisioManager.pendingTestConnect = Pair(livekitUrl, token)
+        return true
+    }
+
     private val pipActionReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(
@@ -77,7 +99,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        parseDeepLink(intent)?.let { VisioManager.pendingDeepLink = it }
+        if (!parseTestDeepLink(intent)) {
+            parseDeepLink(intent)?.let { VisioManager.pendingDeepLink = it }
+        }
 
         val filter =
             IntentFilter().apply {
@@ -105,7 +129,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        parseDeepLink(intent)?.let { VisioManager.pendingDeepLink = it }
+        if (!parseTestDeepLink(intent)) {
+            parseDeepLink(intent)?.let { VisioManager.pendingDeepLink = it }
+        }
     }
 
     override fun onPause() {

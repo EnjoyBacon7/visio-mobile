@@ -328,6 +328,38 @@ fun CallScreen(
                 return@withContext
             }
 
+            // Test deep link: connect directly with LiveKit URL + token (debug builds only)
+            val testConnect = VisioManager.pendingTestConnect
+            if (testConnect != null) {
+                VisioManager.pendingTestConnect = null
+                val (livekitUrl, token) = testConnect
+                Log.i(TAG, "Test deep link: connecting directly to $livekitUrl")
+                try {
+                    VisioManager.client.connectWithToken(livekitUrl, token)
+                } catch (e: Exception) {
+                    errorMessage = "Test connection failed: ${e.message}"
+                    return@withContext
+                }
+
+                try {
+                    VisioManager.startAudioPlayout()
+                } catch (e: Exception) {
+                    errorMessage = "Audio playout failed: ${e.message}"
+                    return@withContext
+                }
+
+                // Apply default settings for mic/camera
+                val settings =
+                    try {
+                        VisioManager.client.getSettings()
+                    } catch (e: Exception) {
+                        null
+                    }
+                micEnabled = settings?.micEnabledOnJoin ?: true
+                cameraEnabled = settings?.cameraEnabledOnJoin ?: false
+                return@withContext
+            }
+
             val settings =
                 try {
                     VisioManager.client.getSettings()
