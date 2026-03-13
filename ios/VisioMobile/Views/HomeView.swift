@@ -225,6 +225,11 @@ struct HomeView: View {
                 manager.pendingDeepLink = nil
             }
         }
+        .onChange(of: manager.pendingTestConnect != nil) { hasTestConnect in
+            if hasTestConnect {
+                navigateToCall = true
+            }
+        }
         .sheet(isPresented: $showCreateRoom) {
             CreateRoomSheet(
                 lang: lang,

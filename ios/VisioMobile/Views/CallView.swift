@@ -258,6 +258,50 @@ struct CallView: View {
                 }
             }
         }
+        .task {
+            guard let (livekitUrl, token) = manager.pendingTestConnect else { return }
+            manager.pendingTestConnect = nil
+
+            // Connect
+            manager.connectWithToken(livekitUrl: livekitUrl, token: token)
+
+            // Start audio playout after short delay
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            manager.startAudioPlayout()
+
+            // Auto-chat messages
+            let chatMessages: [(Int, String)] = [
+                (3, "Hello from iOS! Auto-test started"),
+                (15, "iOS: still connected, testing cross-platform"),
+                (30, "iOS: mid-test check-in"),
+                (45, "iOS: finishing up test cycle"),
+            ]
+            for (delay, text) in chatMessages {
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+                    manager.sendMessage(text)
+                }
+            }
+
+            // Auto-toggles: mic/camera
+            let toggles: [(Int, String)] = [
+                (8, "mic_off"), (13, "mic_on"),
+                (20, "cam_off"), (25, "cam_on"),
+                (35, "mic_off"), (38, "mic_on"),
+            ]
+            for (delay, action) in toggles {
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+                    switch action {
+                    case "mic_off": manager.setMicEnabled(false)
+                    case "mic_on": manager.setMicEnabled(true)
+                    case "cam_off": manager.toggleCamera()
+                    case "cam_on": manager.toggleCamera()
+                    default: break
+                    }
+                }
+            }
+        }
         // Lobby banner is now persistent — driven by waitingParticipants list
     }
 
