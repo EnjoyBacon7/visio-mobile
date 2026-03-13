@@ -113,12 +113,12 @@ LIVEKIT_URL_ANDROID="ws://${LOCAL_IP}:7880"
 # =========================================================================
 info "Building visio-bot..."
 cd "$ROOT_DIR"
-cargo build -p visio-bot --quiet 2>&1 || { fail "Bot build failed"; exit 1; }
+cargo build -p visio-bot --release --quiet 2>&1 || { fail "Bot build failed"; exit 1; }
 ok "visio-bot built"
 
 if [ "$SKIP_DESKTOP" = false ]; then
     info "Building desktop app..."
-    cargo build -p visio-desktop --no-default-features --quiet 2>&1 || { fail "Desktop build failed"; exit 1; }
+    cargo build -p visio-desktop --no-default-features --release --quiet 2>&1 || { fail "Desktop build failed"; exit 1; }
     ok "Desktop built"
 fi
 
@@ -130,7 +130,7 @@ info "Generating tokens..."
 generate_token() {
     local identity="$1"
     local name="$2"
-    cargo run -p visio-bot --quiet -- \
+    "$ROOT_DIR/target/release/visio-bot" \
         --url "$LIVEKIT_URL" \
         --room "$ROOM" \
         --identity "$identity" \
@@ -169,7 +169,7 @@ ok "LiveKit running on port 7880"
 # Step 4: Start bot
 # =========================================================================
 info "Starting bot in room '$ROOM'..."
-cargo run -p visio-bot --quiet -- \
+"$ROOT_DIR/target/release/visio-bot" \
     --url "$LIVEKIT_URL" \
     --room "$ROOM" \
     --identity "bot" \
@@ -207,7 +207,7 @@ if [ "$SKIP_DESKTOP" = false ]; then
 
     # Launch desktop binary with auto-connect args
     cd "$ROOT_DIR"
-    cargo run -p visio-desktop --no-default-features --quiet -- \
+    "$ROOT_DIR/target/release/visio-desktop" \
         --livekit-url "$LIVEKIT_URL" \
         --token "$DESKTOP_TOKEN" \
         >"$DESKTOP_LOG" 2>&1 &
