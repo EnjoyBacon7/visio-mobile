@@ -166,8 +166,8 @@ if [ -f "$BOT_LOG" ]; then
     echo ""
 
     # Check results
-    SUBS=$(grep -c "TrackSubscribed" "$BOT_LOG" 2>/dev/null || echo "0")
-    JOINS=$(grep -c "ParticipantJoined" "$BOT_LOG" 2>/dev/null || echo "0")
+    SUBS="$(grep -c "TrackSubscribed" "$BOT_LOG" 2>/dev/null)" || SUBS=0
+    JOINS="$(grep -c "ParticipantJoined" "$BOT_LOG" 2>/dev/null)" || JOINS=0
 
     if [ "$JOINS" -gt 0 ]; then
         ok "Remote participant(s) joined: $JOINS"
