@@ -22,6 +22,14 @@
                 <string>visio</string>
             </array>
         </dict>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.visio.mobile.test</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>visio-test</string>
+            </array>
+        </dict>
     </array>
     <key>UIBackgroundModes</key>
     <array>
