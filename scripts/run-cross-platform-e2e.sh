@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fully automated cross-platform E2E test: Bot + Desktop + Android.
+# Fully automated cross-platform E2E test: Bot + Desktop + Android + iOS.
 #
 # Orchestrates (ZERO human intervention):
 #   1. LiveKit Docker server (local)
@@ -16,7 +16,7 @@
 #   - Desktop crate pre-built (cargo build -p visio-desktop --no-default-features)
 #
 # Usage:
-#   ./scripts/run-cross-platform-e2e.sh [--duration SECS] [--no-android] [--no-desktop]
+#   ./scripts/run-cross-platform-e2e.sh [--duration SECS] [--no-android] [--no-desktop] [--no-ios]
 #
 set -euo pipefail
 
@@ -33,6 +33,7 @@ API_KEY="devkey"
 API_SECRET="secret"
 SKIP_ANDROID=false
 SKIP_DESKTOP=false
+SKIP_IOS=false
 EXPECTED_PARTICIPANTS=0
 
 # Parse args
@@ -42,6 +43,7 @@ while [[ $# -gt 0 ]]; do
         --room) ROOM="$2"; shift 2 ;;
         --no-android) SKIP_ANDROID=true; shift ;;
         --no-desktop) SKIP_DESKTOP=true; shift ;;
+        --no-ios) SKIP_IOS=true; shift ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -68,6 +70,7 @@ cleanup() {
     [ -n "${VITE_PID:-}" ] && kill "$VITE_PID" 2>/dev/null || true
     lsof -ti:5173 | xargs kill -9 2>/dev/null || true
     adb shell am force-stop io.visio.mobile 2>/dev/null || true
+    [ "$SKIP_IOS" = false ] && xcrun simctl terminate booted io.visio.mobile 2>/dev/null || true
     docker stop livekit-cross-e2e 2>/dev/null || true
     # Keep logs for debugging
     # rm -f "$BOT_LOG" "$DESKTOP_LOG"
@@ -153,6 +156,12 @@ if [ "$SKIP_ANDROID" = false ]; then
     ok "Android token generated"
 fi
 
+if [ "$SKIP_IOS" = false ]; then
+    IOS_TOKEN=$(generate_token "ios-user" "iOS User")
+    ok "iOS token generated"
+    EXPECTED_PARTICIPANTS=$((EXPECTED_PARTICIPANTS + 1))
+fi
+
 # =========================================================================
 # Step 3: Start LiveKit
 # =========================================================================
@@ -235,6 +244,24 @@ if [ "$SKIP_ANDROID" = false ]; then
 fi
 
 # =========================================================================
+# Step 6b: Launch iOS (auto-connect via deep link on simulator)
+# =========================================================================
+if [ "$SKIP_IOS" = false ]; then
+    info "Launching iOS app (auto-connect via deep link)..."
+
+    ENCODED_IOS_TOKEN=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$IOS_TOKEN', safe=''))")
+
+    if xcrun simctl list devices booted 2>/dev/null | grep -q "Booted"; then
+        xcrun simctl openurl booted "visio-test://connect?livekit_url=${LIVEKIT_URL_ANDROID}&token=${ENCODED_IOS_TOKEN}"
+        sleep 3
+        ok "iOS simulator app launched via deep link"
+    else
+        warn "No iOS simulator booted — skipping iOS"
+        SKIP_IOS=true
+    fi
+fi
+
+# =========================================================================
 # Step 7: Status
 # =========================================================================
 echo ""
@@ -251,6 +278,7 @@ echo "Participants:"
 echo "  - Bot:      publishing audio + video + screen share + chat + hand raise"
 [ "$SKIP_DESKTOP" = false ] && echo "  - Desktop:  auto-connected via CLI args"
 [ "$SKIP_ANDROID" = false ] && echo "  - Android:  auto-connected via deep link ($LIVEKIT_URL_ANDROID)"
+[ "$SKIP_IOS" = false ] && echo "  - iOS:      auto-connected via deep link (simulator)"
 echo ""
 echo "============================================================"
 echo ""
@@ -267,6 +295,12 @@ BOT_PID=""
 if [ "$SKIP_ANDROID" = false ]; then
     info "Closing Android app..."
     adb shell am force-stop io.visio.mobile 2>/dev/null || true
+fi
+
+# Close iOS app
+if [ "$SKIP_IOS" = false ]; then
+    info "Closing iOS app..."
+    xcrun simctl terminate booted io.visio.mobile 2>/dev/null || true
 fi
 
 # Kill desktop after bot finishes
@@ -337,6 +371,15 @@ if [ -f "$BOT_LOG" ]; then
             ok "Android: connected and visible to bot"
         else
             fail "Android: NOT detected by bot"
+            EXIT_CODE=1
+        fi
+    fi
+
+    if [ "$SKIP_IOS" = false ]; then
+        if grep -q "ios-user" "$BOT_LOG" 2>/dev/null; then
+            ok "iOS: connected and visible to bot"
+        else
+            fail "iOS: NOT detected by bot"
             EXIT_CODE=1
         fi
     fi
