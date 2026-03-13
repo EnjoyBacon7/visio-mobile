@@ -1,22 +1,24 @@
 //! Visio E2E Bot — a headless participant for automated testing.
 //!
-//! Joins a LiveKit room, publishes synthetic audio/video, sends chat
+//! Joins a LiveKit room, publishes synthetic or real audio/video, sends chat
 //! messages and reactions, and logs all received events. Designed to be
 //! a deterministic test partner for Maestro, Playwright, and XCUITest.
 //!
 //! Usage:
 //! ```sh
-//! # With a LiveKit dev server:
-//! visio-bot --url ws://localhost:7880 --room test-room --identity bot --name "E2E Bot"
+//! # Synthetic media (440Hz sine + colored frames):
+//! visio-bot --url ws://localhost:7880 --room test-room
 //!
-//! # With token generation (default keys for --dev server):
-//! visio-bot --url ws://localhost:7880 --room my-room \
-//!   --api-key devkey --api-secret secret
+//! # Real video file (requires ffmpeg):
+//! visio-bot --url ws://localhost:7880 --room test-room \
+//!   --media-file test-assets/test-video.mp4
 //!
 //! # With a pre-generated token:
 //! visio-bot --url ws://localhost:7880 --token <jwt>
 //! ```
 
+use std::io::Read as IoRead;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -57,13 +59,22 @@ struct Args {
     #[arg(long, default_value = "secret")]
     api_secret: String,
 
-    /// Publish synthetic audio (440Hz sine wave).
+    /// Publish audio.
     #[arg(long, default_value_t = true)]
     audio: bool,
 
-    /// Publish synthetic video (colored frames).
+    /// Publish video.
     #[arg(long, default_value_t = true)]
     video: bool,
+
+    /// Media file to stream (mp4/webm/mkv — requires ffmpeg).
+    /// When set, streams real audio/video instead of synthetic signals.
+    #[arg(long)]
+    media_file: Option<String>,
+
+    /// Loop media file playback.
+    #[arg(long, default_value_t = false)]
+    loop_media: bool,
 
     /// Send a chat message after joining.
     #[arg(long)]
@@ -158,6 +169,10 @@ fn generate_token(args: &Args) -> String {
         .expect("failed to generate token")
 }
 
+// ---------------------------------------------------------------------------
+// Synthetic media generators (fallback when no --media-file)
+// ---------------------------------------------------------------------------
+
 /// Generate a 440Hz sine wave audio frame (20ms at 48kHz mono).
 fn generate_sine_frame(sample_offset: &mut u64) -> Vec<i16> {
     const SAMPLE_RATE: f64 = 48000.0;
@@ -180,7 +195,6 @@ fn generate_color_frame(width: u32, height: u32, frame_num: u64) -> I420Buffer {
     let mut buf = I420Buffer::new(width, height);
     let (y_data, u_data, v_data) = buf.data_mut();
 
-    // Cycle through colors every 30 frames
     let phase = (frame_num / 30) % 3;
     let (y_val, u_val, v_val) = match phase {
         0 => (82u8, 90u8, 240u8),   // Red
@@ -196,7 +210,7 @@ fn generate_color_frame(width: u32, height: u32, frame_num: u64) -> I420Buffer {
 }
 
 /// Spawn a task that feeds synthetic audio to the audio source.
-fn spawn_audio_producer(source: livekit::webrtc::audio_source::native::NativeAudioSource) {
+fn spawn_synthetic_audio(source: livekit::webrtc::audio_source::native::NativeAudioSource) {
     tokio::spawn(async move {
         let mut sample_offset: u64 = 0;
         loop {
@@ -214,7 +228,7 @@ fn spawn_audio_producer(source: livekit::webrtc::audio_source::native::NativeAud
 }
 
 /// Spawn a task that feeds synthetic video to the video source.
-fn spawn_video_producer(source: NativeVideoSource) {
+fn spawn_synthetic_video(source: NativeVideoSource) {
     tokio::spawn(async move {
         let mut frame_num: u64 = 0;
         loop {
@@ -226,9 +240,197 @@ fn spawn_video_producer(source: NativeVideoSource) {
             };
             source.capture_frame(&frame);
             frame_num += 1;
-            // ~15fps
             tokio::time::sleep(Duration::from_millis(66)).await;
         }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Media file playback via ffmpeg subprocess
+// ---------------------------------------------------------------------------
+
+const VIDEO_WIDTH: u32 = 640;
+const VIDEO_HEIGHT: u32 = 480;
+const VIDEO_FPS: u32 = 15;
+const AUDIO_SAMPLE_RATE: u32 = 48000;
+const AUDIO_CHANNELS: u32 = 1;
+const AUDIO_FRAME_DURATION_MS: u64 = 20;
+const AUDIO_SAMPLES_PER_FRAME: u32 = (AUDIO_SAMPLE_RATE * AUDIO_FRAME_DURATION_MS as u32) / 1000; // 960
+
+/// Spawn ffmpeg to decode audio from a media file as raw s16le PCM.
+fn spawn_ffmpeg_audio(path: &str, do_loop: bool) -> std::process::Child {
+    let mut cmd = Command::new("ffmpeg");
+    if do_loop {
+        cmd.args(["-stream_loop", "-1"]);
+    }
+    cmd.args([
+        "-i", path,
+        "-vn",                         // no video
+        "-f", "s16le",                 // raw signed 16-bit little-endian
+        "-acodec", "pcm_s16le",
+        "-ar", &AUDIO_SAMPLE_RATE.to_string(),
+        "-ac", &AUDIO_CHANNELS.to_string(),
+        "-loglevel", "error",
+        "-",                           // pipe to stdout
+    ]);
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn ffmpeg for audio — is ffmpeg installed?")
+}
+
+/// Spawn ffmpeg to decode video from a media file as raw I420 (YUV420p).
+fn spawn_ffmpeg_video(path: &str, do_loop: bool) -> std::process::Child {
+    let mut cmd = Command::new("ffmpeg");
+    if do_loop {
+        cmd.args(["-stream_loop", "-1"]);
+    }
+    cmd.args([
+        "-i", path,
+        "-an",                         // no audio
+        "-f", "rawvideo",
+        "-pix_fmt", "yuv420p",        // I420
+        "-s", &format!("{VIDEO_WIDTH}x{VIDEO_HEIGHT}"),
+        "-r", &VIDEO_FPS.to_string(),
+        "-loglevel", "error",
+        "-",                           // pipe to stdout
+    ]);
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn ffmpeg for video — is ffmpeg installed?")
+}
+
+/// Spawn a task that reads decoded audio from ffmpeg and feeds it to LiveKit.
+fn spawn_file_audio(
+    source: livekit::webrtc::audio_source::native::NativeAudioSource,
+    path: String,
+    do_loop: bool,
+) {
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        rt.block_on(async move {
+            let mut child = spawn_ffmpeg_audio(&path, do_loop);
+            let mut stdout = child.stdout.take().expect("no stdout from ffmpeg audio");
+
+            // Each frame: 960 samples × 2 bytes = 1920 bytes
+            let frame_bytes = AUDIO_SAMPLES_PER_FRAME as usize * 2;
+            let mut buf = vec![0u8; frame_bytes];
+            let mut total_frames: u64 = 0;
+
+            loop {
+                match stdout.read_exact(&mut buf) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        tracing::info!("Audio file ended after {total_frames} frames");
+                        break;
+                    }
+                }
+
+                // Convert bytes to i16 samples (little-endian)
+                let samples: Vec<i16> = buf
+                    .chunks_exact(2)
+                    .map(|c| i16::from_le_bytes([c[0], c[1]]))
+                    .collect();
+
+                let frame = AudioFrame {
+                    data: samples.into(),
+                    sample_rate: AUDIO_SAMPLE_RATE,
+                    num_channels: AUDIO_CHANNELS,
+                    samples_per_channel: AUDIO_SAMPLES_PER_FRAME,
+                };
+                source.capture_frame(&frame).await.ok();
+                total_frames += 1;
+
+                tokio::time::sleep(Duration::from_millis(AUDIO_FRAME_DURATION_MS)).await;
+            }
+
+            child.kill().ok();
+        });
+    });
+}
+
+/// Spawn a task that reads decoded video from ffmpeg and feeds it to LiveKit.
+fn spawn_file_video(source: NativeVideoSource, path: String, do_loop: bool) {
+    std::thread::spawn(move || {
+        let mut child = spawn_ffmpeg_video(&path, do_loop);
+        let mut stdout = child.stdout.take().expect("no stdout from ffmpeg video");
+
+        // I420 frame size: W×H × 1.5 (Y + U/4 + V/4)
+        let y_size = (VIDEO_WIDTH * VIDEO_HEIGHT) as usize;
+        let uv_size = y_size / 4;
+        let frame_bytes = y_size + 2 * uv_size;
+        let mut buf = vec![0u8; frame_bytes];
+        let mut total_frames: u64 = 0;
+        let frame_interval = Duration::from_millis(1000 / VIDEO_FPS as u64);
+
+        loop {
+            let start = std::time::Instant::now();
+
+            match stdout.read_exact(&mut buf) {
+                Ok(()) => {}
+                Err(_) => {
+                    tracing::info!("Video file ended after {total_frames} frames");
+                    break;
+                }
+            }
+
+            // Build I420Buffer from raw YUV data
+            let mut i420 = I420Buffer::new(VIDEO_WIDTH, VIDEO_HEIGHT);
+            {
+                // Get strides before mutable borrow
+                let (stride_y, stride_u, stride_v) = i420.strides();
+                let stride_y = stride_y as usize;
+                let stride_u = stride_u as usize;
+                let stride_v = stride_v as usize;
+                let (y_data, u_data, v_data) = i420.data_mut();
+                let w = VIDEO_WIDTH as usize;
+                let h = VIDEO_HEIGHT as usize;
+
+                // Y plane
+                for row in 0..h {
+                    let src_off = row * w;
+                    let dst_off = row * stride_y;
+                    y_data[dst_off..dst_off + w].copy_from_slice(&buf[src_off..src_off + w]);
+                }
+                // U plane
+                let u_w = w / 2;
+                let u_h = h / 2;
+                let u_start = y_size;
+                for row in 0..u_h {
+                    let src_off = u_start + row * u_w;
+                    let dst_off = row * stride_u;
+                    u_data[dst_off..dst_off + u_w].copy_from_slice(&buf[src_off..src_off + u_w]);
+                }
+                // V plane
+                let v_start = y_size + uv_size;
+                for row in 0..u_h {
+                    let src_off = v_start + row * u_w;
+                    let dst_off = row * stride_v;
+                    v_data[dst_off..dst_off + u_w].copy_from_slice(&buf[src_off..src_off + u_w]);
+                }
+            }
+
+            let frame: VideoFrame<I420Buffer> = VideoFrame {
+                rotation: VideoRotation::VideoRotation0,
+                buffer: i420,
+                timestamp_us: 0,
+            };
+            source.capture_frame(&frame);
+            total_frames += 1;
+
+            // Maintain frame rate
+            let elapsed = start.elapsed();
+            if elapsed < frame_interval {
+                std::thread::sleep(frame_interval - elapsed);
+            }
+        }
+
+        child.kill().ok();
     });
 }
 
@@ -243,11 +445,27 @@ async fn main() {
 
     let args = Args::parse();
 
+    // Validate media file exists if provided
+    if let Some(ref path) = args.media_file {
+        if !std::path::Path::new(path).exists() {
+            eprintln!("Media file not found: {path}");
+            eprintln!("Run: ./scripts/download-test-media.sh");
+            std::process::exit(1);
+        }
+        // Check ffmpeg is available
+        if Command::new("ffmpeg").arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
+            eprintln!("ffmpeg not found — required for --media-file");
+            eprintln!("Install: brew install ffmpeg");
+            std::process::exit(1);
+        }
+    }
+
     let token = args.token.clone().unwrap_or_else(|| generate_token(&args));
 
+    let media_label = if args.media_file.is_some() { "file" } else { "synthetic" };
     tracing::info!(
-        "Visio Bot starting: room={}, identity={}, name={}, audio={}, video={}, duration={}s",
-        args.room, args.identity, args.name, args.audio, args.video, args.duration
+        "Visio Bot starting: room={}, identity={}, name={}, media={}, audio={}, video={}, duration={}s",
+        args.room, args.identity, args.name, media_label, args.audio, args.video, args.duration
     );
 
     let rm = RoomManager::new();
@@ -266,8 +484,13 @@ async fn main() {
     if args.audio {
         match controls.publish_microphone().await {
             Ok(source) => {
-                tracing::info!("Publishing synthetic audio (440Hz sine)");
-                spawn_audio_producer(source);
+                if let Some(ref path) = args.media_file {
+                    tracing::info!("Publishing audio from file: {path}");
+                    spawn_file_audio(source, path.clone(), args.loop_media);
+                } else {
+                    tracing::info!("Publishing synthetic audio (440Hz sine)");
+                    spawn_synthetic_audio(source);
+                }
             }
             Err(e) => tracing::warn!("Failed to publish mic: {e}"),
         }
@@ -277,8 +500,13 @@ async fn main() {
     if args.video {
         match controls.publish_camera().await {
             Ok(source) => {
-                tracing::info!("Publishing synthetic video (640x480 color cycling)");
-                spawn_video_producer(source);
+                if let Some(ref path) = args.media_file {
+                    tracing::info!("Publishing video from file: {path} ({}x{} @{}fps)", VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS);
+                    spawn_file_video(source, path.clone(), args.loop_media);
+                } else {
+                    tracing::info!("Publishing synthetic video (640x480 color cycling)");
+                    spawn_synthetic_video(source);
+                }
             }
             Err(e) => tracing::warn!("Failed to publish camera: {e}"),
         }
