@@ -785,6 +785,9 @@ extension VisioManager: VisioEventListener {
                     }
                 }
 
+            case .bandwidthModeChanged:
+                break
+
             case .connectionLost:
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let self else { return }
