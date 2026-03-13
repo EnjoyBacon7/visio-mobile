@@ -31,6 +31,7 @@
 		A1000100000000000000000D /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000200000000000000000D /* libresolv.tbd */; };
 		A10001000000000000000019 /* OidcAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200000000000000001D /* OidcAuthManager.swift */; };
 		A1000100000000000000001A /* ContextDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200000000000000001E /* ContextDetector.swift */; };
+		B10001000000000000000001 /* VisioMobileUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002000000000000000001 /* VisioMobileUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -63,6 +64,8 @@
 		A1000200000000000000001D /* OidcAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OidcAuthManager.swift; sourceTree = "<group>"; };
 		A1000200000000000000001E /* ContextDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextDetector.swift; sourceTree = "<group>"; };
 		A10003000000000000000001 /* VisioMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VisioMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10002000000000000000001 /* VisioMobileUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisioMobileUITests.swift; sourceTree = "<group>"; };
+		B10003000000000000000001 /* VisioMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VisioMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +78,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10004000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -82,6 +92,7 @@
 			isa = PBXGroup;
 			children = (
 				A10005000000000000000002 /* VisioMobile */,
+				B1000500000000000000000A /* VisioMobileUITests */,
 				A10005000000000000000005 /* Frameworks */,
 				A10005000000000000000003 /* Products */,
 			);
@@ -112,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				A10003000000000000000001 /* VisioMobile.app */,
+				B10003000000000000000001 /* VisioMobileUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,7 +189,33 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
+		B1000500000000000000000A /* VisioMobileUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B10002000000000000000001 /* VisioMobileUITests.swift */,
+			);
+			path = VisioMobileUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
+
+/* Begin PBXContainerItemProxy section */
+		B10010000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10009000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10006000000000000000001;
+			remoteInfo = VisioMobile;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		B10011000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10006000000000000000001 /* VisioMobile */;
+			targetProxy = B10010000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		A10007000000000000000002 /* Copy i18n JSON */ = {
@@ -238,6 +276,23 @@
 			productReference = A10003000000000000000001 /* VisioMobile.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B10006000000000000000001 /* VisioMobileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10008000000000000000001 /* Build configuration list for PBXNativeTarget "VisioMobileUITests" */;
+			buildPhases = (
+				B10007000000000000000001 /* Sources */,
+				B10004000000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B10011000000000000000001 /* PBXTargetDependency */,
+			);
+			name = VisioMobileUITests;
+			productName = VisioMobileUITests;
+			productReference = B10003000000000000000001 /* VisioMobileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -266,6 +321,7 @@
 			projectRoot = "";
 			targets = (
 				A10006000000000000000001 /* VisioMobile */,
+				B10006000000000000000001 /* VisioMobileUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -296,6 +352,14 @@
 				A10001000000000000000018 /* InCallSettingsSheet.swift in Sources */,
 				A10001000000000000000019 /* OidcAuthManager.swift in Sources */,
 				A1000100000000000000001A /* ContextDetector.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10007000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10001000000000000000001 /* VisioMobileUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,6 +490,38 @@
 			};
 			name = Release;
 		};
+		B1000A00000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.visio.mobile.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VisioMobile;
+			};
+			name = Debug;
+		};
+		B1000A00000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.visio.mobile.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VisioMobile;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -443,6 +539,15 @@
 			buildConfigurations = (
 				A1000B00000000000000001 /* Debug */,
 				A1000B00000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10008000000000000000001 /* Build configuration list for PBXNativeTarget "VisioMobileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1000A00000000000000001 /* Debug */,
+				B1000A00000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
