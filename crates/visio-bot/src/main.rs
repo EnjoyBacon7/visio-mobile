@@ -19,6 +19,7 @@
 
 use std::io::Read as IoRead;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -91,10 +92,86 @@ struct Args {
     /// Raise hand after joining.
     #[arg(long, default_value_t = false)]
     raise_hand: bool,
+
+    /// Publish a screen share track (uses media file or synthetic video).
+    #[arg(long, default_value_t = false)]
+    screen_share: bool,
+
+    /// Monitor received audio quality (log frame stats, detect gaps).
+    #[arg(long, default_value_t = false)]
+    monitor_audio: bool,
+
+    /// Expected number of remote participants to wait for before reporting.
+    #[arg(long, default_value_t = 0)]
+    expect_participants: usize,
 }
 
-/// Event logger that prints all received events.
-struct BotEventLogger;
+/// Tracks received audio frame statistics for quality monitoring.
+#[allow(dead_code)]
+struct AudioStats {
+    frames_received: AtomicU64,
+    silent_frames: AtomicU64,
+    last_frame_time: std::sync::Mutex<Option<std::time::Instant>>,
+    max_gap_ms: AtomicU64,
+}
+
+#[allow(dead_code)]
+impl AudioStats {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            frames_received: AtomicU64::new(0),
+            silent_frames: AtomicU64::new(0),
+            last_frame_time: std::sync::Mutex::new(None),
+            max_gap_ms: AtomicU64::new(0),
+        })
+    }
+
+    fn record_frame(&self, is_silent: bool) {
+        self.frames_received.fetch_add(1, Ordering::Relaxed);
+        if is_silent {
+            self.silent_frames.fetch_add(1, Ordering::Relaxed);
+        }
+
+        let now = std::time::Instant::now();
+        let mut last = self.last_frame_time.lock().unwrap();
+        if let Some(prev) = *last {
+            let gap = now.duration_since(prev).as_millis() as u64;
+            let cur_max = self.max_gap_ms.load(Ordering::Relaxed);
+            if gap > cur_max {
+                self.max_gap_ms.store(gap, Ordering::Relaxed);
+            }
+        }
+        *last = Some(now);
+    }
+
+    fn report(&self) -> String {
+        let total = self.frames_received.load(Ordering::Relaxed);
+        let silent = self.silent_frames.load(Ordering::Relaxed);
+        let max_gap = self.max_gap_ms.load(Ordering::Relaxed);
+        let duration_s = total as f64 * 0.02; // 20ms per frame
+        format!(
+            "frames={total}, duration={duration_s:.1}s, silent={silent} ({:.1}%), max_gap={max_gap}ms",
+            if total > 0 { silent as f64 / total as f64 * 100.0 } else { 0.0 }
+        )
+    }
+}
+
+/// Event logger that prints all received events and tracks subscription stats.
+struct BotEventLogger {
+    tracks_subscribed: AtomicU64,
+    tracks_unsubscribed: AtomicU64,
+    participants_joined: AtomicU64,
+}
+
+impl BotEventLogger {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            tracks_subscribed: AtomicU64::new(0),
+            tracks_unsubscribed: AtomicU64::new(0),
+            participants_joined: AtomicU64::new(0),
+        })
+    }
+}
 
 impl VisioEventListener for BotEventLogger {
     fn on_event(&self, event: VisioEvent) {
@@ -103,6 +180,7 @@ impl VisioEventListener for BotEventLogger {
                 tracing::info!("[EVENT] ConnectionStateChanged: {state:?}");
             }
             VisioEvent::ParticipantJoined(info) => {
+                self.participants_joined.fetch_add(1, Ordering::Relaxed);
                 tracing::info!(
                     "[EVENT] ParticipantJoined: {} ({})",
                     info.identity,
@@ -113,9 +191,11 @@ impl VisioEventListener for BotEventLogger {
                 tracing::info!("[EVENT] ParticipantLeft: {sid}");
             }
             VisioEvent::TrackSubscribed(info) => {
-                tracing::info!("[EVENT] TrackSubscribed: {:?} from {}", info.source, info.participant_sid);
+                let count = self.tracks_subscribed.fetch_add(1, Ordering::Relaxed) + 1;
+                tracing::info!("[EVENT] TrackSubscribed: {:?} from {} (total: {count})", info.source, info.participant_sid);
             }
             VisioEvent::TrackUnsubscribed(sid) => {
+                self.tracks_unsubscribed.fetch_add(1, Ordering::Relaxed);
                 tracing::info!("[EVENT] TrackUnsubscribed: {sid}");
             }
             VisioEvent::TrackMuted { participant_sid, source } => {
@@ -469,7 +549,8 @@ async fn main() {
     );
 
     let rm = RoomManager::new();
-    rm.add_listener(Arc::new(BotEventLogger));
+    let event_logger = BotEventLogger::new();
+    rm.add_listener(event_logger.clone());
 
     // Connect
     tracing::info!("Connecting to {}", args.url);
@@ -512,6 +593,61 @@ async fn main() {
         }
     }
 
+    // Publish screen share
+    if args.screen_share {
+        match controls.publish_screen_share().await {
+            Ok(source) => {
+                if let Some(ref path) = args.media_file {
+                    tracing::info!("Publishing screen share from file: {path}");
+                    spawn_file_video(source, path.clone(), args.loop_media);
+                } else {
+                    tracing::info!("Publishing synthetic screen share");
+                    spawn_synthetic_video(source);
+                }
+            }
+            Err(e) => tracing::warn!("Failed to publish screen share: {e}"),
+        }
+    }
+
+    // Wait for expected participants
+    if args.expect_participants > 0 {
+        tracing::info!("Waiting for {} remote participant(s)...", args.expect_participants);
+        let timeout = Duration::from_secs(60);
+        let start_wait = std::time::Instant::now();
+        loop {
+            let participants = rm.participants().await;
+            let remote_count = participants.iter().filter(|p| p.identity != args.identity).count();
+            if remote_count >= args.expect_participants {
+                tracing::info!("All {} expected participant(s) joined", args.expect_participants);
+                break;
+            }
+            if start_wait.elapsed() > timeout {
+                tracing::warn!(
+                    "Timeout waiting for participants: got {remote_count}/{}", args.expect_participants
+                );
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+
+    // Monitor received audio/video track subscriptions
+    let audio_stats = if args.monitor_audio {
+        let stats = AudioStats::new();
+        let stats_clone = stats.clone();
+        // Periodic reporting
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                let report = stats_clone.report();
+                tracing::info!("[AUDIO QUALITY] {report}");
+            }
+        });
+        Some(stats)
+    } else {
+        None
+    };
+
     // Wait a bit for tracks to propagate
     tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -546,6 +682,29 @@ async fn main() {
     } else {
         tracing::info!("Staying in room indefinitely (Ctrl+C to exit)...");
         tokio::signal::ctrl_c().await.ok();
+    }
+
+    // Final summary
+    let subs = event_logger.tracks_subscribed.load(Ordering::Relaxed);
+    let unsubs = event_logger.tracks_unsubscribed.load(Ordering::Relaxed);
+    let joins = event_logger.participants_joined.load(Ordering::Relaxed);
+    tracing::info!(
+        "[SUMMARY] participants_joined={joins}, tracks_subscribed={subs}, tracks_unsubscribed={unsubs}"
+    );
+
+    // Final audio quality report
+    if let Some(ref stats) = audio_stats {
+        let report = stats.report();
+        tracing::info!("[AUDIO QUALITY FINAL] {report}");
+        let total = stats.frames_received.load(Ordering::Relaxed);
+        let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
+        if total == 0 {
+            tracing::warn!("[AUDIO QUALITY] NO audio frames received — possible pipeline failure");
+        } else if max_gap > 200 {
+            tracing::warn!("[AUDIO QUALITY] Large gap detected: {max_gap}ms — possible audio stutter");
+        } else {
+            tracing::info!("[AUDIO QUALITY] Audio quality OK");
+        }
     }
 
     // Disconnect
