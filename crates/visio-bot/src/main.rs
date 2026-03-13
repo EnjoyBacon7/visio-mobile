@@ -93,6 +93,10 @@ struct Args {
     #[arg(long, default_value_t = false)]
     raise_hand: bool,
 
+    /// Interval (seconds) between periodic chat messages in the toggle loop.
+    #[arg(long, default_value_t = 15)]
+    chat_interval: u64,
+
     /// Publish a screen share track (uses media file or synthetic video).
     #[arg(long, default_value_t = false)]
     screen_share: bool,
@@ -705,6 +709,18 @@ async fn main() {
             start.elapsed() >= total
         }
 
+        let chat_interval = Duration::from_secs(args.chat_interval);
+        let mut last_chat_time = std::time::Instant::now();
+
+        // Contextual messages sent after each toggle action
+        const CHAT_MESSAGES: &[&str] = &[
+            "Audio test: mic was toggled off and on",
+            "Video test: camera was toggled off and on",
+            "Still here! Testing cross-platform communication",
+            "Screen share is active, can you see it?",
+        ];
+        let mut chat_msg_idx: usize = 0;
+
         loop {
             // Sleep 10s before first toggle
             if sleep_or_expire(start_time, total_duration, Duration::from_secs(10)).await {
@@ -727,6 +743,17 @@ async fn main() {
                 tracing::warn!("[TOGGLE] Failed to unmute mic: {e}");
             }
 
+            // Send chat after mic toggle cycle if interval has elapsed
+            if last_chat_time.elapsed() >= chat_interval {
+                let msg = CHAT_MESSAGES[chat_msg_idx % CHAT_MESSAGES.len()];
+                match rm.chat().send_message(msg).await {
+                    Ok(_) => tracing::info!("[CHAT] Sent periodic: '{msg}'"),
+                    Err(e) => tracing::warn!("[CHAT] Failed to send periodic chat: {e}"),
+                }
+                chat_msg_idx += 1;
+                last_chat_time = std::time::Instant::now();
+            }
+
             if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
                 break;
             }
@@ -745,6 +772,17 @@ async fn main() {
             tracing::info!("[TOGGLE] Enabling camera");
             if let Err(e) = controls.set_camera_enabled(true).await {
                 tracing::warn!("[TOGGLE] Failed to enable camera: {e}");
+            }
+
+            // Send chat after camera toggle cycle if interval has elapsed
+            if last_chat_time.elapsed() >= chat_interval {
+                let msg = CHAT_MESSAGES[chat_msg_idx % CHAT_MESSAGES.len()];
+                match rm.chat().send_message(msg).await {
+                    Ok(_) => tracing::info!("[CHAT] Sent periodic: '{msg}'"),
+                    Err(e) => tracing::warn!("[CHAT] Failed to send periodic chat: {e}"),
+                }
+                chat_msg_idx += 1;
+                last_chat_time = std::time::Instant::now();
             }
         }
 

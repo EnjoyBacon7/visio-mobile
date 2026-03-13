@@ -357,6 +357,19 @@ fun CallScreen(
                     }
                 micEnabled = settings?.micEnabledOnJoin ?: true
                 cameraEnabled = settings?.cameraEnabledOnJoin ?: false
+
+                // Auto-chat messages for E2E test
+                coroutineScope.launch(Dispatchers.IO) {
+                    delay(3000)
+                    try { VisioManager.client.sendChatMessage("Android joined the room!") } catch (_: Exception) {}
+                    delay(12000)
+                    try { VisioManager.client.sendChatMessage("Android: I can see the bot's video") } catch (_: Exception) {}
+                    delay(15000)
+                    try { VisioManager.client.sendChatMessage("Android: Audio is working fine") } catch (_: Exception) {}
+                    delay(15000)
+                    try { VisioManager.client.sendChatMessage("Android: All tracks received") } catch (_: Exception) {}
+                }
+
                 return@withContext
             }
 

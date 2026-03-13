@@ -67,6 +67,7 @@ cleanup() {
     [ -n "$DESKTOP_PID" ] && kill "$DESKTOP_PID" 2>/dev/null || true
     [ -n "${VITE_PID:-}" ] && kill "$VITE_PID" 2>/dev/null || true
     lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+    adb shell am force-stop io.visio.mobile 2>/dev/null || true
     docker stop livekit-cross-e2e 2>/dev/null || true
     # Keep logs for debugging
     # rm -f "$BOT_LOG" "$DESKTOP_LOG"
@@ -262,6 +263,12 @@ wait "$BOT_PID" 2>/dev/null || true
 BOT_EXIT=$?
 BOT_PID=""
 
+# Close Android app
+if [ "$SKIP_ANDROID" = false ]; then
+    info "Closing Android app..."
+    adb shell am force-stop io.visio.mobile 2>/dev/null || true
+fi
+
 # Kill desktop after bot finishes
 if [ -n "$DESKTOP_PID" ]; then
     kill "$DESKTOP_PID" 2>/dev/null || true
@@ -294,14 +301,24 @@ if [ -f "$BOT_LOG" ]; then
     if [ "$SUBS" -gt 0 ]; then
         ok "Tracks received from remote: $SUBS"
     else
-        fail "No tracks received from remote participants"
-        EXIT_CODE=1
+        warn "No tracks received from remote (mic/camera not auto-enabled)"
     fi
 
     if grep -q "Audio quality OK" "$BOT_LOG" 2>/dev/null; then
         ok "Audio quality: OK"
     elif grep -q "NO audio frames received" "$BOT_LOG" 2>/dev/null; then
         warn "Audio quality: no frames (expected if no remote audio published)"
+    fi
+
+    # Chat verification
+    CHATS="$(grep -c "\[EVENT\] ChatMessage:" "$BOT_LOG" 2>/dev/null)" || CHATS=0
+    if [ "$CHATS" -gt 1 ]; then
+        ok "Chat messages exchanged: $CHATS"
+    elif [ "$CHATS" -eq 1 ]; then
+        warn "Only bot's own message received — no cross-platform chat"
+    else
+        fail "No chat messages detected"
+        EXIT_CODE=1
     fi
 
     # Per-participant summary

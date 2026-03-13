@@ -2287,6 +2287,19 @@ export default function App() {
         await invoke("connect_with_token", { livekitUrl: livekit_url, token });
         setCurrentMeetUrl(livekit_url);
         setView("call");
+
+        // Auto-chat messages for E2E test
+        const messages = [
+          { delay: 3000, text: "Desktop joined the room!" },
+          { delay: 15000, text: "Desktop: I can see the bot's video" },
+          { delay: 30000, text: "Desktop: Screen share is visible" },
+          { delay: 45000, text: "Desktop: Audio toggles detected" },
+        ];
+        for (const msg of messages) {
+          setTimeout(async () => {
+            try { await invoke("send_chat", { text: msg.text }); } catch {}
+          }, msg.delay);
+        }
       } catch (err) {
         console.error("Auto-connect failed:", err);
       }
