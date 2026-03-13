@@ -13,6 +13,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use livekit::webrtc::prelude::*;
+use livekit::webrtc::video_source::native::NativeVideoSource;
 use livekit_api::access_token::{AccessToken, VideoGrants};
 use visio_core::adaptive::{AdaptiveMode, ContextSignal};
 use visio_core::{ConnectionState, RoomManager, TrackSource, VisioEvent, VisioEventListener};
@@ -1517,4 +1519,484 @@ async fn test_high_quality_mode() {
     assert_eq!(rm.connection_state().await, ConnectionState::Connected);
 
     rm.disconnect().await;
+}
+
+// ===========================================================================
+// BATCH 5: Three-participant media streaming (audio + video with real frames)
+// ===========================================================================
+
+/// Generate a 440Hz sine wave audio frame (20ms at 48kHz mono).
+fn generate_sine_frame(sample_offset: &mut u64) -> Vec<i16> {
+    const SAMPLE_RATE: f64 = 48000.0;
+    const FREQ: f64 = 440.0;
+    const AMPLITUDE: f64 = 3000.0;
+    const SAMPLES_PER_FRAME: usize = 960;
+
+    let mut samples = Vec::with_capacity(SAMPLES_PER_FRAME);
+    for i in 0..SAMPLES_PER_FRAME {
+        let t = (*sample_offset + i as u64) as f64 / SAMPLE_RATE;
+        let val = (t * FREQ * 2.0 * std::f64::consts::PI).sin() * AMPLITUDE;
+        samples.push(val as i16);
+    }
+    *sample_offset += SAMPLES_PER_FRAME as u64;
+    samples
+}
+
+/// Generate a solid-color I420 video frame.
+fn generate_color_frame(width: u32, height: u32, frame_num: u64) -> I420Buffer {
+    let mut buf = I420Buffer::new(width, height);
+    let (y_data, u_data, v_data) = buf.data_mut();
+    let phase = (frame_num / 30) % 3;
+    let (y_val, u_val, v_val) = match phase {
+        0 => (82u8, 90u8, 240u8),
+        1 => (145u8, 54u8, 34u8),
+        _ => (41u8, 240u8, 110u8),
+    };
+    y_data.fill(y_val);
+    u_data.fill(u_val);
+    v_data.fill(v_val);
+    buf
+}
+
+/// Feed synthetic audio frames to a NativeAudioSource.
+fn spawn_audio_feeder(source: livekit::webrtc::audio_source::native::NativeAudioSource) {
+    tokio::spawn(async move {
+        let mut offset: u64 = 0;
+        loop {
+            let samples = generate_sine_frame(&mut offset);
+            let frame = AudioFrame {
+                data: samples.into(),
+                sample_rate: 48000,
+                num_channels: 1,
+                samples_per_channel: 960,
+            };
+            if source.capture_frame(&frame).await.is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    });
+}
+
+/// Feed synthetic video frames to a NativeVideoSource.
+fn spawn_video_feeder(source: NativeVideoSource) {
+    tokio::spawn(async move {
+        let mut frame_num: u64 = 0;
+        loop {
+            let buf = generate_color_frame(640, 480, frame_num);
+            let frame: VideoFrame<I420Buffer> = VideoFrame {
+                rotation: VideoRotation::VideoRotation0,
+                buffer: buf,
+                timestamp_us: 0,
+            };
+            source.capture_frame(&frame);
+            frame_num += 1;
+            tokio::time::sleep(Duration::from_millis(66)).await;
+        }
+    });
+}
+
+/// Helper: wait until all 3 participants see each other.
+async fn wait_three_way_discovery(rm1: &RoomManager, rm2: &RoomManager, rm3: &RoomManager, id1: &str, id2: &str, id3: &str) {
+    let timeout = Duration::from_secs(15);
+    let start = std::time::Instant::now();
+    loop {
+        let p1 = rm1.participants().await;
+        let p2 = rm2.participants().await;
+        let p3 = rm3.participants().await;
+
+        let ok1 = p1.iter().any(|p| p.identity == id2) && p1.iter().any(|p| p.identity == id3);
+        let ok2 = p2.iter().any(|p| p.identity == id1) && p2.iter().any(|p| p.identity == id3);
+        let ok3 = p3.iter().any(|p| p.identity == id1) && p3.iter().any(|p| p.identity == id2);
+
+        if ok1 && ok2 && ok3 {
+            return;
+        }
+        if start.elapsed() > timeout {
+            panic!("3 participants did not fully discover each other within {timeout:?}");
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test: one publisher streams audio+video, two receivers both get tracks
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_video_broadcast() {
+    let room_name = format!("test-3p-video-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm_publisher = RoomManager::new();
+    let rm_viewer1 = RoomManager::new();
+    let rm_viewer2 = RoomManager::new();
+    let capture_v1 = EventCapture::new();
+    let capture_v2 = EventCapture::new();
+    rm_viewer1.add_listener(capture_v1.clone());
+    rm_viewer2.add_listener(capture_v2.clone());
+
+    rm_publisher.connect_with_token(&url, &make_token("streamer", "Streamer", &room_name)).await.expect("connect streamer");
+    rm_viewer1.connect_with_token(&url, &make_token("viewer1", "Viewer 1", &room_name)).await.expect("connect viewer1");
+    rm_viewer2.connect_with_token(&url, &make_token("viewer2", "Viewer 2", &room_name)).await.expect("connect viewer2");
+
+    wait_three_way_discovery(&rm_publisher, &rm_viewer1, &rm_viewer2, "streamer", "viewer1", "viewer2").await;
+
+    // Publisher publishes audio + video with real frames
+    let controls = rm_publisher.controls();
+    let audio_source = controls.publish_microphone().await.expect("publish mic");
+    let video_source = controls.publish_camera().await.expect("publish cam");
+
+    spawn_audio_feeder(audio_source);
+    spawn_video_feeder(video_source);
+
+    // Both viewers should receive TrackSubscribed for Camera AND Microphone
+    let v1_got_both = wait_for(
+        || {
+            let has_mic = capture_v1.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Microphone));
+            let has_cam = capture_v1.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera));
+            has_mic && has_cam
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(v1_got_both, "viewer1 should receive both Microphone and Camera tracks");
+
+    let v2_got_both = wait_for(
+        || {
+            let has_mic = capture_v2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Microphone));
+            let has_cam = capture_v2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera));
+            has_mic && has_cam
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(v2_got_both, "viewer2 should receive both Microphone and Camera tracks");
+
+    // Both viewers should have video track SIDs
+    let sids1 = rm_viewer1.video_track_sids().await;
+    let sids2 = rm_viewer2.video_track_sids().await;
+    assert!(!sids1.is_empty(), "viewer1 should have video track SIDs");
+    assert!(!sids2.is_empty(), "viewer2 should have video track SIDs");
+
+    rm_publisher.disconnect().await;
+    rm_viewer1.disconnect().await;
+    rm_viewer2.disconnect().await;
+}
+
+// ---------------------------------------------------------------------------
+// Test: publisher mutes video → both viewers receive TrackMuted
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_video_mute_broadcast() {
+    let room_name = format!("test-3p-vmute-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm_pub = RoomManager::new();
+    let rm_v1 = RoomManager::new();
+    let rm_v2 = RoomManager::new();
+    let cap_v1 = EventCapture::new();
+    let cap_v2 = EventCapture::new();
+    rm_v1.add_listener(cap_v1.clone());
+    rm_v2.add_listener(cap_v2.clone());
+
+    rm_pub.connect_with_token(&url, &make_token("pub", "Publisher", &room_name)).await.expect("connect");
+    rm_v1.connect_with_token(&url, &make_token("v1", "V1", &room_name)).await.expect("connect");
+    rm_v2.connect_with_token(&url, &make_token("v2", "V2", &room_name)).await.expect("connect");
+    wait_three_way_discovery(&rm_pub, &rm_v1, &rm_v2, "pub", "v1", "v2").await;
+
+    let controls = rm_pub.controls();
+    let video_source = controls.publish_camera().await.expect("publish cam");
+    spawn_video_feeder(video_source);
+
+    // Wait for both to subscribe
+    let both_sub = wait_for(
+        || {
+            cap_v1.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+            && cap_v2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(both_sub, "both viewers should subscribe to camera");
+
+    // Mute camera
+    controls.set_camera_enabled(false).await.expect("mute cam");
+
+    let v1_muted = wait_for(
+        || cap_v1.has(|e| matches!(e, VisioEvent::TrackMuted { source, .. } if *source == TrackSource::Camera)),
+        Duration::from_secs(5),
+    ).await;
+    let v2_muted = wait_for(
+        || cap_v2.has(|e| matches!(e, VisioEvent::TrackMuted { source, .. } if *source == TrackSource::Camera)),
+        Duration::from_secs(5),
+    ).await;
+    assert!(v1_muted, "viewer1 should receive TrackMuted(Camera)");
+    assert!(v2_muted, "viewer2 should receive TrackMuted(Camera)");
+
+    rm_pub.disconnect().await;
+    rm_v1.disconnect().await;
+    rm_v2.disconnect().await;
+}
+
+// ---------------------------------------------------------------------------
+// Test: publisher disconnects → viewers get ParticipantLeft + TrackUnsubscribed
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_publisher_leaves() {
+    let room_name = format!("test-3p-leave-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm_pub = RoomManager::new();
+    let rm_v1 = RoomManager::new();
+    let rm_v2 = RoomManager::new();
+    let cap_v1 = EventCapture::new();
+    let cap_v2 = EventCapture::new();
+    rm_v1.add_listener(cap_v1.clone());
+    rm_v2.add_listener(cap_v2.clone());
+
+    rm_pub.connect_with_token(&url, &make_token("pub", "Publisher", &room_name)).await.expect("connect");
+    rm_v1.connect_with_token(&url, &make_token("v1", "V1", &room_name)).await.expect("connect");
+    rm_v2.connect_with_token(&url, &make_token("v2", "V2", &room_name)).await.expect("connect");
+    wait_three_way_discovery(&rm_pub, &rm_v1, &rm_v2, "pub", "v1", "v2").await;
+
+    let controls = rm_pub.controls();
+    let audio_source = controls.publish_microphone().await.expect("publish mic");
+    let video_source = controls.publish_camera().await.expect("publish cam");
+    spawn_audio_feeder(audio_source);
+    spawn_video_feeder(video_source);
+
+    // Wait for both to get tracks
+    let both_sub = wait_for(
+        || {
+            cap_v1.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+            && cap_v2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(both_sub, "both viewers subscribed to camera");
+
+    // Publisher disconnects
+    rm_pub.disconnect().await;
+
+    // Both viewers should see ParticipantLeft
+    let v1_left = wait_for(
+        || cap_v1.has(|e| matches!(e, VisioEvent::ParticipantLeft(_))),
+        Duration::from_secs(10),
+    ).await;
+    let v2_left = wait_for(
+        || cap_v2.has(|e| matches!(e, VisioEvent::ParticipantLeft(_))),
+        Duration::from_secs(10),
+    ).await;
+    assert!(v1_left, "viewer1 should see ParticipantLeft");
+    assert!(v2_left, "viewer2 should see ParticipantLeft");
+
+    // Both should get TrackUnsubscribed
+    let v1_unsub = cap_v1.has(|e| matches!(e, VisioEvent::TrackUnsubscribed(_)));
+    let v2_unsub = cap_v2.has(|e| matches!(e, VisioEvent::TrackUnsubscribed(_)));
+    assert!(v1_unsub, "viewer1 should get TrackUnsubscribed");
+    assert!(v2_unsub, "viewer2 should get TrackUnsubscribed");
+
+    rm_v1.disconnect().await;
+    rm_v2.disconnect().await;
+}
+
+// ---------------------------------------------------------------------------
+// Test: chat + reaction + hand raise in a 3-participant room with active media
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_full_interaction() {
+    let room_name = format!("test-3p-full-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm1 = RoomManager::new();
+    let rm2 = RoomManager::new();
+    let rm3 = RoomManager::new();
+    let cap1 = EventCapture::new();
+    let cap2 = EventCapture::new();
+    let cap3 = EventCapture::new();
+    rm1.add_listener(cap1.clone());
+    rm2.add_listener(cap2.clone());
+    rm3.add_listener(cap3.clone());
+
+    rm1.connect_with_token(&url, &make_token("alice", "Alice", &room_name)).await.expect("connect");
+    rm2.connect_with_token(&url, &make_token("bob", "Bob", &room_name)).await.expect("connect");
+    rm3.connect_with_token(&url, &make_token("charlie", "Charlie", &room_name)).await.expect("connect");
+    wait_three_way_discovery(&rm1, &rm2, &rm3, "alice", "bob", "charlie").await;
+
+    // Alice publishes audio + video with real frames
+    let controls1 = rm1.controls();
+    let audio_src = controls1.publish_microphone().await.expect("publish mic");
+    let video_src = controls1.publish_camera().await.expect("publish cam");
+    spawn_audio_feeder(audio_src);
+    spawn_video_feeder(video_src);
+
+    // Wait for Bob and Charlie to subscribe
+    let both_sub = wait_for(
+        || {
+            let bob_has = cap2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+                       && cap2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Microphone));
+            let charlie_has = cap3.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera))
+                           && cap3.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Microphone));
+            bob_has && charlie_has
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(both_sub, "bob and charlie should subscribe to alice's audio+video");
+
+    // Bob sends a chat message — Alice and Charlie should receive it
+    rm2.chat().send_message("Hello from Bob").await.expect("chat send");
+    let alice_chat = wait_for(
+        || cap1.has(|e| matches!(e, VisioEvent::ChatMessageReceived(m) if m.text == "Hello from Bob")),
+        Duration::from_secs(10),
+    ).await;
+    let charlie_chat = wait_for(
+        || cap3.has(|e| matches!(e, VisioEvent::ChatMessageReceived(m) if m.text == "Hello from Bob")),
+        Duration::from_secs(10),
+    ).await;
+    assert!(alice_chat, "alice should receive bob's chat");
+    assert!(charlie_chat, "charlie should receive bob's chat");
+
+    // Charlie sends a reaction — Alice and Bob should see it
+    rm3.send_reaction("🎉").await.expect("reaction send");
+    let alice_react = wait_for(
+        || cap1.has(|e| matches!(e, VisioEvent::ReactionReceived { emoji, .. } if emoji == "🎉")),
+        Duration::from_secs(5),
+    ).await;
+    let bob_react = wait_for(
+        || cap2.has(|e| matches!(e, VisioEvent::ReactionReceived { emoji, .. } if emoji == "🎉")),
+        Duration::from_secs(5),
+    ).await;
+    assert!(alice_react, "alice should receive charlie's reaction");
+    assert!(bob_react, "bob should receive charlie's reaction");
+
+    // Alice raises hand — Bob and Charlie should see it
+    rm1.raise_hand().await.expect("raise hand");
+    let bob_hand = wait_for(
+        || cap2.has(|e| matches!(e, VisioEvent::HandRaisedChanged { raised: true, .. })),
+        Duration::from_secs(5),
+    ).await;
+    let charlie_hand = wait_for(
+        || cap3.has(|e| matches!(e, VisioEvent::HandRaisedChanged { raised: true, .. })),
+        Duration::from_secs(5),
+    ).await;
+    assert!(bob_hand, "bob should see alice's hand raised");
+    assert!(charlie_hand, "charlie should see alice's hand raised");
+
+    rm1.disconnect().await;
+    rm2.disconnect().await;
+    rm3.disconnect().await;
+}
+
+// ---------------------------------------------------------------------------
+// Test: two publishers stream simultaneously, third participant gets all tracks
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_two_publishers() {
+    let room_name = format!("test-3p-2pub-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm1 = RoomManager::new();
+    let rm2 = RoomManager::new();
+    let rm3 = RoomManager::new();
+    let cap3 = EventCapture::new();
+    rm3.add_listener(cap3.clone());
+
+    rm1.connect_with_token(&url, &make_token("alice", "Alice", &room_name)).await.expect("connect");
+    rm2.connect_with_token(&url, &make_token("bob", "Bob", &room_name)).await.expect("connect");
+    rm3.connect_with_token(&url, &make_token("charlie", "Charlie", &room_name)).await.expect("connect");
+    wait_three_way_discovery(&rm1, &rm2, &rm3, "alice", "bob", "charlie").await;
+
+    // Alice publishes audio + video
+    let c1 = rm1.controls();
+    let a1 = c1.publish_microphone().await.expect("alice mic");
+    let v1 = c1.publish_camera().await.expect("alice cam");
+    spawn_audio_feeder(a1);
+    spawn_video_feeder(v1);
+
+    // Bob publishes audio + video
+    let c2 = rm2.controls();
+    let a2 = c2.publish_microphone().await.expect("bob mic");
+    let v2 = c2.publish_camera().await.expect("bob cam");
+    spawn_audio_feeder(a2);
+    spawn_video_feeder(v2);
+
+    // Charlie should get 4 TrackSubscribed: 2 mics + 2 cameras
+    let charlie_got_all = wait_for(
+        || {
+            let mic_count = cap3.count(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Microphone));
+            let cam_count = cap3.count(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera));
+            mic_count >= 2 && cam_count >= 2
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(charlie_got_all, "charlie should receive 2 mic + 2 camera tracks");
+
+    // Charlie should have 2 video track SIDs
+    let sids = rm3.video_track_sids().await;
+    assert!(sids.len() >= 2, "charlie should have >= 2 video track SIDs, got {}", sids.len());
+
+    rm1.disconnect().await;
+    rm2.disconnect().await;
+    rm3.disconnect().await;
+}
+
+// ---------------------------------------------------------------------------
+// Test: screen share + camera simultaneously in 3-participant room
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_three_participants_screen_share_and_camera() {
+    let room_name = format!("test-3p-screen-{}", uuid::Uuid::new_v4());
+    let url = livekit_url();
+
+    let rm1 = RoomManager::new();
+    let rm2 = RoomManager::new();
+    let rm3 = RoomManager::new();
+    let cap2 = EventCapture::new();
+    let cap3 = EventCapture::new();
+    rm2.add_listener(cap2.clone());
+    rm3.add_listener(cap3.clone());
+
+    rm1.connect_with_token(&url, &make_token("alice", "Alice", &room_name)).await.expect("connect");
+    rm2.connect_with_token(&url, &make_token("bob", "Bob", &room_name)).await.expect("connect");
+    rm3.connect_with_token(&url, &make_token("charlie", "Charlie", &room_name)).await.expect("connect");
+    wait_three_way_discovery(&rm1, &rm2, &rm3, "alice", "bob", "charlie").await;
+
+    let controls = rm1.controls();
+
+    // Alice publishes camera + screen share
+    let cam_src = controls.publish_camera().await.expect("publish cam");
+    spawn_video_feeder(cam_src);
+    let _screen_src = controls.publish_screen_share().await.expect("publish screen share");
+
+    // Both viewers should get Camera AND ScreenShare tracks
+    let both_got_both = wait_for(
+        || {
+            let b_cam = cap2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera));
+            let b_scr = cap2.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::ScreenShare));
+            let c_cam = cap3.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::Camera));
+            let c_scr = cap3.has(|e| matches!(e, VisioEvent::TrackSubscribed(info) if info.source == TrackSource::ScreenShare));
+            b_cam && b_scr && c_cam && c_scr
+        },
+        Duration::from_secs(15),
+    ).await;
+    assert!(both_got_both, "bob and charlie should both receive Camera + ScreenShare tracks");
+
+    // Stop screen share — both should get unsubscribed
+    controls.stop_screen_share().await.expect("stop screen share");
+
+    let both_unsub = wait_for(
+        || {
+            cap2.has(|e| matches!(e, VisioEvent::TrackUnsubscribed(_)))
+            && cap3.has(|e| matches!(e, VisioEvent::TrackUnsubscribed(_)))
+        },
+        Duration::from_secs(10),
+    ).await;
+    assert!(both_unsub, "bob and charlie should get TrackUnsubscribed when screen share stops");
+
+    rm1.disconnect().await;
+    rm2.disconnect().await;
+    rm3.disconnect().await;
 }
