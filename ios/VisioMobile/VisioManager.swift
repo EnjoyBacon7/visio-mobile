@@ -29,6 +29,9 @@ class VisioManager: ObservableObject {
     @Published var currentTheme: String = "light"
     @Published var displayName: String = ""
     @Published var pendingDeepLink: String? = nil
+    /// For E2E testing: (livekitUrl, token) pair from visio-test:// deep link.
+    /// Only used in DEBUG builds.
+    @Published var pendingTestConnect: (String, String)? = nil
     @Published var isFrontCamera: Bool = true
     @Published var waitingParticipants: [WaitingParticipant] = []
     @Published var lobbyNotification: WaitingParticipant? = nil
@@ -151,6 +154,44 @@ class VisioManager: ObservableObject {
             } catch {
                 DispatchQueue.main.async {
                     self.errorMessage = "Connection failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func connectWithToken(livekitUrl: String, token: String) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let settings = self.client.getSettings()
+                try self.client.connectWithToken(livekitUrl: livekitUrl, token: token)
+
+                if settings.micEnabledOnJoin {
+                    try self.client.setMicrophoneEnabled(enabled: true)
+                }
+                if settings.cameraEnabledOnJoin {
+                    try self.client.setCameraEnabled(enabled: true)
+                }
+
+                let parts = self.client.participants()
+                let mic = self.client.isMicrophoneEnabled()
+                let cam = self.client.isCameraEnabled()
+                let state = self.client.connectionState()
+                DispatchQueue.main.async {
+                    self.participants = parts
+                    self.isMicEnabled = mic
+                    self.isCameraEnabled = cam
+                    self.connectionState = state
+                    self.errorMessage = nil
+                    if cam {
+                        let capture = CameraCapture()
+                        capture.start()
+                        self.cameraCapture = capture
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Test connect failed: \(error.localizedDescription)"
                 }
             }
         }

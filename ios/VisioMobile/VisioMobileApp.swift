@@ -19,6 +19,19 @@ struct VisioMobileApp: App {
             .preferredColorScheme(manager.currentTheme == "dark" ? .dark : .light)
             .onAppear { manager.initAuth() }
             .onOpenURL { url in
+                #if DEBUG
+                if url.scheme == "visio-test" && url.host == "connect" {
+                    let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                    let livekitUrl = components?.queryItems?.first(where: { $0.name == "livekit_url" })?.value
+                    let token = components?.queryItems?.first(where: { $0.name == "token" })?.value
+                    if let livekitUrl, let token {
+                        NSLog("VisioMobileApp: test deep link → \(livekitUrl)")
+                        manager.pendingTestConnect = (livekitUrl, token)
+                    }
+                    return
+                }
+                #endif
+
                 guard url.scheme == "visio",
                       let host = url.host,
                       let slug = url.pathComponents.dropFirst().first
