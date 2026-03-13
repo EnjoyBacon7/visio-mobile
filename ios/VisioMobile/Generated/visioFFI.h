@@ -301,6 +301,11 @@ RustBuffer uniffi_visio_ffi_fn_method_visioclient_add_access(void*_Nonnull ptr, 
 void uniffi_visio_ffi_fn_method_visioclient_add_listener(void*_Nonnull ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_ROOM_TO_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADD_ROOM_TO_HISTORY
+void uniffi_visio_ffi_fn_method_visioclient_add_room_to_history(void*_Nonnull ptr, RustBuffer url, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADMIT_PARTICIPANT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_ADMIT_PARTICIPANT
 void uniffi_visio_ffi_fn_method_visioclient_admit_participant(void*_Nonnull ptr, RustBuffer participant_id, RustCallStatus *_Nonnull out_status
@@ -321,9 +326,19 @@ void uniffi_visio_ffi_fn_method_visioclient_cancel_lobby(void*_Nonnull ptr, Rust
 RustBuffer uniffi_visio_ffi_fn_method_visioclient_chat_messages(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CLEAR_ROOM_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CLEAR_ROOM_HISTORY
+void uniffi_visio_ffi_fn_method_visioclient_clear_room_history(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CONNECT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CONNECT
 void uniffi_visio_ffi_fn_method_visioclient_connect(void*_Nonnull ptr, RustBuffer meet_url, RustBuffer username, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CONNECT_WITH_TOKEN
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CONNECT_WITH_TOKEN
+void uniffi_visio_ffi_fn_method_visioclient_connect_with_token(void*_Nonnull ptr, RustBuffer livekit_url, RustBuffer token, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_CONNECTION_STATE
@@ -354,6 +369,11 @@ RustBuffer uniffi_visio_ffi_fn_method_visioclient_get_background_mode(void*_Nonn
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_GET_MEET_INSTANCES
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_GET_MEET_INSTANCES
 RustBuffer uniffi_visio_ffi_fn_method_visioclient_get_meet_instances(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_GET_ROOM_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_GET_ROOM_HISTORY
+RustBuffer uniffi_visio_ffi_fn_method_visioclient_get_room_history(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_GET_SESSION_STATE
@@ -887,6 +907,12 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_add_listener(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_ROOM_TO_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADD_ROOM_TO_HISTORY
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_add_room_to_history(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADMIT_PARTICIPANT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_ADMIT_PARTICIPANT
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_admit_participant(void
@@ -911,9 +937,21 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_chat_messages(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CLEAR_ROOM_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CLEAR_ROOM_HISTORY
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_clear_room_history(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CONNECT
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CONNECT
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_connect(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CONNECT_WITH_TOKEN
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_CONNECT_WITH_TOKEN
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_connect_with_token(void
     
 );
 #endif
@@ -950,6 +988,12 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_get_background_mode(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_GET_MEET_INSTANCES
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_GET_MEET_INSTANCES
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_get_meet_instances(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_GET_ROOM_HISTORY
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_GET_ROOM_HISTORY
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_get_room_history(void
     
 );
 #endif

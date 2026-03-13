@@ -529,6 +529,8 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     
     func addListener(listener: VisioEventListener) 
     
+    func addRoomToHistory(url: String) 
+    
     func admitParticipant(participantId: String) throws 
     
     func authenticate(meetUrl: String, cookie: String) throws 
@@ -537,7 +539,11 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     
     func chatMessages()  -> [ChatMessage]
     
+    func clearRoomHistory() 
+    
     func connect(meetUrl: String, username: String?) throws 
+    
+    func connectWithToken(livekitUrl: String, token: String) throws 
     
     func connectionState()  -> ConnectionState
     
@@ -550,6 +556,8 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     func getBackgroundMode()  -> String
     
     func getMeetInstances()  -> [String]
+    
+    func getRoomHistory()  -> [String]
     
     func getSessionState()  -> SessionState
     
@@ -726,6 +734,13 @@ open func addListener(listener: VisioEventListener)  {try! rustCall() {
 }
 }
     
+open func addRoomToHistory(url: String)  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_add_room_to_history(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
+    )
+}
+}
+    
 open func admitParticipant(participantId: String)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_admit_participant(self.uniffiClonePointer(),
         FfiConverterString.lower(participantId),$0
@@ -754,10 +769,24 @@ open func chatMessages() -> [ChatMessage]  {
 })
 }
     
+open func clearRoomHistory()  {try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_clear_room_history(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
 open func connect(meetUrl: String, username: String?)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_connect(self.uniffiClonePointer(),
         FfiConverterString.lower(meetUrl),
         FfiConverterOptionString.lower(username),$0
+    )
+}
+}
+    
+open func connectWithToken(livekitUrl: String, token: String)throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_connect_with_token(self.uniffiClonePointer(),
+        FfiConverterString.lower(livekitUrl),
+        FfiConverterString.lower(token),$0
     )
 }
 }
@@ -802,6 +831,13 @@ open func getBackgroundMode() -> String  {
 open func getMeetInstances() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_visio_ffi_fn_method_visioclient_get_meet_instances(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getRoomHistory() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_visio_ffi_fn_method_visioclient_get_room_history(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -2023,6 +2059,83 @@ extension AdaptiveMode: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum BandwidthMode {
+    
+    case full
+    case reducedVideo
+    case audioOnly
+}
+
+
+#if compiler(>=6)
+extension BandwidthMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBandwidthMode: FfiConverterRustBuffer {
+    typealias SwiftType = BandwidthMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BandwidthMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .full
+        
+        case 2: return .reducedVideo
+        
+        case 3: return .audioOnly
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BandwidthMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .full:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .reducedVideo:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .audioOnly:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBandwidthMode_lift(_ buf: RustBuffer) throws -> BandwidthMode {
+    return try FfiConverterTypeBandwidthMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBandwidthMode_lower(_ value: BandwidthMode) -> RustBuffer {
+    return FfiConverterTypeBandwidthMode.lower(value)
+}
+
+
+extension BandwidthMode: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ConnectionQuality {
     
     case excellent
@@ -2772,6 +2885,8 @@ public enum VisioEvent {
     )
     case adaptiveModeChanged(mode: AdaptiveMode
     )
+    case bandwidthModeChanged(mode: BandwidthMode
+    )
     case connectionLost
 }
 
@@ -2840,7 +2955,10 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
         case 17: return .adaptiveModeChanged(mode: try FfiConverterTypeAdaptiveMode.read(from: &buf)
         )
         
-        case 18: return .connectionLost
+        case 18: return .bandwidthModeChanged(mode: try FfiConverterTypeBandwidthMode.read(from: &buf)
+        )
+        
+        case 19: return .connectionLost
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2942,8 +3060,13 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
             FfiConverterTypeAdaptiveMode.write(mode, into: &buf)
             
         
-        case .connectionLost:
+        case let .bandwidthModeChanged(mode):
             writeInt(&buf, Int32(18))
+            FfiConverterTypeBandwidthMode.write(mode, into: &buf)
+            
+        
+        case .connectionLost:
+            writeInt(&buf, Int32(19))
         
         }
     }
@@ -3321,6 +3444,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_visio_ffi_checksum_method_visioclient_add_listener() != 29296) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_visio_ffi_checksum_method_visioclient_add_room_to_history() != 37487) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_visio_ffi_checksum_method_visioclient_admit_participant() != 6663) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3333,7 +3459,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_visio_ffi_checksum_method_visioclient_chat_messages() != 48857) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_visio_ffi_checksum_method_visioclient_clear_room_history() != 9918) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_visio_ffi_checksum_method_visioclient_connect() != 34638) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_connect_with_token() != 61350) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_connection_state() != 20987) {
@@ -3352,6 +3484,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_get_meet_instances() != 1312) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_get_room_history() != 62961) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_get_session_state() != 38004) {

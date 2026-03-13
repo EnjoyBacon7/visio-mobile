@@ -684,10 +684,71 @@ async fn main() {
         }
     }
 
-    // Stay in room
+    // Stay in room, cycling mic and camera toggles
     if args.duration > 0 {
-        tracing::info!("Staying in room for {}s...", args.duration);
-        tokio::time::sleep(Duration::from_secs(args.duration)).await;
+        tracing::info!("Staying in room for {}s (cycling mic/camera toggles)...", args.duration);
+        let start_time = std::time::Instant::now();
+        let total_duration = Duration::from_secs(args.duration);
+
+        // Helper: sleep up to `dur`, return true if duration expired
+        async fn sleep_or_expire(
+            start: std::time::Instant,
+            total: Duration,
+            dur: Duration,
+        ) -> bool {
+            let elapsed = start.elapsed();
+            if elapsed >= total {
+                return true;
+            }
+            let remaining = total - elapsed;
+            tokio::time::sleep(dur.min(remaining)).await;
+            start.elapsed() >= total
+        }
+
+        loop {
+            // Sleep 10s before first toggle
+            if sleep_or_expire(start_time, total_duration, Duration::from_secs(10)).await {
+                break;
+            }
+
+            // Toggle mic off
+            tracing::info!("[TOGGLE] Muting microphone");
+            if let Err(e) = controls.set_microphone_enabled(false).await {
+                tracing::warn!("[TOGGLE] Failed to mute mic: {e}");
+            }
+
+            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
+                break;
+            }
+
+            // Toggle mic on
+            tracing::info!("[TOGGLE] Unmuting microphone");
+            if let Err(e) = controls.set_microphone_enabled(true).await {
+                tracing::warn!("[TOGGLE] Failed to unmute mic: {e}");
+            }
+
+            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
+                break;
+            }
+
+            // Toggle camera off
+            tracing::info!("[TOGGLE] Disabling camera");
+            if let Err(e) = controls.set_camera_enabled(false).await {
+                tracing::warn!("[TOGGLE] Failed to disable camera: {e}");
+            }
+
+            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
+                break;
+            }
+
+            // Toggle camera on
+            tracing::info!("[TOGGLE] Enabling camera");
+            if let Err(e) = controls.set_camera_enabled(true).await {
+                tracing::warn!("[TOGGLE] Failed to enable camera: {e}");
+            }
+        }
+
+        tracing::info!("Toggle cycling complete after {:.1}s", start_time.elapsed().as_secs_f64());
     } else {
         tracing::info!("Staying in room indefinitely (Ctrl+C to exit)...");
         tokio::signal::ctrl_c().await.ok();
