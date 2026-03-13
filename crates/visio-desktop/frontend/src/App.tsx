@@ -2313,6 +2313,32 @@ export default function App() {
         for (const t of toggleSequence) {
           setTimeout(async () => { try { await t.action(); } catch {} }, t.delay);
         }
+
+        // Auto screen share: start when bot stops sharing (~30s into test), stop after 20s
+        setTimeout(async () => {
+          try {
+            // Get available sources and pick the first monitor
+            const sources = await invoke<Array<{id: string, name: string, source_type: string}>>("list_screen_sources");
+            const monitor = sources.find(s => s.source_type === "Monitor") || sources[0];
+            if (monitor) {
+              console.log("Auto screen share: starting with source", monitor.name);
+              await invoke("start_screen_share", { sourceId: monitor.id });
+              setIsScreenSharing(true);
+              // Stop after 20s
+              setTimeout(async () => {
+                try {
+                  await invoke("stop_screen_share");
+                  setIsScreenSharing(false);
+                  console.log("Auto screen share: stopped");
+                } catch (err) {
+                  console.error("Auto screen share stop failed:", err);
+                }
+              }, 20000);
+            }
+          } catch (err) {
+            console.error("Auto screen share failed:", err);
+          }
+        }, 35000); // Start at 35s — after bot stops its share at ~30s
       } catch (err) {
         console.error("Auto-connect failed:", err);
       }
