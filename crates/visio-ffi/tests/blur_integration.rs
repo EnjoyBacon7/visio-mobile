@@ -46,10 +46,7 @@ fn test_blur_mode_on_synthetic_frame() {
     let mut v = vec![128u8; uv_w * uv_h];
 
     let result = visio_ffi::blur::BlurProcessor::process_i420(
-        &mut y, &mut u, &mut v,
-        width, height,
-        width, uv_w, uv_w,
-        0,
+        &mut y, &mut u, &mut v, width, height, width, uv_w, uv_w, 0,
     );
 
     assert!(result, "Blur mode should process successfully");
@@ -70,7 +67,10 @@ fn test_image_replacement_mode() {
     // Load a background image
     let bg_path = project_root().join("assets/backgrounds/1.jpg");
     if !bg_path.exists() {
-        eprintln!("Skipping: background image not found at {}", bg_path.display());
+        eprintln!(
+            "Skipping: background image not found at {}",
+            bg_path.display()
+        );
         return;
     }
     let jpeg_bytes = std::fs::read(&bg_path).unwrap();
@@ -79,8 +79,13 @@ fn test_image_replacement_mode() {
     let height = 480usize;
 
     // Load replacement image
-    let load_result = visio_ffi::blur::BlurProcessor::load_replacement_image(1, &jpeg_bytes, width, height);
-    assert!(load_result.is_ok(), "Image load failed: {:?}", load_result.err());
+    let load_result =
+        visio_ffi::blur::BlurProcessor::load_replacement_image(1, &jpeg_bytes, width, height);
+    assert!(
+        load_result.is_ok(),
+        "Image load failed: {:?}",
+        load_result.err()
+    );
 
     // Set image mode
     visio_ffi::blur::BlurProcessor::set_mode(visio_ffi::blur::process::BackgroundMode::Image(1));
@@ -92,14 +97,14 @@ fn test_image_replacement_mode() {
     let mut v = vec![128u8; uv_w * uv_h];
 
     let result = visio_ffi::blur::BlurProcessor::process_i420(
-        &mut y, &mut u, &mut v,
-        width, height,
-        width, uv_w, uv_w,
-        0,
+        &mut y, &mut u, &mut v, width, height, width, uv_w, uv_w, 0,
     );
 
     assert!(result, "Image replacement mode should process successfully");
-    println!("Image replacement mode: pipeline OK on {}x{}", width, height);
+    println!(
+        "Image replacement mode: pipeline OK on {}x{}",
+        width, height
+    );
 
     visio_ffi::blur::BlurProcessor::set_mode(visio_ffi::blur::process::BackgroundMode::Off);
 }

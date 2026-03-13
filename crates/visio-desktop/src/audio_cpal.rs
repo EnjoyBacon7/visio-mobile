@@ -25,9 +25,7 @@ pub struct AudioDeviceInfo {
 /// List available audio input devices via cpal.
 pub fn list_input_devices() -> Vec<AudioDeviceInfo> {
     let host = cpal::default_host();
-    let default_name = host
-        .default_input_device()
-        .and_then(|d| d.name().ok());
+    let default_name = host.default_input_device().and_then(|d| d.name().ok());
 
     host.input_devices()
         .map(|devices| {
@@ -47,9 +45,7 @@ pub fn list_input_devices() -> Vec<AudioDeviceInfo> {
 /// List available audio output devices via cpal.
 pub fn list_output_devices() -> Vec<AudioDeviceInfo> {
     let host = cpal::default_host();
-    let default_name = host
-        .default_output_device()
-        .and_then(|d| d.name().ok());
+    let default_name = host.default_output_device().and_then(|d| d.name().ok());
 
     host.output_devices()
         .map(|devices| {
@@ -69,17 +65,17 @@ pub fn list_output_devices() -> Vec<AudioDeviceInfo> {
 /// Find an input device by name.
 pub fn find_input_device(name: &str) -> Option<cpal::Device> {
     let host = cpal::default_host();
-    host.input_devices().ok()?.find(|d| {
-        d.name().map(|n| n == name).unwrap_or(false)
-    })
+    host.input_devices()
+        .ok()?
+        .find(|d| d.name().map(|n| n == name).unwrap_or(false))
 }
 
 /// Find an output device by name.
 pub fn find_output_device(name: &str) -> Option<cpal::Device> {
     let host = cpal::default_host();
-    host.output_devices().ok()?.find(|d| {
-        d.name().map(|n| n == name).unwrap_or(false)
-    })
+    host.output_devices()
+        .ok()?
+        .find(|d| d.name().map(|n| n == name).unwrap_or(false))
 }
 
 /// Internal sample rate used by LiveKit (48kHz mono i16).
@@ -176,7 +172,9 @@ impl CpalAudioPlayout {
             )
             .map_err(|e| format!("build output stream: {e}"))?;
 
-        stream.play().map_err(|e| format!("play output stream: {e}"))?;
+        stream
+            .play()
+            .map_err(|e| format!("play output stream: {e}"))?;
         tracing::info!("cpal audio playout started");
 
         Ok(Self {
@@ -292,7 +290,9 @@ impl CpalAudioCapture {
             )
             .map_err(|e| format!("build input stream: {e}"))?;
 
-        stream.play().map_err(|e| format!("play input stream: {e}"))?;
+        stream
+            .play()
+            .map_err(|e| format!("play input stream: {e}"))?;
 
         // Drain thread: pops frames from the buffer and submits them to LiveKit
         let running_drain = running.clone();

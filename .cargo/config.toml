@@ -1,3 +1,8 @@
+# ort uses load-dynamic on Linux to avoid duplicate protobuf symbols with
+# webrtc-sys. Set rpath so the binary finds libonnxruntime.so next to it.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-args=-Wl,-rpath,$ORIGIN/lib/onnxruntime"]
+
 [target.'cfg(target_os = "macos")']
 rustflags = ["-C", "link-arg=-ObjC"]
 

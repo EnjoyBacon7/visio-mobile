@@ -179,7 +179,8 @@ The audio device picker (chevron next to the mic button) is available in **all m
 **Linux only:** Install system dependencies:
 ```bash
 # Debian/Ubuntu
-sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libasound2-dev
+sudo apt-get install libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libasound2-dev \
+  libpipewire-0.3-dev libclang-dev libgbm-dev
 
 # Fedora
 sudo dnf install gtk3-devel webkit2gtk4.1-devel librsvg2-devel alsa-lib-devel

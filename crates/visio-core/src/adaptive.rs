@@ -69,11 +69,7 @@ impl AdaptiveEngine {
         }
 
         let new = self.current_mode();
-        if new != old {
-            Some(new)
-        } else {
-            None
-        }
+        if new != old { Some(new) } else { None }
     }
 
     /// Sets (or clears) a manual mode override.

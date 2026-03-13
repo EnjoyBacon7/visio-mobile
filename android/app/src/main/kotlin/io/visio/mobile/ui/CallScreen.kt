@@ -21,10 +21,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.VideocamOff
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -44,6 +40,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.VideocamOff
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -390,9 +390,10 @@ fun CallScreen(
     // Request BLUETOOTH_CONNECT permission on Android 12+ for car kit detection
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val hasBtPerm = ContextCompat.checkSelfPermission(
-                context, Manifest.permission.BLUETOOTH_CONNECT,
-            ) == PackageManager.PERMISSION_GRANTED
+            val hasBtPerm =
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.BLUETOOTH_CONNECT,
+                ) == PackageManager.PERMISSION_GRANTED
             if (!hasBtPerm) {
                 bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
             }
@@ -530,14 +531,18 @@ fun CallScreen(
                         val activeSpeakerSid = activeSpeakers.firstOrNull()
                         // Find if active speaker is a remote participant
                         // (participants[0] is local, so skip it when looking for remote speaker)
-                        val remoteSpeaker = if (activeSpeakerSid != null) {
-                            participants.drop(1).find { it.sid == activeSpeakerSid }
-                        } else null
+                        val remoteSpeaker =
+                            if (activeSpeakerSid != null) {
+                                participants.drop(1).find { it.sid == activeSpeakerSid }
+                            } else {
+                                null
+                            }
 
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(8.dp)),
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp)),
                         ) {
                             if (remoteSpeaker != null) {
                                 // Show remote active speaker
@@ -565,9 +570,10 @@ fun CallScreen(
                     AdaptiveMode.OFFICE -> {
                         // Office mode: full grid with screen share support
                         val displayItems = buildDisplayItems(participants)
-                        val focusedDisplayItem = focusedItem?.let { fi ->
-                            displayItems.find { it.participant.sid == fi.participantSid && it.source == fi.source }
-                        }
+                        val focusedDisplayItem =
+                            focusedItem?.let { fi ->
+                                displayItems.find { it.participant.sid == fi.participantSid && it.source == fi.source }
+                            }
 
                         if (focusedDisplayItem != null) {
                             // Focus layout: main item + thumbnail bar
@@ -582,12 +588,13 @@ fun CallScreen(
                                             .background(VisioColors.PrimaryDark50)
                                             .clickable { focusedItem = null },
                                 ) {
-                                    val hasTrack = focusedDisplayItem.trackSid != null &&
-                                        if (focusedDisplayItem.isScreenShare) {
-                                            focusedDisplayItem.participant.hasScreenShare
-                                        } else {
-                                            focusedDisplayItem.participant.hasVideo
-                                        }
+                                    val hasTrack =
+                                        focusedDisplayItem.trackSid != null &&
+                                            if (focusedDisplayItem.isScreenShare) {
+                                                focusedDisplayItem.participant.hasScreenShare
+                                            } else {
+                                                focusedDisplayItem.participant.hasVideo
+                                            }
                                     if (hasTrack) {
                                         AndroidView(
                                             factory = { ctx -> VideoSurfaceView(ctx, focusedDisplayItem.trackSid!!) },
@@ -630,14 +637,15 @@ fun CallScreen(
                                     // Close/exit focus button (top-right)
                                     IconButton(
                                         onClick = { focusedItem = null },
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .size(36.dp)
-                                            .background(
-                                                Color.Black.copy(alpha = 0.5f),
-                                                CircleShape,
-                                            ),
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(8.dp)
+                                                .size(36.dp)
+                                                .background(
+                                                    Color.Black.copy(alpha = 0.5f),
+                                                    CircleShape,
+                                                ),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.Close,
@@ -733,14 +741,15 @@ fun CallScreen(
                                                             onClick = {
                                                                 focusedItem = FocusItem(item.participant.sid, item.source)
                                                             },
-                                                            modifier = Modifier
-                                                                .align(Alignment.TopEnd)
-                                                                .padding(4.dp)
-                                                                .size(32.dp)
-                                                                .background(
-                                                                    Color.Black.copy(alpha = 0.5f),
-                                                                    CircleShape,
-                                                                ),
+                                                            modifier =
+                                                                Modifier
+                                                                    .align(Alignment.TopEnd)
+                                                                    .padding(4.dp)
+                                                                    .size(32.dp)
+                                                                    .background(
+                                                                        Color.Black.copy(alpha = 0.5f),
+                                                                        CircleShape,
+                                                                    ),
                                                         ) {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.Fullscreen,
@@ -765,24 +774,26 @@ fun CallScreen(
 
                 // Persistent adaptive mode indicator (on top of everything)
                 Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    val (modeIcon, modeKey) = when (adaptiveMode) {
-                        uniffi.visio.AdaptiveMode.OFFICE -> "🏢" to "adaptive.office"
-                        uniffi.visio.AdaptiveMode.PEDESTRIAN -> "🚶" to "adaptive.pedestrian"
-                        uniffi.visio.AdaptiveMode.CAR -> "🚗" to "adaptive.car"
-                    }
+                    val (modeIcon, modeKey) =
+                        when (adaptiveMode) {
+                            uniffi.visio.AdaptiveMode.OFFICE -> "🏢" to "adaptive.office"
+                            uniffi.visio.AdaptiveMode.PEDESTRIAN -> "🚶" to "adaptive.pedestrian"
+                            uniffi.visio.AdaptiveMode.CAR -> "🚗" to "adaptive.car"
+                        }
                     Text(text = modeIcon, fontSize = 12.sp)
                     Text(
                         text = Strings.t(modeKey, lang),
                         color = Color.White,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
                     )
                 }
             }
@@ -1180,11 +1191,12 @@ private fun ControlBar(
 
             // Adaptive mode override
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .background(Color(0xCC000000), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(Color(0xCC000000), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Text(
                     text = Strings.t("adaptive.override", lang),
@@ -1197,12 +1209,13 @@ private fun ControlBar(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val modeOptions = listOf<Pair<AdaptiveMode?, String>>(
-                        null to Strings.t("adaptive.auto", lang),
-                        AdaptiveMode.OFFICE to Strings.t("adaptive.office", lang),
-                        AdaptiveMode.PEDESTRIAN to Strings.t("adaptive.pedestrian", lang),
-                        AdaptiveMode.CAR to Strings.t("adaptive.car", lang),
-                    )
+                    val modeOptions =
+                        listOf<Pair<AdaptiveMode?, String>>(
+                            null to Strings.t("adaptive.auto", lang),
+                            AdaptiveMode.OFFICE to Strings.t("adaptive.office", lang),
+                            AdaptiveMode.PEDESTRIAN to Strings.t("adaptive.pedestrian", lang),
+                            AdaptiveMode.CAR to Strings.t("adaptive.car", lang),
+                        )
                     modeOptions.forEach { (mode, label) ->
                         val isSelected = mode == adaptiveModeOverride
                         Text(
@@ -1210,16 +1223,17 @@ private fun ControlBar(
                             color = if (isSelected) Color.Black else VisioColors.White,
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier
-                                .background(
-                                    if (isSelected) VisioColors.Primary500 else VisioColors.PrimaryDark100,
-                                    RoundedCornerShape(16.dp),
-                                )
-                                .clickable {
-                                    adaptiveModeOverride = mode
-                                    onAdaptiveModeOverride(mode)
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier =
+                                Modifier
+                                    .background(
+                                        if (isSelected) VisioColors.Primary500 else VisioColors.PrimaryDark100,
+                                        RoundedCornerShape(16.dp),
+                                    )
+                                    .clickable {
+                                        adaptiveModeOverride = mode
+                                        onAdaptiveModeOverride(mode)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
                             maxLines = 1,
                         )
                     }
@@ -1454,11 +1468,12 @@ fun ParticipantTile(
         }
 
     // For screen share tiles, use screenShareTrackSid; for camera tiles, use videoTrackSid
-    val hasTrack = if (isScreenShare) {
-        participant.hasScreenShare && participant.screenShareTrackSid != null
-    } else {
-        participant.hasVideo && participant.videoTrackSid != null
-    }
+    val hasTrack =
+        if (isScreenShare) {
+            participant.hasScreenShare && participant.screenShareTrackSid != null
+        } else {
+            participant.hasVideo && participant.videoTrackSid != null
+        }
     val trackSid = if (isScreenShare) participant.screenShareTrackSid else participant.videoTrackSid
 
     Box(
@@ -1478,9 +1493,10 @@ fun ParticipantTile(
             )
         } else {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF1A1A2E)),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF1A1A2E)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(

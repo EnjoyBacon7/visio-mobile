@@ -5,8 +5,8 @@
 //! Also emits self-view frames through the visio-video desktop callback.
 
 use std::ffi::{c_char, c_void};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use livekit::webrtc::prelude::*;
 use livekit::webrtc::video_source::native::NativeVideoSource;
@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject};
-use objc2::{define_class, msg_send, ClassType};
+use objc2::{ClassType, define_class, msg_send};
 
 // ---------------------------------------------------------------------------
 // Video device enumeration
@@ -51,9 +51,8 @@ unsafe fn list_cameras_avfoundation() -> Vec<VideoDeviceInfo> {
     };
 
     // Get default device for comparison
-    let default_ptr: *mut AnyObject = unsafe {
-        msg_send![device_cls, defaultDeviceWithMediaType: AVMediaTypeVideo]
-    };
+    let default_ptr: *mut AnyObject =
+        unsafe { msg_send![device_cls, defaultDeviceWithMediaType: AVMediaTypeVideo] };
     let default_uid: Option<String> = if !default_ptr.is_null() {
         let uid_ns: *mut AnyObject = unsafe { msg_send![default_ptr, uniqueID] };
         if !uid_ns.is_null() {
@@ -268,8 +267,7 @@ fn process_camera_frame(sample_buffer: *const c_void) {
     for row in 0..h {
         let src_start = row * y_stride;
         let dst_start = row * strides.0 as usize;
-        let src_slice =
-            unsafe { std::slice::from_raw_parts(y_ptr.add(src_start), w) };
+        let src_slice = unsafe { std::slice::from_raw_parts(y_ptr.add(src_start), w) };
         y_dst[dst_start..dst_start + w].copy_from_slice(src_slice);
     }
 
@@ -277,9 +275,8 @@ fn process_camera_frame(sample_buffer: *const c_void) {
     let chroma_h = h / 2;
     let chroma_w = w / 2;
     for row in 0..chroma_h {
-        let src_row = unsafe {
-            std::slice::from_raw_parts(uv_ptr.add(row * uv_stride), chroma_w * 2)
-        };
+        let src_row =
+            unsafe { std::slice::from_raw_parts(uv_ptr.add(row * uv_stride), chroma_w * 2) };
         let dst_row_offset = row * strides.1 as usize;
         for col in 0..chroma_w {
             u_dst[dst_row_offset + col] = src_row[col * 2];
@@ -298,9 +295,14 @@ fn process_camera_frame(sample_buffer: *const c_void) {
     {
         let (y_data, u_data, v_data) = i420.data_mut();
         visio_ffi::blur::BlurProcessor::process_i420(
-            y_data, u_data, v_data,
-            w, h,
-            strides.0 as usize, strides.1 as usize, strides.2 as usize,
+            y_data,
+            u_data,
+            v_data,
+            w,
+            h,
+            strides.0 as usize,
+            strides.1 as usize,
+            strides.2 as usize,
             0, // Desktop camera frames have no rotation metadata
         );
     }
@@ -392,18 +394,16 @@ impl MacCameraCapture {
 
     unsafe fn start_avfoundation_with_uid(unique_id: &str) -> Result<Self, String> {
         // --- Create session ---
-        let session_cls = AnyClass::get(c"AVCaptureSession")
-            .ok_or("AVCaptureSession class not found")?;
+        let session_cls =
+            AnyClass::get(c"AVCaptureSession").ok_or("AVCaptureSession class not found")?;
         let session: Retained<AnyObject> = unsafe { msg_send![session_cls, new] };
 
         // Set session preset
-        let _: () = unsafe {
-            msg_send![&*session, setSessionPreset: AVCaptureSessionPresetHigh]
-        };
+        let _: () = unsafe { msg_send![&*session, setSessionPreset: AVCaptureSessionPresetHigh] };
 
         // --- Find camera device by uniqueID ---
-        let device_cls = AnyClass::get(c"AVCaptureDevice")
-            .ok_or("AVCaptureDevice class not found")?;
+        let device_cls =
+            AnyClass::get(c"AVCaptureDevice").ok_or("AVCaptureDevice class not found")?;
         let ns_cls = AnyClass::get(c"NSString").unwrap();
         let uid_ns: Retained<AnyObject> = unsafe {
             msg_send![
@@ -412,27 +412,27 @@ impl MacCameraCapture {
                     .map_err(|_| "invalid unique_id")?.as_ptr()
             ]
         };
-        let device_ptr: *mut AnyObject = unsafe {
-            msg_send![device_cls, deviceWithUniqueID: &*uid_ns]
-        };
+        let device_ptr: *mut AnyObject =
+            unsafe { msg_send![device_cls, deviceWithUniqueID: &*uid_ns] };
         if device_ptr.is_null() {
-            return Err(format!("No camera device found with unique_id: {unique_id}"));
+            return Err(format!(
+                "No camera device found with unique_id: {unique_id}"
+            ));
         }
-        let device = unsafe { Retained::retain(device_ptr) }
-            .ok_or("Failed to retain camera device")?;
+        let device =
+            unsafe { Retained::retain(device_ptr) }.ok_or("Failed to retain camera device")?;
 
         // --- Create device input ---
-        let input_cls = AnyClass::get(c"AVCaptureDeviceInput")
-            .ok_or("AVCaptureDeviceInput class not found")?;
+        let input_cls =
+            AnyClass::get(c"AVCaptureDeviceInput").ok_or("AVCaptureDeviceInput class not found")?;
         let mut error_ptr: *mut AnyObject = std::ptr::null_mut();
-        let input_ptr: *mut AnyObject = unsafe {
-            msg_send![input_cls, deviceInputWithDevice: &*device, error: &mut error_ptr]
-        };
+        let input_ptr: *mut AnyObject =
+            unsafe { msg_send![input_cls, deviceInputWithDevice: &*device, error: &mut error_ptr] };
         if input_ptr.is_null() {
             return Err("Failed to create camera input".into());
         }
-        let input = unsafe { Retained::retain(input_ptr) }
-            .ok_or("Failed to retain camera input")?;
+        let input =
+            unsafe { Retained::retain(input_ptr) }.ok_or("Failed to retain camera input")?;
 
         // --- Create video data output ---
         let output_cls = AnyClass::get(c"AVCaptureVideoDataOutput")
@@ -441,57 +441,40 @@ impl MacCameraCapture {
 
         // Force NV12 pixel format via videoSettings dictionary
         let nsnumber_cls = AnyClass::get(c"NSNumber").unwrap();
-        let format_num: Retained<AnyObject> = unsafe {
-            msg_send![nsnumber_cls, numberWithUnsignedInt: PIXEL_FORMAT_NV12]
-        };
+        let format_num: Retained<AnyObject> =
+            unsafe { msg_send![nsnumber_cls, numberWithUnsignedInt: PIXEL_FORMAT_NV12] };
 
         let key_bytes = c"PixelFormatType";
         let key_cls = AnyClass::get(c"NSString").unwrap();
-        let format_key: Retained<AnyObject> = unsafe {
-            msg_send![key_cls, stringWithUTF8String: key_bytes.as_ptr()]
-        };
+        let format_key: Retained<AnyObject> =
+            unsafe { msg_send![key_cls, stringWithUTF8String: key_bytes.as_ptr()] };
 
         let dict_cls = AnyClass::get(c"NSDictionary").unwrap();
         let video_settings: Retained<AnyObject> = unsafe {
             msg_send![dict_cls, dictionaryWithObject: &*format_num, forKey: &*format_key]
         };
-        let _: () = unsafe {
-            msg_send![&*output, setVideoSettings: &*video_settings]
-        };
+        let _: () = unsafe { msg_send![&*output, setVideoSettings: &*video_settings] };
 
         // Discard late frames
-        let _: () = unsafe {
-            msg_send![&*output, setAlwaysDiscardsLateVideoFrames: Bool::YES]
-        };
+        let _: () = unsafe { msg_send![&*output, setAlwaysDiscardsLateVideoFrames: Bool::YES] };
 
         // --- Create delegate and dispatch queue ---
-        let delegate: Retained<VisioCameraDelegate> = unsafe {
-            msg_send![VisioCameraDelegate::class(), new]
-        };
+        let delegate: Retained<VisioCameraDelegate> =
+            unsafe { msg_send![VisioCameraDelegate::class(), new] };
 
-        let queue = unsafe {
-            dispatch_queue_create(
-                c"io.visio.camera".as_ptr(),
-                std::ptr::null(),
-            )
-        };
+        let queue = unsafe { dispatch_queue_create(c"io.visio.camera".as_ptr(), std::ptr::null()) };
 
-        let _: () = unsafe {
-            msg_send![&*output, setSampleBufferDelegate: &*delegate, queue: queue]
-        };
+        let _: () =
+            unsafe { msg_send![&*output, setSampleBufferDelegate: &*delegate, queue: queue] };
 
         // --- Add input and output to session ---
-        let can_add_input: Bool = unsafe {
-            msg_send![&*session, canAddInput: &*input]
-        };
+        let can_add_input: Bool = unsafe { msg_send![&*session, canAddInput: &*input] };
         if !can_add_input.as_bool() {
             return Err("Cannot add camera input to session".into());
         }
         let _: () = unsafe { msg_send![&*session, addInput: &*input] };
 
-        let can_add_output: Bool = unsafe {
-            msg_send![&*session, canAddOutput: &*output]
-        };
+        let can_add_output: Bool = unsafe { msg_send![&*session, canAddOutput: &*output] };
         if !can_add_output.as_bool() {
             return Err("Cannot add video output to session".into());
         }
@@ -510,39 +493,35 @@ impl MacCameraCapture {
 
     unsafe fn start_avfoundation() -> Result<Self, String> {
         // --- Create session ---
-        let session_cls = AnyClass::get(c"AVCaptureSession")
-            .ok_or("AVCaptureSession class not found")?;
+        let session_cls =
+            AnyClass::get(c"AVCaptureSession").ok_or("AVCaptureSession class not found")?;
         let session: Retained<AnyObject> = unsafe { msg_send![session_cls, new] };
 
         // Set session preset
-        let _: () = unsafe {
-            msg_send![&*session, setSessionPreset: AVCaptureSessionPresetHigh]
-        };
+        let _: () = unsafe { msg_send![&*session, setSessionPreset: AVCaptureSessionPresetHigh] };
 
         // --- Find camera device ---
-        let device_cls = AnyClass::get(c"AVCaptureDevice")
-            .ok_or("AVCaptureDevice class not found")?;
-        let device_ptr: *mut AnyObject = unsafe {
-            msg_send![device_cls, defaultDeviceWithMediaType: AVMediaTypeVideo]
-        };
+        let device_cls =
+            AnyClass::get(c"AVCaptureDevice").ok_or("AVCaptureDevice class not found")?;
+        let device_ptr: *mut AnyObject =
+            unsafe { msg_send![device_cls, defaultDeviceWithMediaType: AVMediaTypeVideo] };
         if device_ptr.is_null() {
             return Err("No camera device found".into());
         }
-        let device = unsafe { Retained::retain(device_ptr) }
-            .ok_or("Failed to retain camera device")?;
+        let device =
+            unsafe { Retained::retain(device_ptr) }.ok_or("Failed to retain camera device")?;
 
         // --- Create device input ---
-        let input_cls = AnyClass::get(c"AVCaptureDeviceInput")
-            .ok_or("AVCaptureDeviceInput class not found")?;
+        let input_cls =
+            AnyClass::get(c"AVCaptureDeviceInput").ok_or("AVCaptureDeviceInput class not found")?;
         let mut error_ptr: *mut AnyObject = std::ptr::null_mut();
-        let input_ptr: *mut AnyObject = unsafe {
-            msg_send![input_cls, deviceInputWithDevice: &*device, error: &mut error_ptr]
-        };
+        let input_ptr: *mut AnyObject =
+            unsafe { msg_send![input_cls, deviceInputWithDevice: &*device, error: &mut error_ptr] };
         if input_ptr.is_null() {
             return Err("Failed to create camera input".into());
         }
-        let input = unsafe { Retained::retain(input_ptr) }
-            .ok_or("Failed to retain camera input")?;
+        let input =
+            unsafe { Retained::retain(input_ptr) }.ok_or("Failed to retain camera input")?;
 
         // --- Create video data output ---
         let output_cls = AnyClass::get(c"AVCaptureVideoDataOutput")
@@ -551,58 +530,41 @@ impl MacCameraCapture {
 
         // Force NV12 pixel format via videoSettings dictionary
         let nsnumber_cls = AnyClass::get(c"NSNumber").unwrap();
-        let format_num: Retained<AnyObject> = unsafe {
-            msg_send![nsnumber_cls, numberWithUnsignedInt: PIXEL_FORMAT_NV12]
-        };
+        let format_num: Retained<AnyObject> =
+            unsafe { msg_send![nsnumber_cls, numberWithUnsignedInt: PIXEL_FORMAT_NV12] };
 
         // kCVPixelBufferPixelFormatTypeKey = "PixelFormatType"
         let key_bytes = c"PixelFormatType";
         let key_cls = AnyClass::get(c"NSString").unwrap();
-        let format_key: Retained<AnyObject> = unsafe {
-            msg_send![key_cls, stringWithUTF8String: key_bytes.as_ptr()]
-        };
+        let format_key: Retained<AnyObject> =
+            unsafe { msg_send![key_cls, stringWithUTF8String: key_bytes.as_ptr()] };
 
         let dict_cls = AnyClass::get(c"NSDictionary").unwrap();
         let video_settings: Retained<AnyObject> = unsafe {
             msg_send![dict_cls, dictionaryWithObject: &*format_num, forKey: &*format_key]
         };
-        let _: () = unsafe {
-            msg_send![&*output, setVideoSettings: &*video_settings]
-        };
+        let _: () = unsafe { msg_send![&*output, setVideoSettings: &*video_settings] };
 
         // Discard late frames
-        let _: () = unsafe {
-            msg_send![&*output, setAlwaysDiscardsLateVideoFrames: Bool::YES]
-        };
+        let _: () = unsafe { msg_send![&*output, setAlwaysDiscardsLateVideoFrames: Bool::YES] };
 
         // --- Create delegate and dispatch queue ---
-        let delegate: Retained<VisioCameraDelegate> = unsafe {
-            msg_send![VisioCameraDelegate::class(), new]
-        };
+        let delegate: Retained<VisioCameraDelegate> =
+            unsafe { msg_send![VisioCameraDelegate::class(), new] };
 
-        let queue = unsafe {
-            dispatch_queue_create(
-                c"io.visio.camera".as_ptr(),
-                std::ptr::null(),
-            )
-        };
+        let queue = unsafe { dispatch_queue_create(c"io.visio.camera".as_ptr(), std::ptr::null()) };
 
-        let _: () = unsafe {
-            msg_send![&*output, setSampleBufferDelegate: &*delegate, queue: queue]
-        };
+        let _: () =
+            unsafe { msg_send![&*output, setSampleBufferDelegate: &*delegate, queue: queue] };
 
         // --- Add input and output to session ---
-        let can_add_input: Bool = unsafe {
-            msg_send![&*session, canAddInput: &*input]
-        };
+        let can_add_input: Bool = unsafe { msg_send![&*session, canAddInput: &*input] };
         if !can_add_input.as_bool() {
             return Err("Cannot add camera input to session".into());
         }
         let _: () = unsafe { msg_send![&*session, addInput: &*input] };
 
-        let can_add_output: Bool = unsafe {
-            msg_send![&*session, canAddOutput: &*output]
-        };
+        let can_add_output: Bool = unsafe { msg_send![&*session, canAddOutput: &*output] };
         if !can_add_output.as_bool() {
             return Err("Cannot add video output to session".into());
         }

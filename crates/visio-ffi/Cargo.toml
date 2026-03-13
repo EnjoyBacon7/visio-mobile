@@ -19,6 +19,11 @@ ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "n
 ndarray = "0.17"
 jpeg-decoder = "0.3"
 
+# On Linux, use load-dynamic to avoid duplicate protobuf symbols with webrtc-sys. Use api-18 for that.
+# download-binaries still needed for matching ort-sys headers.
+[target.'cfg(target_os = "linux")'.dependencies]
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "load-dynamic", "download-binaries", "api-18", "tls-native"] }
+
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 ndk-sys = "0.6"

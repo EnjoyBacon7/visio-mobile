@@ -3,8 +3,8 @@
 //! Lists available monitors and windows, captures frames at ~15 fps,
 //! converts RGBA->I420, and feeds into a LiveKit NativeVideoSource.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use image::DynamicImage;
@@ -179,7 +179,9 @@ fn rgba_to_i420(rgba: &[u8], width: u32, height: u32) -> I420Buffer {
 }
 
 /// Capture + convert on a blocking thread, return the I420 buffer.
-fn capture_and_convert(capturer: &(dyn Fn() -> Result<image::DynamicImage, String> + Send + Sync)) -> Result<(I420Buffer, u32, u32), String> {
+fn capture_and_convert(
+    capturer: &(dyn Fn() -> Result<image::DynamicImage, String> + Send + Sync),
+) -> Result<(I420Buffer, u32, u32), String> {
     let img = capturer()?;
     let rgba_img = img.to_rgba8();
     let width = rgba_img.width() & !1;

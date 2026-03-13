@@ -23,7 +23,9 @@ pub fn blur_plane(
     if width == 0 || height == 0 {
         return Vec::new();
     }
-    let r = radius.min(width.saturating_sub(1)).min(height.saturating_sub(1));
+    let r = radius
+        .min(width.saturating_sub(1))
+        .min(height.saturating_sub(1));
 
     let mut src = extract_plane(data, width, height, stride);
     let mut dst = vec![0u8; width * height];

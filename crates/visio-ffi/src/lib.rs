@@ -39,7 +39,9 @@ pub extern "C" fn Java_io_visio_mobile_VisioApplication_nativeInitWebrtc(
     // Get JavaVM from JNIEnv
     let env = unsafe { jni::JNIEnv::from_raw(env as *mut jni::sys::JNIEnv) }
         .expect("nativeInitWebrtc: invalid JNIEnv");
-    let jvm = env.get_java_vm().expect("nativeInitWebrtc: failed to get JavaVM");
+    let jvm = env
+        .get_java_vm()
+        .expect("nativeInitWebrtc: failed to get JavaVM");
 
     libwebrtc::android::initialize_android(&jvm);
 
@@ -56,10 +58,16 @@ fn visio_log(msg: &str) {
     {
         use std::ffi::CString;
         unsafe extern "C" {
-            fn __android_log_write(prio: i32, tag: *const std::ffi::c_char, text: *const std::ffi::c_char) -> i32;
+            fn __android_log_write(
+                prio: i32,
+                tag: *const std::ffi::c_char,
+                text: *const std::ffi::c_char,
+            ) -> i32;
         }
         let text = CString::new(msg).unwrap_or_else(|_| c"(invalid utf8)".into());
-        unsafe { __android_log_write(4 /* INFO */, c"VISIO_FFI".as_ptr(), text.as_ptr()); }
+        unsafe {
+            __android_log_write(4 /* INFO */, c"VISIO_FFI".as_ptr(), text.as_ptr());
+        }
     }
     #[cfg(target_os = "ios")]
     {
@@ -69,7 +77,9 @@ fn visio_log(msg: &str) {
             fn syslog(priority: i32, message: *const std::ffi::c_char, ...);
         }
         let text = CString::new(msg).unwrap_or_else(|_| c"(invalid utf8)".into());
-        unsafe { syslog(6 /* LOG_INFO */, text.as_ptr()); }
+        unsafe {
+            syslog(6 /* LOG_INFO */, text.as_ptr());
+        }
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     eprintln!("{msg}");
@@ -85,8 +95,11 @@ fn init_logging() {
     INIT.call_once(|| {
         tracing_subscriber::fmt()
             .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "visio_core=debug,visio_ffi=debug,visio_video=info".parse().unwrap()),
+                tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                    "visio_core=debug,visio_ffi=debug,visio_video=info"
+                        .parse()
+                        .unwrap()
+                }),
             )
             .with_ansi(false)
             .init();
@@ -413,24 +426,66 @@ impl From<visio_core::RoomAccess> for RoomAccess {
 
 #[derive(Debug, Clone)]
 pub enum VisioEvent {
-    ConnectionStateChanged { state: ConnectionState },
-    ParticipantJoined { info: ParticipantInfo },
-    ParticipantLeft { participant_sid: String },
-    TrackSubscribed { info: TrackInfo },
-    TrackUnsubscribed { track_sid: String },
-    TrackMuted { participant_sid: String, source: TrackSource },
-    TrackUnmuted { participant_sid: String, source: TrackSource },
-    ActiveSpeakersChanged { participant_sids: Vec<String> },
-    ConnectionQualityChanged { participant_sid: String, quality: ConnectionQuality },
-    ChatMessageReceived { message: ChatMessage },
-    HandRaisedChanged { participant_sid: String, raised: bool, position: u32 },
-    UnreadCountChanged { count: u32 },
-    LobbyParticipantJoined { id: String, username: String },
-    LobbyParticipantLeft { id: String },
+    ConnectionStateChanged {
+        state: ConnectionState,
+    },
+    ParticipantJoined {
+        info: ParticipantInfo,
+    },
+    ParticipantLeft {
+        participant_sid: String,
+    },
+    TrackSubscribed {
+        info: TrackInfo,
+    },
+    TrackUnsubscribed {
+        track_sid: String,
+    },
+    TrackMuted {
+        participant_sid: String,
+        source: TrackSource,
+    },
+    TrackUnmuted {
+        participant_sid: String,
+        source: TrackSource,
+    },
+    ActiveSpeakersChanged {
+        participant_sids: Vec<String>,
+    },
+    ConnectionQualityChanged {
+        participant_sid: String,
+        quality: ConnectionQuality,
+    },
+    ChatMessageReceived {
+        message: ChatMessage,
+    },
+    HandRaisedChanged {
+        participant_sid: String,
+        raised: bool,
+        position: u32,
+    },
+    UnreadCountChanged {
+        count: u32,
+    },
+    LobbyParticipantJoined {
+        id: String,
+        username: String,
+    },
+    LobbyParticipantLeft {
+        id: String,
+    },
     LobbyDenied,
-    ReactionReceived { participant_sid: String, participant_name: String, emoji: String },
-    AdaptiveModeChanged { mode: AdaptiveMode },
-    BandwidthModeChanged { mode: BandwidthMode },
+    ReactionReceived {
+        participant_sid: String,
+        participant_name: String,
+        emoji: String,
+    },
+    AdaptiveModeChanged {
+        mode: AdaptiveMode,
+    },
+    BandwidthModeChanged {
+        mode: BandwidthMode,
+    },
     ConnectionLost,
 }
 
@@ -440,49 +495,63 @@ impl From<CoreVisioEvent> for VisioEvent {
             CoreVisioEvent::ConnectionStateChanged(s) => {
                 Self::ConnectionStateChanged { state: s.into() }
             }
-            CoreVisioEvent::ParticipantJoined(p) => {
-                Self::ParticipantJoined { info: p.into() }
-            }
-            CoreVisioEvent::ParticipantLeft(sid) => {
-                Self::ParticipantLeft { participant_sid: sid }
-            }
-            CoreVisioEvent::TrackSubscribed(t) => {
-                Self::TrackSubscribed { info: t.into() }
-            }
-            CoreVisioEvent::TrackUnsubscribed(sid) => {
-                Self::TrackUnsubscribed { track_sid: sid }
-            }
-            CoreVisioEvent::TrackMuted { participant_sid, source } => {
-                Self::TrackMuted { participant_sid, source: source.into() }
-            }
-            CoreVisioEvent::TrackUnmuted { participant_sid, source } => {
-                Self::TrackUnmuted { participant_sid, source: source.into() }
-            }
-            CoreVisioEvent::ActiveSpeakersChanged(sids) => {
-                Self::ActiveSpeakersChanged { participant_sids: sids }
-            }
-            CoreVisioEvent::ConnectionQualityChanged { participant_sid, quality } => {
-                Self::ConnectionQualityChanged { participant_sid, quality: quality.into() }
-            }
+            CoreVisioEvent::ParticipantJoined(p) => Self::ParticipantJoined { info: p.into() },
+            CoreVisioEvent::ParticipantLeft(sid) => Self::ParticipantLeft {
+                participant_sid: sid,
+            },
+            CoreVisioEvent::TrackSubscribed(t) => Self::TrackSubscribed { info: t.into() },
+            CoreVisioEvent::TrackUnsubscribed(sid) => Self::TrackUnsubscribed { track_sid: sid },
+            CoreVisioEvent::TrackMuted {
+                participant_sid,
+                source,
+            } => Self::TrackMuted {
+                participant_sid,
+                source: source.into(),
+            },
+            CoreVisioEvent::TrackUnmuted {
+                participant_sid,
+                source,
+            } => Self::TrackUnmuted {
+                participant_sid,
+                source: source.into(),
+            },
+            CoreVisioEvent::ActiveSpeakersChanged(sids) => Self::ActiveSpeakersChanged {
+                participant_sids: sids,
+            },
+            CoreVisioEvent::ConnectionQualityChanged {
+                participant_sid,
+                quality,
+            } => Self::ConnectionQualityChanged {
+                participant_sid,
+                quality: quality.into(),
+            },
             CoreVisioEvent::ChatMessageReceived(m) => {
                 Self::ChatMessageReceived { message: m.into() }
             }
-            CoreVisioEvent::HandRaisedChanged { participant_sid, raised, position } => {
-                Self::HandRaisedChanged { participant_sid, raised, position }
-            }
-            CoreVisioEvent::UnreadCountChanged(count) => {
-                Self::UnreadCountChanged { count }
-            }
+            CoreVisioEvent::HandRaisedChanged {
+                participant_sid,
+                raised,
+                position,
+            } => Self::HandRaisedChanged {
+                participant_sid,
+                raised,
+                position,
+            },
+            CoreVisioEvent::UnreadCountChanged(count) => Self::UnreadCountChanged { count },
             CoreVisioEvent::LobbyParticipantJoined { id, username } => {
                 Self::LobbyParticipantJoined { id, username }
             }
-            CoreVisioEvent::LobbyParticipantLeft { id } => {
-                Self::LobbyParticipantLeft { id }
-            }
+            CoreVisioEvent::LobbyParticipantLeft { id } => Self::LobbyParticipantLeft { id },
             CoreVisioEvent::LobbyDenied => Self::LobbyDenied,
-            CoreVisioEvent::ReactionReceived { participant_sid, participant_name, emoji } => {
-                Self::ReactionReceived { participant_sid, participant_name, emoji }
-            }
+            CoreVisioEvent::ReactionReceived {
+                participant_sid,
+                participant_name,
+                emoji,
+            } => Self::ReactionReceived {
+                participant_sid,
+                participant_name,
+                emoji,
+            },
             CoreVisioEvent::AdaptiveModeChanged { mode } => {
                 Self::AdaptiveModeChanged { mode: mode.into() }
             }
@@ -521,7 +590,9 @@ impl From<visio_core::VisioError> for VisioError {
             visio_core::VisioError::Connection(msg) => Self::Connection { msg },
             visio_core::VisioError::Room(msg) => Self::Room { msg },
             visio_core::VisioError::Auth(msg) => Self::Auth { msg },
-            visio_core::VisioError::AuthRequired => Self::Auth { msg: "authentication required".to_string() },
+            visio_core::VisioError::AuthRequired => Self::Auth {
+                msg: "authentication required".to_string(),
+            },
             visio_core::VisioError::Http(msg) => Self::Http { msg },
             visio_core::VisioError::InvalidUrl(msg) => Self::InvalidUrl { msg },
             visio_core::VisioError::Session(msg) => Self::Session { msg },
@@ -675,7 +746,10 @@ impl VisioClient {
             session.cookie()
         };
 
-        visio_log(&format!("VISIO FFI: connect() cookie present={}", cookie.is_some()));
+        visio_log(&format!(
+            "VISIO FFI: connect() cookie present={}",
+            cookie.is_some()
+        ));
 
         // Wrap in catch_unwind to prevent panics from crossing FFI boundary (UB → SIGSEGV).
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -687,7 +761,10 @@ impl VisioClient {
                     .await
                     .map_err(VisioError::from)
             });
-            visio_log(&format!("VISIO FFI: block_on completed, success={}", res.is_ok()));
+            visio_log(&format!(
+                "VISIO FFI: block_on completed, success={}",
+                res.is_ok()
+            ));
             res
         }));
 
@@ -713,7 +790,9 @@ impl VisioClient {
                     "unknown panic".to_string()
                 };
                 visio_log(&format!("VISIO FFI: connect() PANIC caught: {msg}"));
-                Err(VisioError::Connection { msg: format!("panic in connect: {msg}") })
+                Err(VisioError::Connection {
+                    msg: format!("panic in connect: {msg}"),
+                })
             }
         }
     }
@@ -740,7 +819,9 @@ impl VisioClient {
     }
 
     pub fn connection_state(&self) -> ConnectionState {
-        self.rt.block_on(self.room_manager.connection_state()).into()
+        self.rt
+            .block_on(self.room_manager.connection_state())
+            .into()
     }
 
     pub fn participants(&self) -> Vec<ParticipantInfo> {
@@ -921,12 +1002,14 @@ impl VisioClient {
     }
 
     pub fn raise_hand(&self) -> Result<(), VisioError> {
-        self.rt.block_on(self.room_manager.raise_hand())
+        self.rt
+            .block_on(self.room_manager.raise_hand())
             .map_err(VisioError::from)
     }
 
     pub fn lower_hand(&self) -> Result<(), VisioError> {
-        self.rt.block_on(self.room_manager.lower_hand())
+        self.rt
+            .block_on(self.room_manager.lower_hand())
             .map_err(VisioError::from)
     }
 
@@ -935,7 +1018,8 @@ impl VisioClient {
     }
 
     pub fn send_reaction(&self, emoji: String) -> Result<(), VisioError> {
-        self.rt.block_on(self.room_manager.send_reaction(&emoji))
+        self.rt
+            .block_on(self.room_manager.send_reaction(&emoji))
             .map_err(VisioError::from)
     }
 
@@ -953,9 +1037,15 @@ impl VisioClient {
             session.cookie()
         };
         if let Err(e) = visio_core::AuthService::extract_slug(&url) {
-            return RoomValidationResult::InvalidFormat { message: e.to_string() };
+            return RoomValidationResult::InvalidFormat {
+                message: e.to_string(),
+            };
         }
-        match self.rt.block_on(visio_core::AuthService::validate_room(&url, username.as_deref(), cookie.as_deref())) {
+        match self.rt.block_on(visio_core::AuthService::validate_room(
+            &url,
+            username.as_deref(),
+            cookie.as_deref(),
+        )) {
             Ok(token_info) => RoomValidationResult::Valid {
                 livekit_url: token_info.livekit_url,
                 token: token_info.token,
@@ -963,15 +1053,18 @@ impl VisioClient {
             Err(visio_core::VisioError::Auth(msg)) if msg.contains("404") => {
                 RoomValidationResult::NotFound
             }
-            Err(e) => RoomValidationResult::NetworkError { message: e.to_string() },
+            Err(e) => RoomValidationResult::NetworkError {
+                message: e.to_string(),
+            },
         }
     }
 
     /// Set session cookie after OIDC flow, validate with backend
     pub fn authenticate(&self, meet_url: String, cookie: String) -> Result<(), VisioError> {
-        let user = self.rt.block_on(
-            visio_core::SessionManager::fetch_user(&meet_url, &cookie)
-        ).map_err(VisioError::from)?;
+        let user = self
+            .rt
+            .block_on(visio_core::SessionManager::fetch_user(&meet_url, &cookie))
+            .map_err(VisioError::from)?;
 
         let instance = meet_url
             .trim_end_matches('/')
@@ -1003,14 +1096,18 @@ impl VisioClient {
     /// Logout and clear session
     pub fn logout(&self, meet_url: String) -> Result<(), VisioError> {
         let mut session = self.session_manager.lock().unwrap();
-        self.rt.block_on(session.logout(&meet_url)).map_err(VisioError::from)?;
+        self.rt
+            .block_on(session.logout(&meet_url))
+            .map_err(VisioError::from)?;
         Ok(())
     }
 
     /// Validate existing session cookie (returns true if still valid)
     pub fn validate_session(&self, meet_url: String) -> Result<bool, VisioError> {
         let mut session = self.session_manager.lock().unwrap();
-        self.rt.block_on(session.validate_session(&meet_url)).map_err(VisioError::from)
+        self.rt
+            .block_on(session.validate_session(&meet_url))
+            .map_err(VisioError::from)
     }
 
     /// Create a new room via the Meet backend API
@@ -1022,8 +1119,8 @@ impl VisioClient {
     ) -> Result<CreateRoomResult, VisioError> {
         let cookie = {
             let session = self.session_manager.lock().unwrap();
-            session.cookie().ok_or_else(|| {
-                VisioError::Session { msg: "Not authenticated".to_string() }
+            session.cookie().ok_or_else(|| VisioError::Session {
+                msg: "Not authenticated".to_string(),
             })?
         };
 
@@ -1039,7 +1136,9 @@ impl VisioClient {
 
         let (livekit_url, livekit_token) = match result.livekit {
             Some(lk) => (
-                lk.url.replace("https://", "wss://").replace("http://", "ws://"),
+                lk.url
+                    .replace("https://", "wss://")
+                    .replace("http://", "ws://"),
                 lk.token,
             ),
             None => (String::new(), String::new()),
@@ -1081,19 +1180,25 @@ impl VisioClient {
     pub fn search_users(&self, query: String) -> Result<Vec<UserSearchResult>, VisioError> {
         let (cookie, meet_instance) = {
             let session = self.session_manager.lock().unwrap();
-            let cookie = session.cookie().ok_or_else(|| {
-                VisioError::Session { msg: "Not authenticated".to_string() }
+            let cookie = session.cookie().ok_or_else(|| VisioError::Session {
+                msg: "Not authenticated".to_string(),
             })?;
-            let instance = session.meet_instance().ok_or_else(|| {
-                VisioError::Session { msg: "No meet instance".to_string() }
-            })?.to_string();
+            let instance = session
+                .meet_instance()
+                .ok_or_else(|| VisioError::Session {
+                    msg: "No meet instance".to_string(),
+                })?
+                .to_string();
             (cookie, instance)
         };
         let meet_url = format!("https://{}/room", meet_instance);
 
-        let results = self.rt.block_on(
-            visio_core::AccessService::search_users(&meet_url, &cookie, &query)
-        ).map_err(VisioError::from)?;
+        let results = self
+            .rt
+            .block_on(visio_core::AccessService::search_users(
+                &meet_url, &cookie, &query,
+            ))
+            .map_err(VisioError::from)?;
 
         Ok(results.into_iter().map(|u| u.into()).collect())
     }
@@ -1101,19 +1206,25 @@ impl VisioClient {
     pub fn list_accesses(&self, room_id: String) -> Result<Vec<RoomAccess>, VisioError> {
         let (cookie, meet_instance) = {
             let session = self.session_manager.lock().unwrap();
-            let cookie = session.cookie().ok_or_else(|| {
-                VisioError::Session { msg: "Not authenticated".to_string() }
+            let cookie = session.cookie().ok_or_else(|| VisioError::Session {
+                msg: "Not authenticated".to_string(),
             })?;
-            let instance = session.meet_instance().ok_or_else(|| {
-                VisioError::Session { msg: "No meet instance".to_string() }
-            })?.to_string();
+            let instance = session
+                .meet_instance()
+                .ok_or_else(|| VisioError::Session {
+                    msg: "No meet instance".to_string(),
+                })?
+                .to_string();
             (cookie, instance)
         };
         let meet_url = format!("https://{}/room", meet_instance);
 
-        let results = self.rt.block_on(
-            visio_core::AccessService::list_accesses(&meet_url, &cookie, &room_id)
-        ).map_err(VisioError::from)?;
+        let results = self
+            .rt
+            .block_on(visio_core::AccessService::list_accesses(
+                &meet_url, &cookie, &room_id,
+            ))
+            .map_err(VisioError::from)?;
 
         Ok(results.into_iter().map(|a| a.into()).collect())
     }
@@ -1121,19 +1232,25 @@ impl VisioClient {
     pub fn add_access(&self, user_id: String, room_id: String) -> Result<RoomAccess, VisioError> {
         let (cookie, meet_instance) = {
             let session = self.session_manager.lock().unwrap();
-            let cookie = session.cookie().ok_or_else(|| {
-                VisioError::Session { msg: "Not authenticated".to_string() }
+            let cookie = session.cookie().ok_or_else(|| VisioError::Session {
+                msg: "Not authenticated".to_string(),
             })?;
-            let instance = session.meet_instance().ok_or_else(|| {
-                VisioError::Session { msg: "No meet instance".to_string() }
-            })?.to_string();
+            let instance = session
+                .meet_instance()
+                .ok_or_else(|| VisioError::Session {
+                    msg: "No meet instance".to_string(),
+                })?
+                .to_string();
             (cookie, instance)
         };
         let meet_url = format!("https://{}/room", meet_instance);
 
-        let result = self.rt.block_on(
-            visio_core::AccessService::add_access(&meet_url, &cookie, &user_id, &room_id)
-        ).map_err(VisioError::from)?;
+        let result = self
+            .rt
+            .block_on(visio_core::AccessService::add_access(
+                &meet_url, &cookie, &user_id, &room_id,
+            ))
+            .map_err(VisioError::from)?;
 
         Ok(result.into())
     }
@@ -1141,27 +1258,31 @@ impl VisioClient {
     pub fn remove_access(&self, access_id: String) -> Result<(), VisioError> {
         let (cookie, meet_instance) = {
             let session = self.session_manager.lock().unwrap();
-            let cookie = session.cookie().ok_or_else(|| {
-                VisioError::Session { msg: "Not authenticated".to_string() }
+            let cookie = session.cookie().ok_or_else(|| VisioError::Session {
+                msg: "Not authenticated".to_string(),
             })?;
-            let instance = session.meet_instance().ok_or_else(|| {
-                VisioError::Session { msg: "No meet instance".to_string() }
-            })?.to_string();
+            let instance = session
+                .meet_instance()
+                .ok_or_else(|| VisioError::Session {
+                    msg: "No meet instance".to_string(),
+                })?
+                .to_string();
             (cookie, instance)
         };
         let meet_url = format!("https://{}/room", meet_instance);
 
-        self.rt.block_on(
-            visio_core::AccessService::remove_access(&meet_url, &cookie, &access_id)
-        ).map_err(VisioError::from)?;
+        self.rt
+            .block_on(visio_core::AccessService::remove_access(
+                &meet_url, &cookie, &access_id,
+            ))
+            .map_err(VisioError::from)?;
 
         Ok(())
     }
 
     pub fn report_network_type(&self, network_type: NetworkType) {
-        self.room_manager.report_context_signal(
-            CoreContextSignal::NetworkType(network_type.into()),
-        );
+        self.room_manager
+            .report_context_signal(CoreContextSignal::NetworkType(network_type.into()));
     }
 
     pub fn report_motion_detected(&self, detected: bool) {
@@ -1184,17 +1305,28 @@ impl VisioClient {
     }
 
     pub fn start_video_renderer(&self, track_sid: String) {
-        let track = self.rt.block_on(self.room_manager.get_video_track(&track_sid));
+        let track = self
+            .rt
+            .block_on(self.room_manager.get_video_track(&track_sid));
         if let Some(video_track) = track {
-            visio_log(&format!("VISIO FFI: starting video renderer for {track_sid}"));
-            visio_video::start_track_renderer(track_sid, video_track, std::ptr::null_mut(), Some(self.rt.handle().clone()));
+            visio_log(&format!(
+                "VISIO FFI: starting video renderer for {track_sid}"
+            ));
+            visio_video::start_track_renderer(
+                track_sid,
+                video_track,
+                std::ptr::null_mut(),
+                Some(self.rt.handle().clone()),
+            );
         } else {
             visio_log(&format!("VISIO FFI: no video track found for {track_sid}"));
         }
     }
 
     pub fn stop_video_renderer(&self, track_sid: String) {
-        visio_log(&format!("VISIO FFI: stopping video renderer for {track_sid}"));
+        visio_log(&format!(
+            "VISIO FFI: stopping video renderer for {track_sid}"
+        ));
         visio_video::stop_track_renderer(&track_sid);
     }
 
@@ -1222,8 +1354,9 @@ impl VisioClient {
     }
 
     pub fn load_background_image(&self, id: u8, jpeg_path: String) -> Result<(), VisioError> {
-        let jpeg_bytes = std::fs::read(&jpeg_path)
-            .map_err(|e| VisioError::Generic { msg: format!("Failed to read image: {e}") })?;
+        let jpeg_bytes = std::fs::read(&jpeg_path).map_err(|e| VisioError::Generic {
+            msg: format!("Failed to read image: {e}"),
+        })?;
         // Use 640x480 as default target — will be re-loaded at actual frame dimensions if needed
         blur::BlurProcessor::load_replacement_image(id, &jpeg_bytes, 640, 480)
             .map_err(|e| VisioError::Generic { msg: e })
@@ -1238,11 +1371,11 @@ impl VisioClient {
 // ── Global camera video source (for Android Camera2 → Rust pipeline) ─
 
 #[cfg(target_os = "android")]
+use livekit::webrtc::audio_source::native::NativeAudioSource;
+#[cfg(target_os = "android")]
 use livekit::webrtc::prelude::*;
 #[cfg(target_os = "android")]
 use livekit::webrtc::video_source::native::NativeVideoSource;
-#[cfg(target_os = "android")]
-use livekit::webrtc::audio_source::native::NativeAudioSource;
 
 /// Stores the AudioPlayoutBuffer from RoomManager so the Android AudioPlayout
 /// Kotlin class can pull decoded remote audio via JNI.
@@ -1411,17 +1544,16 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePushCameraFrame(
     };
 
     // Get direct buffer addresses from ByteBuffer objects
-    let Ok(jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else { return };
+    let Ok(jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else {
+        return;
+    };
 
-    let y_ptr = unsafe {
-        jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(y_buf))
-    };
-    let u_ptr = unsafe {
-        jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(u_buf))
-    };
-    let v_ptr = unsafe {
-        jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(v_buf))
-    };
+    let y_ptr =
+        unsafe { jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(y_buf)) };
+    let u_ptr =
+        unsafe { jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(u_buf)) };
+    let v_ptr =
+        unsafe { jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(v_buf)) };
 
     let (Ok(y_ptr), Ok(u_ptr), Ok(v_ptr)) = (y_ptr, u_ptr, v_ptr) else {
         visio_log("VISIO FFI: failed to get direct buffer addresses from ByteBuffers");
@@ -1484,9 +1616,14 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePushCameraFrame(
         let strides = i420.strides();
         let (y_data, u_data, v_data) = i420.data_mut();
         blur::BlurProcessor::process_i420(
-            y_data, u_data, v_data,
-            w as usize, h as usize,
-            strides.0 as usize, strides.1 as usize, strides.2 as usize,
+            y_data,
+            u_data,
+            v_data,
+            w as usize,
+            h as usize,
+            strides.0 as usize,
+            strides.1 as usize,
+            strides.2 as usize,
             rotation_degrees as u32,
         );
     }
@@ -1566,11 +1703,15 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePushAudioFrame(
     let source = source.clone();
     drop(guard);
 
-    let Ok(jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else { return };
+    let Ok(jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else {
+        return;
+    };
     let ptr = unsafe {
         jni_env.get_direct_buffer_address(&jni::objects::JByteBuffer::from_raw(data_buf))
     };
-    let Ok(ptr) = ptr else { return; };
+    let Ok(ptr) = ptr else {
+        return;
+    };
 
     let sample_count = num_samples as usize;
     let pcm_data = unsafe { std::slice::from_raw_parts(ptr as *const i16, sample_count) };
@@ -1625,9 +1766,12 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePullAudioPlaybac
     let playout = playout.clone();
     drop(guard);
 
-    let Ok(mut jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else { return 0 };
+    let Ok(mut jni_env) = (unsafe { jni::JNIEnv::from_raw(env) }) else {
+        return 0;
+    };
 
-    let len = jni_env.get_array_length(&unsafe { jni::objects::JShortArray::from_raw(buffer) })
+    let len = jni_env
+        .get_array_length(&unsafe { jni::objects::JShortArray::from_raw(buffer) })
         .unwrap_or(0) as usize;
     if len == 0 {
         std::mem::forget(jni_env);
@@ -1652,13 +1796,16 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePullAudioPlaybac
 /// Stores the AudioPlayoutBuffer from RoomManager so the iOS AudioPlayout
 /// Swift class can pull decoded remote audio via C FFI.
 #[cfg(target_os = "ios")]
-static PLAYOUT_BUFFER_IOS: StdMutex<Option<Arc<visio_core::AudioPlayoutBuffer>>> = StdMutex::new(None);
+static PLAYOUT_BUFFER_IOS: StdMutex<Option<Arc<visio_core::AudioPlayoutBuffer>>> =
+    StdMutex::new(None);
 
 /// Stores the NativeVideoSource after `set_camera_enabled(true)` publishes
 /// the camera track. The iOS CameraCapture Swift class pushes I420 frames
 /// into this source via C FFI → `visio_push_ios_camera_frame()`.
 #[cfg(target_os = "ios")]
-static CAMERA_SOURCE_IOS: StdMutex<Option<livekit::webrtc::video_source::native::NativeVideoSource>> = StdMutex::new(None);
+static CAMERA_SOURCE_IOS: StdMutex<
+    Option<livekit::webrtc::video_source::native::NativeVideoSource>,
+> = StdMutex::new(None);
 
 /// Pull decoded remote audio samples from the playout buffer.
 ///
@@ -1672,7 +1819,9 @@ static CAMERA_SOURCE_IOS: StdMutex<Option<livekit::webrtc::video_source::native:
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn visio_pull_audio_playback(buffer: *mut i16, capacity: u32) -> i32 {
     let guard = PLAYOUT_BUFFER_IOS.lock().unwrap();
-    let Some(playout) = guard.as_ref() else { return 0 };
+    let Some(playout) = guard.as_ref() else {
+        return 0;
+    };
     let playout = playout.clone();
     drop(guard);
 
@@ -1687,10 +1836,14 @@ pub unsafe extern "C" fn visio_pull_audio_playback(buffer: *mut i16, capacity: u
 #[cfg(target_os = "ios")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn visio_push_ios_camera_frame(
-    y_ptr: *const u8, y_stride: u32,
-    u_ptr: *const u8, u_stride: u32,
-    v_ptr: *const u8, v_stride: u32,
-    width: u32, height: u32,
+    y_ptr: *const u8,
+    y_stride: u32,
+    u_ptr: *const u8,
+    u_stride: u32,
+    v_ptr: *const u8,
+    v_stride: u32,
+    width: u32,
+    height: u32,
 ) {
     use livekit::webrtc::prelude::*;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1704,10 +1857,13 @@ pub unsafe extern "C" fn visio_push_ios_camera_frame(
             None => {
                 let n = IOS_FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
                 if n % 30 == 0 {
-                    visio_log(&format!("visio_push_ios_camera_frame: no source (frame #{})", n));
+                    visio_log(&format!(
+                        "visio_push_ios_camera_frame: no source (frame #{})",
+                        n
+                    ));
                 }
                 return;
-            },
+            }
         }
     };
 
@@ -1735,13 +1891,15 @@ pub unsafe extern "C" fn visio_push_ios_camera_frame(
     }
     // Copy U plane
     for row in 0..chroma_h {
-        let src = unsafe { std::slice::from_raw_parts(u_ptr.add(row * u_stride as usize), chroma_w) };
+        let src =
+            unsafe { std::slice::from_raw_parts(u_ptr.add(row * u_stride as usize), chroma_w) };
         let dst_start = row * strides.1 as usize;
         u_dst[dst_start..dst_start + chroma_w].copy_from_slice(src);
     }
     // Copy V plane
     for row in 0..chroma_h {
-        let src = unsafe { std::slice::from_raw_parts(v_ptr.add(row * v_stride as usize), chroma_w) };
+        let src =
+            unsafe { std::slice::from_raw_parts(v_ptr.add(row * v_stride as usize), chroma_w) };
         let dst_start = row * strides.2 as usize;
         v_dst[dst_start..dst_start + chroma_w].copy_from_slice(src);
     }
@@ -1751,9 +1909,14 @@ pub unsafe extern "C" fn visio_push_ios_camera_frame(
         let strides = i420.strides();
         let (y_data, u_data, v_data) = i420.data_mut();
         blur::BlurProcessor::process_i420(
-            y_data, u_data, v_data,
-            width as usize, height as usize,
-            strides.0 as usize, strides.1 as usize, strides.2 as usize,
+            y_data,
+            u_data,
+            v_data,
+            width as usize,
+            height as usize,
+            strides.0 as usize,
+            strides.1 as usize,
+            strides.2 as usize,
             0, // iOS frames are pre-rotated by AVCaptureConnection
         );
     }
@@ -1808,7 +1971,12 @@ pub unsafe extern "C" fn visio_attach_video_surface(
         .block_on(client.room_manager.get_video_track(&sid_str));
     match track {
         Some(video_track) => {
-            visio_video::start_track_renderer(sid_str, video_track, surface, Some(client.rt.handle().clone()));
+            visio_video::start_track_renderer(
+                sid_str,
+                video_track,
+                surface,
+                Some(client.rt.handle().clone()),
+            );
             0
         }
         None => {
@@ -1825,9 +1993,7 @@ pub unsafe extern "C" fn visio_attach_video_surface(
 ///
 /// Returns 0 on success, -1 on invalid arguments.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn visio_detach_video_surface(
-    track_sid: *const std::ffi::c_char,
-) -> i32 {
+pub unsafe extern "C" fn visio_detach_video_surface(track_sid: *const std::ffi::c_char) -> i32 {
     if track_sid.is_null() {
         return -1;
     }
@@ -1869,9 +2035,8 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
 
     // Get ANativeWindow from Surface
     let surface = unsafe { JObject::from_raw(surface_obj) };
-    let native_window = unsafe {
-        ndk_sys::ANativeWindow_fromSurface(env as *mut _, surface.as_raw() as *mut _)
-    };
+    let native_window =
+        unsafe { ndk_sys::ANativeWindow_fromSurface(env as *mut _, surface.as_raw() as *mut _) };
     if native_window.is_null() {
         visio_log("VISIO JNI: ANativeWindow_fromSurface returned null");
         return;
@@ -1904,11 +2069,16 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
     let track = client
         .rt
         .block_on(client.room_manager.get_video_track(&track_sid));
-    visio_log(&format!("VISIO JNI: block_on done, track found={}", track.is_some()));
+    visio_log(&format!(
+        "VISIO JNI: block_on done, track found={}",
+        track.is_some()
+    ));
 
     match track {
         Some(video_track) => {
-            visio_log(&format!("VISIO JNI: calling start_track_renderer for {track_sid}"));
+            visio_log(&format!(
+                "VISIO JNI: calling start_track_renderer for {track_sid}"
+            ));
             // Transfer ownership — start_track_renderer/frame_loop holds the surface.
             visio_video::start_track_renderer(
                 track_sid.clone(),
@@ -1916,10 +2086,14 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
                 window_handle.into_raw() as *mut std::ffi::c_void,
                 Some(client.rt.handle().clone()),
             );
-            visio_log(&format!("VISIO JNI: start_track_renderer returned for {track_sid}"));
+            visio_log(&format!(
+                "VISIO JNI: start_track_renderer returned for {track_sid}"
+            ));
         }
         None => {
-            visio_log(&format!("VISIO JNI: track {track_sid} not in registry yet, storing as pending surface"));
+            visio_log(&format!(
+                "VISIO JNI: track {track_sid} not in registry yet, storing as pending surface"
+            ));
             pending::store(track_sid, window_handle.into_raw() as *mut std::ffi::c_void);
         }
     }
@@ -1955,7 +2129,9 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_detachSurface(
     // The old ANativeWindow is released automatically by the RAII wrapper when
     // attachSurface replaces it.  Final cleanup happens in disconnect().
     if track_sid == "local-camera" {
-        visio_log("VISIO JNI: detachSurface(local-camera) — skipped (surface replaced on next attach)");
+        visio_log(
+            "VISIO JNI: detachSurface(local-camera) — skipped (surface replaced on next attach)",
+        );
         return;
     }
 

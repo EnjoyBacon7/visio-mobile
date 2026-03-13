@@ -58,11 +58,7 @@ pub unsafe extern "C" fn visio_video_set_ios_callback(
 /// The Swift callback receives raw Y/U/V plane pointers and strides so it can
 /// create a CVPixelBuffer (or copy into one from a pool) and enqueue it on an
 /// AVSampleBufferDisplayLayer for GPU-accelerated YUV-to-RGB conversion.
-pub(crate) fn render_frame(
-    frame: &BoxVideoFrame,
-    _surface: *mut c_void,
-    track_sid: &str,
-) {
+pub(crate) fn render_frame(frame: &BoxVideoFrame, _surface: *mut c_void, track_sid: &str) {
     let Some(cb) = IOS_CALLBACK.get() else {
         return;
     };

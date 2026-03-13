@@ -2,7 +2,9 @@ use futures_util::StreamExt;
 use livekit::data_stream::StreamReader;
 use livekit::participant::ConnectionQuality as LkConnectionQuality;
 use livekit::prelude::{DataPacket, RemoteParticipant, Room, RoomEvent, RoomOptions};
-use livekit::track::{RemoteVideoTrack, TrackKind as LkTrackKind, TrackSource as LkTrackSource, VideoQuality};
+use livekit::track::{
+    RemoteVideoTrack, TrackKind as LkTrackKind, TrackSource as LkTrackSource, VideoQuality,
+};
 use livekit::webrtc::audio_stream::native::NativeAudioStream;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,9 +12,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::sync::Mutex;
 
 use crate::adaptive;
-use crate::bandwidth;
 use crate::audio_playout::AudioPlayoutBuffer;
 use crate::auth::AuthService;
+use crate::bandwidth;
 use crate::chat::MessageStore;
 use crate::errors::VisioError;
 use crate::events::{
@@ -90,7 +92,8 @@ impl RoomManager {
     /// degradation to always receive the highest quality video.
     /// Intended for desktop clients with reliable connectivity.
     pub fn set_high_quality_mode(&self, enabled: bool) {
-        self.high_quality_mode.store(enabled, std::sync::atomic::Ordering::Relaxed);
+        self.high_quality_mode
+            .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get a reference to the audio playout buffer.
@@ -140,7 +143,10 @@ impl RoomManager {
     }
 
     /// Report a context signal from the platform layer.
-    pub fn report_context_signal(&self, signal: adaptive::ContextSignal) -> Option<adaptive::AdaptiveMode> {
+    pub fn report_context_signal(
+        &self,
+        signal: adaptive::ContextSignal,
+    ) -> Option<adaptive::AdaptiveMode> {
         let mut engine = self.adaptive.lock().unwrap_or_else(|p| p.into_inner());
         let changed = engine.update_signal(signal);
         if let Some(mode) = changed {
@@ -162,7 +168,8 @@ impl RoomManager {
         engine.set_override(mode);
         let new = engine.current_mode();
         if new != old {
-            self.emitter.emit(VisioEvent::AdaptiveModeChanged { mode: new });
+            self.emitter
+                .emit(VisioEvent::AdaptiveModeChanged { mode: new });
         }
     }
 
@@ -294,7 +301,9 @@ impl RoomManager {
     ) -> Result<(), VisioError> {
         self.set_connection_state(ConnectionState::Connecting).await;
 
-        let high_quality = self.high_quality_mode.load(std::sync::atomic::Ordering::Relaxed);
+        let high_quality = self
+            .high_quality_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         let mut options = RoomOptions::default();
         options.auto_subscribe = true;
@@ -997,7 +1006,8 @@ impl RoomManager {
                             .insert(track_sid.clone(), video_track.clone());
                         tracing::info!(
                             "video track stored in registry: track_sid={}, source={:?}",
-                            track_sid, source
+                            track_sid,
+                            source
                         );
                     }
 
@@ -1175,7 +1185,8 @@ impl RoomManager {
                     // --- Bandwidth adaptation (only for local participant) ---
                     // Skip degradation in high-quality mode (desktop).
                     if !high_quality_mode.load(std::sync::atomic::Ordering::Relaxed) {
-                        let local_sid_opt = participants.lock().await.local_sid().map(|s| s.to_string());
+                        let local_sid_opt =
+                            participants.lock().await.local_sid().map(|s| s.to_string());
                         if local_sid_opt.as_deref() == Some(&psid) {
                             let new_mode = {
                                 let mut bw = bandwidth_ctrl.lock().unwrap();
@@ -1188,9 +1199,14 @@ impl RoomManager {
                                 // Apply video track changes
                                 if let Some(lk_room) = room_ref.lock().await.as_ref() {
                                     let remote_participants = lk_room.remote_participants();
-                                    let active = participants.lock().await.active_speakers().first().cloned();
+                                    let active = participants
+                                        .lock()
+                                        .await
+                                        .active_speakers()
+                                        .first()
+                                        .cloned();
 
-                                    for (_identity, rp) in &remote_participants {
+                                    for rp in remote_participants.values() {
                                         for (_sid, pub_) in rp.track_publications() {
                                             if pub_.kind() != LkTrackKind::Video {
                                                 continue;
@@ -1201,7 +1217,8 @@ impl RoomManager {
                                                     pub_.set_video_quality(VideoQuality::High);
                                                 }
                                                 bandwidth::BandwidthMode::ReducedVideo => {
-                                                    let is_active_speaker = active.as_deref() == Some(&rp.sid().to_string());
+                                                    let is_active_speaker = active.as_deref()
+                                                        == Some(&rp.sid().to_string());
                                                     pub_.set_enabled(is_active_speaker);
                                                     if is_active_speaker {
                                                         pub_.set_video_quality(VideoQuality::Low);

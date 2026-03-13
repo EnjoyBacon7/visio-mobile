@@ -5,7 +5,7 @@
 //! This crate bypasses UniFFI for zero-copy performance.
 
 use std::collections::HashMap;
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{CStr, c_char, c_void};
 use std::sync::{Mutex, OnceLock};
 
 use futures_util::StreamExt;
@@ -26,7 +26,13 @@ fn android_log(msg: &str) {
     use std::ffi::CString;
     let text = CString::new(msg).unwrap_or_else(|_| c"(invalid)".into());
     unsafe {
-        unsafe extern "C" { fn __android_log_write(prio: i32, tag: *const std::ffi::c_char, text: *const std::ffi::c_char) -> i32; }
+        unsafe extern "C" {
+            fn __android_log_write(
+                prio: i32,
+                tag: *const std::ffi::c_char,
+                text: *const std::ffi::c_char,
+            ) -> i32;
+        }
         __android_log_write(4, c"VISIO_VIDEO".as_ptr(), text.as_ptr());
     }
 }
@@ -157,16 +163,23 @@ async fn frame_loop(
     mut cancel_rx: watch::Receiver<bool>,
 ) {
     #[cfg(target_os = "android")]
-    android_log(&format!("VISIO VIDEO: frame_loop started for track={track_sid}, enabled={}, muted={}",
-        track.is_enabled(), track.is_muted()));
+    android_log(&format!(
+        "VISIO VIDEO: frame_loop started for track={track_sid}, enabled={}, muted={}",
+        track.is_enabled(),
+        track.is_muted()
+    ));
     tracing::info!(track_sid = %track_sid, "frame_loop started");
 
     let rtc_track = track.rtc_track();
     #[cfg(target_os = "android")]
-    android_log(&format!("VISIO VIDEO: creating NativeVideoStream for track={track_sid}"));
+    android_log(&format!(
+        "VISIO VIDEO: creating NativeVideoStream for track={track_sid}"
+    ));
     let mut stream = NativeVideoStream::new(rtc_track);
     #[cfg(target_os = "android")]
-    android_log(&format!("VISIO VIDEO: NativeVideoStream created, waiting for frames track={track_sid}"));
+    android_log(&format!(
+        "VISIO VIDEO: NativeVideoStream created, waiting for frames track={track_sid}"
+    ));
 
     #[cfg(target_os = "android")]
     let mut android_frame_count: u64 = 0;
@@ -291,9 +304,7 @@ pub unsafe extern "C" fn visio_video_attach_surface(
 ///
 /// Returns 0 on success, -1 on invalid arguments.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn visio_video_detach_surface(
-    track_sid: *const c_char,
-) -> i32 {
+pub unsafe extern "C" fn visio_video_detach_surface(track_sid: *const c_char) -> i32 {
     if track_sid.is_null() {
         return -1;
     }

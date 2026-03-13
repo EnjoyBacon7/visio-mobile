@@ -73,8 +73,7 @@ impl BlurProcessor {
     ) -> Result<(), String> {
         // Validate that the JPEG is decodable
         convert::jpeg_dimensions(jpeg_bytes)?;
-        *REPLACEMENT_JPEG.lock().map_err(|e| e.to_string())? =
-            Some((id, jpeg_bytes.to_vec()));
+        *REPLACEMENT_JPEG.lock().map_err(|e| e.to_string())? = Some((id, jpeg_bytes.to_vec()));
         // Invalidate cached I420 so it gets regenerated with correct dimensions/rotation
         *REPLACEMENT_CACHE.lock().map_err(|e| e.to_string())? = None;
         Ok(())
@@ -82,12 +81,7 @@ impl BlurProcessor {
 
     /// Generate (or return cached) I420 replacement image for the given frame
     /// dimensions and rotation.
-    fn get_replacement(
-        id: u8,
-        frame_w: usize,
-        frame_h: usize,
-        rotation: u32,
-    ) -> Option<()> {
+    fn get_replacement(id: u8, frame_w: usize, frame_h: usize, rotation: u32) -> Option<()> {
         // Check if cache is already valid
         {
             let cache = REPLACEMENT_CACHE.lock().ok()?;
@@ -161,9 +155,7 @@ impl BlurProcessor {
         let rgb = convert::i420_to_rgb(y, u, v, width, height, stride_y, stride_u, stride_v);
         let rgb_256 = convert::resize_rgb(&rgb, width, height, 256, 256);
 
-        let mask_result = model::with_session(|session| {
-            segment::segment(session, &rgb_256)
-        });
+        let mask_result = model::with_session(|session| segment::segment(session, &rgb_256));
 
         let mask_256 = match mask_result {
             Some(Ok(m)) => m,
@@ -227,7 +219,9 @@ impl BlurProcessor {
                 Self::get_replacement(id, width, height, rotation);
                 let cache = REPLACEMENT_CACHE.lock().unwrap();
                 let replacement = match cache.as_ref() {
-                    Some(r) if r.width == width && r.height == height && r.rotation == rotation => r,
+                    Some(r) if r.width == width && r.height == height && r.rotation == rotation => {
+                        r
+                    }
                     _ => return false,
                 };
 

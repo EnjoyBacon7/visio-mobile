@@ -7,9 +7,9 @@ use visio_core::{
     SettingsStore, TrackInfo, TrackKind, TrackSource, VisioEvent, VisioEventListener,
 };
 
+mod audio_cpal;
 #[cfg(target_os = "macos")]
 mod camera_macos;
-mod audio_cpal;
 mod screen_capture;
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,9 @@ unsafe extern "C" fn on_desktop_frame(
     let sid = unsafe { std::ffi::CStr::from_ptr(track_sid) };
     let Ok(sid_str) = sid.to_str() else { return };
     let b64 = unsafe { std::slice::from_raw_parts(data, data_len) };
-    let Ok(b64_str) = std::str::from_utf8(b64) else { return };
+    let Ok(b64_str) = std::str::from_utf8(b64) else {
+        return;
+    };
 
     let _ = app.emit(
         "video-frame",
@@ -330,7 +332,8 @@ async fn validate_room(
         let session = state.session.lock().await;
         session.cookie()
     };
-    match visio_core::AuthService::validate_room(&url, username.as_deref(), cookie.as_deref()).await {
+    match visio_core::AuthService::validate_room(&url, username.as_deref(), cookie.as_deref()).await
+    {
         Ok(token_info) => Ok(serde_json::json!({
             "status": "valid",
             "livekit_url": token_info.livekit_url,
@@ -430,19 +433,14 @@ async fn get_local_participant(
 }
 
 #[tauri::command]
-async fn get_video_tracks(
-    state: tauri::State<'_, VisioState>,
-) -> Result<Vec<String>, String> {
+async fn get_video_tracks(state: tauri::State<'_, VisioState>) -> Result<Vec<String>, String> {
     let room = state.room.lock().await;
     let sids = room.video_track_sids().await;
     Ok(sids)
 }
 
 #[tauri::command]
-async fn toggle_mic(
-    state: tauri::State<'_, VisioState>,
-    enabled: bool,
-) -> Result<(), String> {
+async fn toggle_mic(state: tauri::State<'_, VisioState>, enabled: bool) -> Result<(), String> {
     let controls = state.controls.lock().await;
     controls
         .set_microphone_enabled(enabled)
@@ -451,17 +449,27 @@ async fn toggle_mic(
 
     if enabled {
         // Start capture if not already running
-        let already_running = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+        let already_running = state
+            .audio_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some();
         if !already_running {
             if let Some(source) = controls.audio_source().await {
                 let capture = audio_cpal::CpalAudioCapture::start(source)
                     .map_err(|e| format!("audio capture: {e}"))?;
-                *state.audio_capture.lock().unwrap_or_else(|e| e.into_inner()) = Some(capture);
+                *state
+                    .audio_capture
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(capture);
             }
         }
     } else {
         // Stop capture
-        let mut cap = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cap = state
+            .audio_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(capture) = cap.take() {
             capture.stop();
         }
@@ -471,18 +479,12 @@ async fn toggle_mic(
 }
 
 #[tauri::command]
-async fn toggle_camera(
-    state: tauri::State<'_, VisioState>,
-    enabled: bool,
-) -> Result<(), String> {
+async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Result<(), String> {
     let controls = state.controls.lock().await;
     if enabled {
         // Publish camera track if not yet published
         if controls.video_source().await.is_none() {
-            let source = controls
-                .publish_camera()
-                .await
-                .map_err(|e| e.to_string())?;
+            let _source = controls.publish_camera().await.map_err(|e| e.to_string())?;
             tracing::info!("camera track published via toggle_camera");
 
             // Start native camera capture
@@ -490,7 +492,10 @@ async fn toggle_camera(
             {
                 let capture = camera_macos::MacCameraCapture::start(source)
                     .map_err(|e| format!("camera capture: {e}"))?;
-                let mut cam = state.camera_capture.lock().unwrap_or_else(|e| e.into_inner());
+                let mut cam = state
+                    .camera_capture
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 *cam = Some(capture);
             }
         }
@@ -498,7 +503,10 @@ async fn toggle_camera(
         // Stop camera capture when disabling
         #[cfg(target_os = "macos")]
         {
-            let mut cam = state.camera_capture.lock().unwrap_or_else(|e| e.into_inner());
+            let mut cam = state
+                .camera_capture
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(mut capture) = cam.take() {
                 capture.stop();
             }
@@ -548,10 +556,7 @@ async fn get_messages(
 }
 
 #[tauri::command]
-fn get_translations(
-    app: AppHandle,
-    lang: String,
-) -> Result<serde_json::Value, String> {
+fn get_translations(app: AppHandle, lang: String) -> Result<serde_json::Value, String> {
     let supported = ["en", "fr", "de", "es", "it", "nl"];
     let lang = if supported.contains(&lang.as_str()) {
         lang
@@ -571,8 +576,7 @@ fn get_translations(
         format!("i18n file not found: {lang}.json")
     })?;
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("invalid i18n JSON: {e}"))
+    serde_json::from_str(&content).map_err(|e| format!("invalid i18n JSON: {e}"))
 }
 
 #[tauri::command]
@@ -608,7 +612,10 @@ fn set_display_name(
         }
     }
     state.settings.set_display_name(name.clone());
-    let _ = app.emit("settings-changed", serde_json::json!({"display_name": name}));
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({"display_name": name}),
+    );
     Ok(())
 }
 
@@ -630,23 +637,21 @@ fn set_language(
 }
 
 #[tauri::command]
-fn set_mic_enabled_on_join(
-    app: AppHandle,
-    state: tauri::State<'_, VisioState>,
-    enabled: bool,
-) {
+fn set_mic_enabled_on_join(app: AppHandle, state: tauri::State<'_, VisioState>, enabled: bool) {
     state.settings.set_mic_enabled_on_join(enabled);
-    let _ = app.emit("settings-changed", serde_json::json!({"mic_enabled_on_join": enabled}));
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({"mic_enabled_on_join": enabled}),
+    );
 }
 
 #[tauri::command]
-fn set_camera_enabled_on_join(
-    app: AppHandle,
-    state: tauri::State<'_, VisioState>,
-    enabled: bool,
-) {
+fn set_camera_enabled_on_join(app: AppHandle, state: tauri::State<'_, VisioState>, enabled: bool) {
     state.settings.set_camera_enabled_on_join(enabled);
-    let _ = app.emit("settings-changed", serde_json::json!({"camera_enabled_on_join": enabled}));
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({"camera_enabled_on_join": enabled}),
+    );
 }
 
 #[tauri::command]
@@ -734,18 +739,22 @@ async fn start_screen_share(
     let capture = screen_capture::ScreenCapture::start(&source_id, source)
         .map_err(|e| format!("screen capture: {e}"))?;
 
-    let mut cap = state.screen_capture.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cap = state
+        .screen_capture
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     *cap = Some(capture);
 
     Ok(())
 }
 
 #[tauri::command]
-async fn stop_screen_share(
-    state: tauri::State<'_, VisioState>,
-) -> Result<(), String> {
+async fn stop_screen_share(state: tauri::State<'_, VisioState>) -> Result<(), String> {
     {
-        let mut cap = state.screen_capture.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cap = state
+            .screen_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(mut capture) = cap.take() {
             capture.stop();
         }
@@ -799,7 +808,10 @@ fn set_adaptive_mode_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     state.settings.set_adaptive_mode_enabled(enabled);
-    let _ = app.emit("settings-changed", serde_json::json!({"adaptive_mode_enabled": enabled}));
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({"adaptive_mode_enabled": enabled}),
+    );
     Ok(())
 }
 
@@ -850,7 +862,10 @@ async fn select_audio_input(
 
     // Stop existing capture
     {
-        let mut cap = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cap = state
+            .audio_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(capture) = cap.take() {
             capture.stop();
         }
@@ -861,7 +876,10 @@ async fn select_audio_input(
     if let Some(source) = controls.audio_source().await {
         let capture = audio_cpal::CpalAudioCapture::start_with_device(device, source)
             .map_err(|e| format!("audio capture: {e}"))?;
-        let mut cap = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cap = state
+            .audio_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *cap = Some(capture);
     }
 
@@ -876,12 +894,13 @@ fn select_audio_output(
     let device = audio_cpal::find_output_device(&device_name)
         .ok_or_else(|| format!("Audio output device not found: {device_name}"))?;
 
-    let new_playout = audio_cpal::CpalAudioPlayout::start_with_device(
-        device,
-        state.playout_buffer.clone(),
-    )?;
+    let new_playout =
+        audio_cpal::CpalAudioPlayout::start_with_device(device, state.playout_buffer.clone())?;
 
-    let mut playout = state.audio_playout.lock().unwrap_or_else(|e| e.into_inner());
+    let mut playout = state
+        .audio_playout
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     *playout = new_playout;
 
     Ok(())
@@ -894,12 +913,17 @@ async fn select_video_input(
     unique_id: String,
 ) -> Result<(), String> {
     let controls = state.controls.lock().await;
-    let source = controls.video_source().await
+    let source = controls
+        .video_source()
+        .await
         .ok_or("No video source — enable camera first")?;
 
     // Stop existing camera
     {
-        let mut cam = state.camera_capture.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cam = state
+            .camera_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(mut capture) = cam.take() {
             capture.stop();
         }
@@ -908,7 +932,10 @@ async fn select_video_input(
     // Start with selected camera
     let capture = camera_macos::MacCameraCapture::start_with_unique_id(&unique_id, source)
         .map_err(|e| format!("camera: {e}"))?;
-    let mut cam = state.camera_capture.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cam = state
+        .camera_capture
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     *cam = Some(capture);
 
     Ok(())
@@ -983,7 +1010,10 @@ async fn search_users(
 ) -> Result<serde_json::Value, String> {
     let session = state.session.lock().await;
     let cookie = session.cookie().ok_or("Not authenticated")?;
-    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    let meet_instance = session
+        .meet_instance()
+        .ok_or("No meet instance")?
+        .to_string();
     drop(session);
 
     let meet_url = format!("https://{}/room", meet_instance);
@@ -1001,7 +1031,10 @@ async fn list_accesses(
 ) -> Result<serde_json::Value, String> {
     let session = state.session.lock().await;
     let cookie = session.cookie().ok_or("Not authenticated")?;
-    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    let meet_instance = session
+        .meet_instance()
+        .ok_or("No meet instance")?
+        .to_string();
     drop(session);
 
     let meet_url = format!("https://{}/room", meet_instance);
@@ -1020,7 +1053,10 @@ async fn add_access(
 ) -> Result<serde_json::Value, String> {
     let session = state.session.lock().await;
     let cookie = session.cookie().ok_or("Not authenticated")?;
-    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    let meet_instance = session
+        .meet_instance()
+        .ok_or("No meet instance")?
+        .to_string();
     drop(session);
 
     let meet_url = format!("https://{}/room", meet_instance);
@@ -1038,7 +1074,10 @@ async fn remove_access(
 ) -> Result<(), String> {
     let session = state.session.lock().await;
     let cookie = session.cookie().ok_or("Not authenticated")?;
-    let meet_instance = session.meet_instance().ok_or("No meet instance")?.to_string();
+    let meet_instance = session
+        .meet_instance()
+        .ok_or("No meet instance")?
+        .to_string();
     drop(session);
 
     let meet_url = format!("https://{}/room", meet_instance);
@@ -1167,23 +1206,18 @@ async fn create_room(
     access_level: String,
 ) -> Result<serde_json::Value, String> {
     let session = state.session.lock().await;
-    let cookie = session
-        .cookie()
-        .ok_or("Not authenticated")?;
+    let cookie = session.cookie().ok_or("Not authenticated")?;
     drop(session);
 
-    let result = visio_core::SessionManager::create_room(
-        &meet_url,
-        &cookie,
-        &name,
-        &access_level,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let result = visio_core::SessionManager::create_room(&meet_url, &cookie, &name, &access_level)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let (livekit_url, livekit_token) = match result.livekit {
         Some(lk) => (
-            lk.url.replace("https://", "wss://").replace("http://", "ws://"),
+            lk.url
+                .replace("https://", "wss://")
+                .replace("http://", "ws://"),
             lk.token,
         ),
         None => (String::new(), String::new()),
@@ -1227,7 +1261,9 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "visio_core=info,visio_video=info,visio_desktop=info".parse().unwrap()
+                "visio_core=info,visio_video=info,visio_desktop=info"
+                    .parse()
+                    .unwrap()
             }),
         )
         .init();
@@ -1313,20 +1349,29 @@ pub fn run() {
                 let room = state.room.clone();
                 // Stop audio/camera capture before disconnect
                 {
-                    let mut cap = state.audio_capture.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut cap = state
+                        .audio_capture
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     if let Some(capture) = cap.take() {
                         capture.stop();
                     }
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    let mut cam = state.camera_capture.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut cam = state
+                        .camera_capture
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     if let Some(mut capture) = cam.take() {
                         capture.stop();
                     }
                 }
                 {
-                    let mut sc = state.screen_capture.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut sc = state
+                        .screen_capture
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     if let Some(mut capture) = sc.take() {
                         capture.stop();
                     }

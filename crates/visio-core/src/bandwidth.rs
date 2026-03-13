@@ -242,7 +242,8 @@ mod tests {
         ctrl.update_with_time(ConnectionQuality::Good, t_good);
 
         // Good at +6s (5s after first Good) — should restore.
-        let result = ctrl.update_with_time(ConnectionQuality::Good, t_good + Duration::from_secs(5));
+        let result =
+            ctrl.update_with_time(ConnectionQuality::Good, t_good + Duration::from_secs(5));
         assert_eq!(result, Some(BandwidthMode::Full));
         assert_eq!(ctrl.current_mode(), BandwidthMode::Full);
     }
@@ -304,7 +305,8 @@ mod tests {
         assert_eq!(result, None);
 
         // Excellent also returns None.
-        let result = ctrl.update_with_time(ConnectionQuality::Excellent, t0 + Duration::from_secs(1));
+        let result =
+            ctrl.update_with_time(ConnectionQuality::Excellent, t0 + Duration::from_secs(1));
         assert_eq!(result, None);
     }
 }

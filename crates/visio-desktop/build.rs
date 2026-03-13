@@ -9,7 +9,9 @@ fn main() {
             .and_then(|p| p.parent());
         if let Some(target_dir) = target_dir {
             for dir in ["i18n", "backgrounds", "models"] {
-                let _ = std::fs::remove_dir_all(target_dir.join(dir));
+                let path = target_dir.join(dir);
+                let _ = std::fs::remove_dir_all(&path);
+                let _ = std::fs::remove_file(&path);
             }
         }
     }

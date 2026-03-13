@@ -35,13 +35,7 @@ pub fn i420_to_rgb(
 }
 
 /// Resize RGB image to target dimensions using bilinear interpolation.
-pub fn resize_rgb(
-    src: &[u8],
-    src_w: usize,
-    src_h: usize,
-    dst_w: usize,
-    dst_h: usize,
-) -> Vec<u8> {
+pub fn resize_rgb(src: &[u8], src_w: usize, src_h: usize, dst_w: usize, dst_h: usize) -> Vec<u8> {
     let mut dst = vec![0u8; dst_w * dst_h * 3];
     let x_ratio = src_w as f32 / dst_w as f32;
     let y_ratio = src_h as f32 / dst_h as f32;

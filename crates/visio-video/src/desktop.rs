@@ -127,11 +127,7 @@ fn encode_and_deliver(
 }
 
 /// Render a single I420 frame by converting to JPEG and calling the callback.
-pub(crate) fn render_frame(
-    frame: &BoxVideoFrame,
-    _surface: *mut c_void,
-    track_sid: &str,
-) {
+pub(crate) fn render_frame(frame: &BoxVideoFrame, _surface: *mut c_void, track_sid: &str) {
     let buffer = &frame.buffer;
     let width = buffer.width();
     let height = buffer.height();
@@ -142,25 +138,20 @@ pub(crate) fn render_frame(
     let (stride_y, stride_u, stride_v) = i420.strides();
 
     encode_and_deliver(
-        y_data, stride_y, u_data, stride_u, v_data, stride_v,
-        width, height, track_sid,
+        y_data, stride_y, u_data, stride_u, v_data, stride_v, width, height, track_sid,
     );
 }
 
 /// Render a local I420 buffer (e.g. camera self-view) through the desktop callback.
 ///
 /// Called from visio-desktop's camera capture module to show self-view.
-pub fn render_local_i420(
-    i420: &livekit::webrtc::prelude::I420Buffer,
-    track_sid: &str,
-) {
+pub fn render_local_i420(i420: &livekit::webrtc::prelude::I420Buffer, track_sid: &str) {
     let width = i420.width();
     let height = i420.height();
     let (y_data, u_data, v_data) = i420.data();
     let (stride_y, stride_u, stride_v) = i420.strides();
 
     encode_and_deliver(
-        y_data, stride_y, u_data, stride_u, v_data, stride_v,
-        width, height, track_sid,
+        y_data, stride_y, u_data, stride_u, v_data, stride_v, width, height, track_sid,
     );
 }

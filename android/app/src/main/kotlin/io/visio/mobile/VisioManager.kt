@@ -123,7 +123,7 @@ object VisioManager : VisioEventListener {
     // Grace period: don't let CAR mode disable camera right after connection
     // (gives camera-on-join time to activate)
     private var connectionTimestampMs = 0L
-    private val CONNECTION_GRACE_MS = 5000L  // 5 seconds after connect
+    private val CONNECTION_GRACE_MS = 5000L // 5 seconds after connect
 
     // Track previous audio device to restore after car mode
     private var previousAudioDevice: AudioDeviceInfo? = null
@@ -321,10 +321,11 @@ object VisioManager : VisioEventListener {
     fun startAudioCapture() {
         if (audioCapture != null) return
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val btInput = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
+        val btInput =
+            am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
         if (btInput != null) {
             Log.i("VisioManager", "Bluetooth input detected at startup: ${btInput.productName}")
         }
@@ -355,11 +356,12 @@ object VisioManager : VisioEventListener {
                 acquire(4 * 60 * 60 * 1000L) // 4-hour timeout as safety net
             }
         // Detect Bluetooth output device at startup
-        val btOutput = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
+        val btOutput =
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
         if (btOutput != null) {
             Log.i("VisioManager", "Bluetooth output detected at startup: ${btOutput.productName}")
         }
@@ -444,10 +446,11 @@ object VisioManager : VisioEventListener {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Android 12+: use setCommunicationDevice
-            val btDevice = am.availableCommunicationDevices.firstOrNull { device ->
-                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-            }
+            val btDevice =
+                am.availableCommunicationDevices.firstOrNull { device ->
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                }
             if (btDevice != null) {
                 val success = am.setCommunicationDevice(btDevice)
                 Log.i("VisioManager", "setCommunicationDevice(${btDevice.productName}): $success")
@@ -468,15 +471,17 @@ object VisioManager : VisioEventListener {
         }
 
         // Also set preferred devices on audio tracks
-        val btOutput = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
-        val btInput = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
+        val btOutput =
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+        val btInput =
+            am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
         btOutput?.let {
             audioPlayout?.setPreferredDevice(it)
             Log.i("VisioManager", "Set preferred output: ${it.productName}")
@@ -510,45 +515,49 @@ object VisioManager : VisioEventListener {
      */
     private fun startAudioFocusMonitoring() {
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-            when (focusChange) {
-                AudioManager.AUDIOFOCUS_LOSS,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                    Log.i("VisioManager", "Audio focus lost (phone call?) — pausing audio")
-                    wasPlayingBeforeFocusLoss = audioPlayout != null
-                    stopAudioPlayout()
-                    stopAudioCapture()
-                }
-                AudioManager.AUDIOFOCUS_GAIN -> {
-                    Log.i("VisioManager", "Audio focus regained — resuming audio")
-                    if (wasPlayingBeforeFocusLoss && connectionState.value is ConnectionState.Connected) {
-                        scope.launch(Dispatchers.IO) {
-                            startAudioPlayout()
-                            if (client.isMicrophoneEnabled()) {
-                                startAudioCapture()
+        audioFocusListener =
+            AudioManager.OnAudioFocusChangeListener { focusChange ->
+                when (focusChange) {
+                    AudioManager.AUDIOFOCUS_LOSS,
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                    -> {
+                        Log.i("VisioManager", "Audio focus lost (phone call?) — pausing audio")
+                        wasPlayingBeforeFocusLoss = audioPlayout != null
+                        stopAudioPlayout()
+                        stopAudioCapture()
+                    }
+                    AudioManager.AUDIOFOCUS_GAIN -> {
+                        Log.i("VisioManager", "Audio focus regained — resuming audio")
+                        if (wasPlayingBeforeFocusLoss && connectionState.value is ConnectionState.Connected) {
+                            scope.launch(Dispatchers.IO) {
+                                startAudioPlayout()
+                                if (client.isMicrophoneEnabled()) {
+                                    startAudioCapture()
+                                }
                             }
                         }
+                        wasPlayingBeforeFocusLoss = false
                     }
-                    wasPlayingBeforeFocusLoss = false
                 }
             }
-        }
 
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+        val result =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request =
+                    android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(
+                            android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build(),
+                        )
+                        .setOnAudioFocusChangeListener(audioFocusListener!!)
                         .build()
-                )
-                .setOnAudioFocusChangeListener(audioFocusListener!!)
-                .build()
-            am.requestAudioFocus(request)
-        } else {
-            @Suppress("DEPRECATION")
-            am.requestAudioFocus(audioFocusListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN)
-        }
+                am.requestAudioFocus(request)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(audioFocusListener, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN)
+            }
         Log.i("VisioManager", "Audio focus requested: result=$result")
     }
 
@@ -559,9 +568,10 @@ object VisioManager : VisioEventListener {
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioFocusListener?.let { listener ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val request = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                    .setOnAudioFocusChangeListener(listener)
-                    .build()
+                val request =
+                    android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setOnAudioFocusChangeListener(listener)
+                        .build()
                 am.abandonAudioFocusRequest(request)
             } else {
                 @Suppress("DEPRECATION")
@@ -591,11 +601,12 @@ object VisioManager : VisioEventListener {
     fun onBluetoothAudioDeviceDisconnected() {
         if (_connectionState.value !is ConnectionState.Connected) return
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val remainingBtDevice = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-        }
+        val remainingBtDevice =
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
         if (remainingBtDevice != null) {
             // Another BT device still connected — route to it
             Log.i("VisioManager", "Switching audio to remaining BT device: ${remainingBtDevice.productName}")

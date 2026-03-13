@@ -67,11 +67,8 @@ pub fn render_i420_to_surface(
         }
 
         let mut native_buf = std::mem::MaybeUninit::<ndk_sys::ANativeWindow_Buffer>::uninit();
-        let lock_result = ndk_sys::ANativeWindow_lock(
-            window,
-            native_buf.as_mut_ptr(),
-            std::ptr::null_mut(),
-        );
+        let lock_result =
+            ndk_sys::ANativeWindow_lock(window, native_buf.as_mut_ptr(), std::ptr::null_mut());
         if lock_result != 0 {
             return;
         }
@@ -156,11 +153,7 @@ pub fn render_i420_to_surface(
 /// Render a single I420 frame to an ANativeWindow surface.
 /// Returns `false` if the surface is invalid (destroyed/released),
 /// signalling the caller to stop the frame loop.
-pub(crate) fn render_frame(
-    frame: &BoxVideoFrame,
-    surface: *mut c_void,
-    _track_sid: &str,
-) -> bool {
+pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_sid: &str) -> bool {
     let buffer = &frame.buffer;
     let width = buffer.width() as usize;
     let height = buffer.height() as usize;
@@ -201,11 +194,8 @@ pub(crate) fn render_frame(
 
         // Lock the surface buffer for writing.
         let mut native_buf = std::mem::MaybeUninit::<ndk_sys::ANativeWindow_Buffer>::uninit();
-        let lock_result = ndk_sys::ANativeWindow_lock(
-            window,
-            native_buf.as_mut_ptr(),
-            std::ptr::null_mut(),
-        );
+        let lock_result =
+            ndk_sys::ANativeWindow_lock(window, native_buf.as_mut_ptr(), std::ptr::null_mut());
         if lock_result != 0 {
             tracing::warn!("ANativeWindow_lock failed: {lock_result}");
             return false;
