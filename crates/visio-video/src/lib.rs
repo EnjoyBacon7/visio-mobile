@@ -117,6 +117,10 @@ pub fn start_track_renderer(
     surface: *mut c_void,
     rt_handle: Option<Handle>,
 ) {
+    tracing::info!(track_sid = %track_sid, "start_track_renderer called");
+    #[cfg(target_os = "android")]
+    android_log(&format!("VISIO VIDEO: start_track_renderer track={track_sid}"));
+
     // If there is already a renderer for this track, stop it first.
     stop_track_renderer(&track_sid);
 
@@ -141,6 +145,10 @@ pub fn start_track_renderer(
 
 /// Stop and remove the renderer for `track_sid`.
 pub fn stop_track_renderer(track_sid: &str) {
+    tracing::info!(track_sid = %track_sid, "stop_track_renderer called");
+    #[cfg(target_os = "android")]
+    android_log(&format!("VISIO VIDEO: stop_track_renderer track={track_sid}"));
+
     if let Some(renderer) = renderers()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -175,7 +183,7 @@ async fn frame_loop(
     android_log(&format!(
         "VISIO VIDEO: creating NativeVideoStream for track={track_sid}"
     ));
-    let mut stream = NativeVideoStream::new(rtc_track);
+    let mut stream = NativeVideoStream::new(rtc_track.clone());
     #[cfg(target_os = "android")]
     android_log(&format!(
         "VISIO VIDEO: NativeVideoStream created, waiting for frames track={track_sid}"
@@ -189,6 +197,13 @@ async fn frame_loop(
     // Desktop: only render every Nth frame to save CPU.
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     let mut frame_count: u64 = 0;
+
+    /// Maximum number of consecutive stream-ended retries before giving up.
+    /// This handles the case where a muted track's NativeVideoStream yields
+    /// None immediately — we re-create the stream and retry after a short
+    /// delay, giving the track time to resume producing frames after unmute.
+    const MAX_STREAM_RETRIES: u32 = 10;
+    let mut stream_retries: u32 = 0;
 
     loop {
         tokio::select! {
@@ -208,6 +223,9 @@ async fn frame_loop(
             frame_opt = stream.next() => {
                 match frame_opt {
                     Some(frame) => {
+                        // Reset retry counter on successful frame reception.
+                        stream_retries = 0;
+
                         // --- Android ---
                         #[cfg(target_os = "android")]
                         {
@@ -242,10 +260,42 @@ async fn frame_loop(
                         }
                     }
                     None => {
+                        stream_retries += 1;
                         #[cfg(target_os = "android")]
-                        android_log(&format!("VISIO VIDEO: stream ended (None) track={track_sid}, total frames={android_frame_count}"));
-                        tracing::info!(track_sid = %track_sid, "video stream ended");
-                        break;
+                        android_log(&format!(
+                            "VISIO VIDEO: stream yielded None track={track_sid}, retry {stream_retries}/{MAX_STREAM_RETRIES}"
+                        ));
+                        tracing::info!(
+                            track_sid = %track_sid,
+                            retry = stream_retries,
+                            max_retries = MAX_STREAM_RETRIES,
+                            "video stream yielded None, will retry with new NativeVideoStream"
+                        );
+
+                        if stream_retries > MAX_STREAM_RETRIES {
+                            #[cfg(target_os = "android")]
+                            android_log(&format!(
+                                "VISIO VIDEO: stream ended permanently track={track_sid} after {MAX_STREAM_RETRIES} retries"
+                            ));
+                            tracing::info!(track_sid = %track_sid, "video stream ended permanently after max retries");
+                            break;
+                        }
+
+                        // Wait before re-creating the stream — gives the track
+                        // time to resume producing frames after an unmute.
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                        // Re-create NativeVideoStream from the same rtc_track.
+                        // When a remote participant toggles their camera off and
+                        // back on, the old stream is exhausted but the track
+                        // object is still valid and will produce new frames once
+                        // unmuted.
+                        stream = NativeVideoStream::new(rtc_track.clone());
+                        #[cfg(target_os = "android")]
+                        android_log(&format!(
+                            "VISIO VIDEO: re-created NativeVideoStream track={track_sid}"
+                        ));
+                        tracing::info!(track_sid = %track_sid, "re-created NativeVideoStream after None");
                     }
                 }
             }

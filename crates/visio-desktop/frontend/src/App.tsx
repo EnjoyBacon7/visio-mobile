@@ -2300,6 +2300,19 @@ export default function App() {
             try { await invoke("send_chat", { text: msg.text }); } catch {}
           }, msg.delay);
         }
+
+        // Auto-toggle mic and camera for E2E test
+        const toggleSequence = [
+          { delay: 8000, action: async () => { await invoke("toggle_mic", { enabled: false }); } },
+          { delay: 13000, action: async () => { await invoke("toggle_mic", { enabled: true }); } },
+          { delay: 20000, action: async () => { await invoke("toggle_camera", { enabled: false }); } },
+          { delay: 25000, action: async () => { await invoke("toggle_camera", { enabled: true }); } },
+          { delay: 35000, action: async () => { await invoke("toggle_mic", { enabled: false }); } },
+          { delay: 38000, action: async () => { await invoke("toggle_mic", { enabled: true }); } },
+        ];
+        for (const t of toggleSequence) {
+          setTimeout(async () => { try { await t.action(); } catch {} }, t.delay);
+        }
       } catch (err) {
         console.error("Auto-connect failed:", err);
       }

@@ -370,6 +370,22 @@ fun CallScreen(
                     try { VisioManager.client.sendChatMessage("Android: All tracks received") } catch (_: Exception) {}
                 }
 
+                // Auto-toggle mic and camera for E2E test
+                coroutineScope.launch(Dispatchers.IO) {
+                    delay(8000)
+                    try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
+                    delay(5000)  // 13s total
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startAudioCapture() } catch (_: Exception) {}
+                    delay(7000)  // 20s total
+                    try { VisioManager.stopCameraCapture(); VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
+                    delay(5000)  // 25s total
+                    try { VisioManager.client.setCameraEnabled(true); VisioManager.startCameraCapture() } catch (_: Exception) {}
+                    delay(10000) // 35s total
+                    try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
+                    delay(3000)  // 38s total
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startAudioCapture() } catch (_: Exception) {}
+                }
+
                 return@withContext
             }
 

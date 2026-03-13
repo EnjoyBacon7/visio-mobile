@@ -1081,7 +1081,15 @@ impl RoomManager {
                     publication,
                 } => {
                     let psid = participant.sid().to_string();
+                    let track_sid = publication.sid().to_string();
                     let source = Self::lk_source_to_visio(publication.source());
+                    tracing::info!(
+                        participant_sid = %psid,
+                        track_sid = %track_sid,
+                        source = ?source,
+                        "TrackMuted: track still in subscribed_tracks={}",
+                        subscribed_tracks.lock().await.contains_key(&track_sid),
+                    );
 
                     let mut pm = participants.lock().await;
                     if let Some(p) = pm.participant_mut(&psid) {
@@ -1113,6 +1121,13 @@ impl RoomManager {
                     let psid = participant.sid().to_string();
                     let source = Self::lk_source_to_visio(publication.source());
                     let track_sid = publication.sid().to_string();
+                    tracing::info!(
+                        participant_sid = %psid,
+                        track_sid = %track_sid,
+                        source = ?source,
+                        "TrackUnmuted: track in subscribed_tracks={}",
+                        subscribed_tracks.lock().await.contains_key(&track_sid),
+                    );
 
                     let mut pm = participants.lock().await;
                     if let Some(p) = pm.participant_mut(&psid) {
