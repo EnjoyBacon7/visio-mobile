@@ -162,12 +162,61 @@ impl AudioStats {
     }
 }
 
+/// Tracks received video frame statistics for quality monitoring.
+struct VideoStats {
+    frames_received: AtomicU64,
+    start_time: std::sync::Mutex<Option<std::time::Instant>>,
+    max_gap_ms: AtomicU64,
+    last_frame_time: std::sync::Mutex<Option<std::time::Instant>>,
+}
+
+impl VideoStats {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            frames_received: AtomicU64::new(0),
+            start_time: std::sync::Mutex::new(None),
+            max_gap_ms: AtomicU64::new(0),
+            last_frame_time: std::sync::Mutex::new(None),
+        })
+    }
+
+    fn record_frame(&self) {
+        let now = std::time::Instant::now();
+        let count = self.frames_received.fetch_add(1, Ordering::Relaxed);
+        if count == 0 {
+            *self.start_time.lock().unwrap() = Some(now);
+        }
+        let mut last = self.last_frame_time.lock().unwrap();
+        if let Some(prev) = *last {
+            let gap = now.duration_since(prev).as_millis() as u64;
+            let cur_max = self.max_gap_ms.load(Ordering::Relaxed);
+            if gap > cur_max {
+                self.max_gap_ms.store(gap, Ordering::Relaxed);
+            }
+        }
+        *last = Some(now);
+    }
+
+    fn report(&self) -> String {
+        let total = self.frames_received.load(Ordering::Relaxed);
+        let max_gap = self.max_gap_ms.load(Ordering::Relaxed);
+        let duration_s = self.start_time.lock().unwrap()
+            .map(|t| t.elapsed().as_secs_f64())
+            .unwrap_or(0.0);
+        let avg_fps = if duration_s > 0.0 { total as f64 / duration_s } else { 0.0 };
+        format!(
+            "frames={total}, duration={duration_s:.1}s, avg_fps={avg_fps:.1}, max_gap={max_gap}ms"
+        )
+    }
+}
+
 /// Event logger that prints all received events and tracks subscription stats.
 struct BotEventLogger {
     tracks_subscribed: AtomicU64,
     tracks_unsubscribed: AtomicU64,
     participants_joined: AtomicU64,
     audio_track_sids: std::sync::Mutex<Vec<String>>,
+    video_track_sids: std::sync::Mutex<Vec<String>>,
 }
 
 impl BotEventLogger {
@@ -177,6 +226,7 @@ impl BotEventLogger {
             tracks_unsubscribed: AtomicU64::new(0),
             participants_joined: AtomicU64::new(0),
             audio_track_sids: std::sync::Mutex::new(Vec::new()),
+            video_track_sids: std::sync::Mutex::new(Vec::new()),
         })
     }
 }
@@ -203,6 +253,9 @@ impl VisioEventListener for BotEventLogger {
                 tracing::info!("[EVENT] TrackSubscribed: {:?} from {} (total: {count})", info.source, info.participant_sid);
                 if info.kind == TrackKind::Audio {
                     self.audio_track_sids.lock().unwrap().push(info.sid.clone());
+                }
+                if info.kind == TrackKind::Video {
+                    self.video_track_sids.lock().unwrap().push(info.sid.clone());
                 }
             }
             VisioEvent::TrackUnsubscribed(sid) => {
@@ -695,6 +748,46 @@ async fn main() {
         None
     };
 
+    // Monitor received video track subscriptions
+    let video_stats = if args.monitor_audio {
+        let stats = VideoStats::new();
+
+        tokio::spawn({
+            let stats = stats.clone();
+            async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    let report = stats.report();
+                    tracing::info!("[VIDEO QUALITY] {report}");
+                }
+            }
+        });
+
+        let video_sids = event_logger.video_track_sids.lock().unwrap().clone();
+        tracing::info!("[VIDEO MONITOR] Found {} remote video tracks", video_sids.len());
+
+        for sid in &video_sids {
+            if let Some(track) = rm.get_video_track(sid).await {
+                let rtc_track = track.rtc_track();
+                let stats_for_stream = stats.clone();
+                let sid_clone = sid.clone();
+                tokio::spawn(async move {
+                    use futures_util::StreamExt;
+                    let mut stream = livekit::webrtc::video_stream::native::NativeVideoStream::new(rtc_track);
+                    tracing::info!("[VIDEO MONITOR] Listening on track {sid_clone}");
+                    while let Some(_frame) = stream.next().await {
+                        stats_for_stream.record_frame();
+                    }
+                    tracing::info!("[VIDEO MONITOR] Stream ended for track {sid_clone}");
+                });
+            }
+        }
+
+        Some(stats)
+    } else {
+        None
+    };
+
     // Wait a bit for tracks to propagate
     tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -846,6 +939,21 @@ async fn main() {
             tracing::warn!("[AUDIO QUALITY] Large gap detected: {max_gap}ms — possible audio stutter");
         } else {
             tracing::info!("[AUDIO QUALITY] Audio quality OK");
+        }
+    }
+
+    // Final video quality report
+    if let Some(ref stats) = video_stats {
+        let report = stats.report();
+        tracing::info!("[VIDEO QUALITY FINAL] {report}");
+        let total = stats.frames_received.load(Ordering::Relaxed);
+        let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
+        if total == 0 {
+            tracing::warn!("[VIDEO QUALITY] NO video frames received");
+        } else if max_gap > 2000 {
+            tracing::warn!("[VIDEO QUALITY] Large gap detected: {max_gap}ms — possible video freeze");
+        } else {
+            tracing::info!("[VIDEO QUALITY] Video quality OK");
         }
     }
 
