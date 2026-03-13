@@ -1,0 +1,20 @@
+appId: io.visio.mobile
+tags:
+  - requires-call
+---
+# Assumes already in a call
+- tapOn:
+    id: "call_chat_button"
+- assertVisible:
+    id: "chat_message_input"
+- tapOn:
+    id: "chat_message_input"
+- inputText: "Hello from Maestro"
+- tapOn:
+    id: "chat_send_button"
+- assertVisible:
+    id: "chat_message_list"
+- tapOn:
+    id: "chat_back_button"
+- assertVisible:
+    id: "call_mic_button"

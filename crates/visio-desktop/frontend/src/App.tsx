@@ -511,7 +511,7 @@ function HomeView({
 
   return (
     <div id="home" className="section active">
-      <button className="settings-gear" onClick={onOpenSettings}>
+      <button className="settings-gear" onClick={onOpenSettings} data-testid="home-settings-button">
         <RiSettings3Line size={24} />
       </button>
       <div className="join-form">
@@ -539,7 +539,7 @@ function HomeView({
           </div>
         ) : (
           <div className="auth-status">
-            <button className="btn btn-primary" onClick={() => {
+            <button className="btn btn-primary" data-testid="home-connect-button" onClick={() => {
               if (meetInstances.length <= 1) {
                 if (meetInstances.length > 0) onLaunchOidc(meetInstances[0]);
               } else {
@@ -604,16 +604,17 @@ function HomeView({
             type="text"
             placeholder="abc-defg-hij"
             autoComplete="off"
+            data-testid="home-room-url-input"
             value={meetUrl}
             onChange={(e) => setMeetUrl(e.target.value)}
             onKeyDown={handleKeyDown}
           />
-          {roomStatus === "checking" && <div className="room-status checking">{t("home.room.checking")}</div>}
-          {roomStatus === "valid" && <div className="room-status valid">{t("home.room.valid")}</div>}
-          {roomStatus === "not_found" && <div className="room-status not-found">{t("home.room.notFound")}</div>}
-          {roomStatus === "auth_required" && <div className="room-status auth-required">{t("home.room.authRequired")}</div>}
-          {roomStatus === "authenticating" && <div className="room-status checking">{t("home.room.authenticating")}</div>}
-          {roomStatus === "error" && <div className="room-status error">{t("home.room.error")}</div>}
+          {roomStatus === "checking" && <div className="room-status checking" data-testid="home-room-status">{t("home.room.checking")}</div>}
+          {roomStatus === "valid" && <div className="room-status valid" data-testid="home-room-status">{t("home.room.valid")}</div>}
+          {roomStatus === "not_found" && <div className="room-status not-found" data-testid="home-room-status">{t("home.room.notFound")}</div>}
+          {roomStatus === "auth_required" && <div className="room-status auth-required" data-testid="home-room-status">{t("home.room.authRequired")}</div>}
+          {roomStatus === "authenticating" && <div className="room-status checking" data-testid="home-room-status">{t("home.room.authenticating")}</div>}
+          {roomStatus === "error" && <div className="room-status error" data-testid="home-room-status">{t("home.room.error")}</div>}
         </div>
         <div className="form-group">
           <label htmlFor="username">{t("home.displayName")}</label>
@@ -622,6 +623,7 @@ function HomeView({
             type="text"
             placeholder={t("home.displayName.placeholder")}
             autoComplete="off"
+            data-testid="home-display-name-input"
             value={displayName}
             onChange={(e) => onDisplayNameChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -632,7 +634,7 @@ function HomeView({
             {t("home.signIn")}
           </button>
         ) : (
-          <button className="btn btn-primary" disabled={joining || roomStatus !== "valid"} onClick={handleJoin}>
+          <button className="btn btn-primary" disabled={joining || roomStatus !== "valid"} onClick={handleJoin} data-testid="home-join-button">
             {joining ? t("home.connecting") : t("home.join")}
           </button>
         )}
@@ -641,6 +643,7 @@ function HomeView({
             className="btn btn-primary"
             style={{ marginTop: "8px", background: "var(--bg-tertiary)", color: "var(--text)" }}
             onClick={() => setShowCreateRoom(true)}
+            data-testid="home-create-room-button"
           >
             {t("home.createRoom")}
           </button>
@@ -1506,7 +1509,7 @@ function CallView({
               )}
             </div>
           ) : (
-            <div className={`video-grid video-grid-${gridCount}`}>
+            <div className={`video-grid video-grid-${gridCount}`} data-testid="call-participant-grid">
               {displayItems.length === 0 ? (
                 <div className="empty-state">{t("call.noParticipants")}</div>
               ) : (
@@ -1529,14 +1532,14 @@ function CallView({
 
         {/* Chat sidebar */}
         {showChat && (
-          <div className="chat-sidebar">
+          <div className="chat-sidebar" data-testid="call-chat-sidebar">
             <div className="chat-header">
               <span>{t("chat")}</span>
               <button className="chat-close" onClick={onToggleChat}>
                 <RiCloseLine size={20} />
               </button>
             </div>
-            <div className="chat-messages" ref={chatScrollRef}>
+            <div className="chat-messages" ref={chatScrollRef} data-testid="chat-message-list">
               {messages.length === 0 ? (
                 <div className="chat-empty">{t("chat.noMessages")}</div>
               ) : (
@@ -1561,6 +1564,7 @@ function CallView({
             <div className="chat-input-bar">
               <input
                 className="chat-input"
+                data-testid="chat-message-input"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
@@ -1568,6 +1572,7 @@ function CallView({
               />
               <button
                 className="chat-send"
+                data-testid="chat-send-button"
                 onClick={sendMessage}
                 disabled={!chatInput.trim()}
               >
@@ -1680,6 +1685,7 @@ function CallView({
           <button
             className={`overflow-item ${isHandRaised ? "overflow-item-active" : ""}`}
             onClick={() => { onToggleHandRaise(); setShowOverflow(false); }}
+            data-testid="call-hand-raise-button"
           >
             <RiHand size={20} />
             <span>{isHandRaised ? t("control.lowerHand") : t("control.raiseHand")}</span>
@@ -1741,6 +1747,7 @@ function CallView({
             onClick={onToggleMic}
             title={micEnabled ? t("control.mute") : t("control.unmute")}
             style={{ borderRadius: "8px 0 0 8px" }}
+            data-testid="call-mic-button"
           >
             {micEnabled ? <RiMicLine size={20} /> : <RiMicOffLine size={20} />}
           </button>
@@ -1761,6 +1768,7 @@ function CallView({
             onClick={onToggleCam}
             title={camEnabled ? t("control.camOff") : t("control.camOn")}
             style={{ borderRadius: "8px 0 0 8px" }}
+            data-testid="call-camera-button"
           >
             {camEnabled ? (
               <RiVideoOnLine size={20} />
@@ -1800,6 +1808,7 @@ function CallView({
             }
           }}
           title={isScreenSharing ? t("call.stopShare") : t("call.startShare")}
+          data-testid="call-screen-share-button"
         >
           <ScreenShareIcon size={20} />
         </button>
@@ -1809,6 +1818,7 @@ function CallView({
           className={`control-btn ${showParticipants ? "control-btn-hand" : ""}`}
           onClick={onToggleParticipants}
           title={t("control.participants")}
+          data-testid="call-participants-button"
         >
           <RiGroupLine size={20} />
           <span className="unread-badge" style={{ background: "var(--accent)" }}>
@@ -1821,6 +1831,7 @@ function CallView({
           className={`control-btn ${showChat ? "control-btn-hand" : ""}`}
           onClick={onToggleChat}
           title={t("chat")}
+          data-testid="call-chat-button"
         >
           <RiChat1Line size={20} />
           {unreadCount > 0 && (
@@ -1844,6 +1855,7 @@ function CallView({
           className="control-btn control-btn-hangup"
           onClick={onHangUp}
           title={t("control.leave")}
+          data-testid="call-hangup-button"
         >
           <RiPhoneFill size={20} />
         </button>
@@ -2027,7 +2039,7 @@ function SettingsModal({
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <span>{t("settings")}</span>
-          <button onClick={onClose}>
+          <button onClick={onClose} data-testid="settings-close-button">
             <RiCloseLine size={20} />
           </button>
         </div>
@@ -2036,6 +2048,7 @@ function SettingsModal({
             <label className="settings-label">{t("settings.displayName")}</label>
             <input
               className="settings-input"
+              data-testid="settings-display-name-input"
               value={form.displayName}
               onChange={(e) =>
                 setForm({ ...form, displayName: e.target.value })
@@ -2046,6 +2059,7 @@ function SettingsModal({
             <label className="settings-label">{t("settings.language")}</label>
             <select
               value={form.language}
+              data-testid="settings-language-select"
               onChange={(e) => {
                 const lang = e.target.value;
                 setForm({ ...form, language: lang });
@@ -2054,7 +2068,7 @@ function SettingsModal({
               }}
             >
               {SUPPORTED_LANGS.map((code) => (
-                <option key={code} value={code}>
+                <option key={code} value={code} data-testid={`settings-language-${code}`}>
                   {translations[code]["lang." + code]}
                 </option>
               ))}

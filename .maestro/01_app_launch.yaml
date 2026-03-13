@@ -1,0 +1,7 @@
+appId: io.visio.mobile
+---
+- launchApp
+- assertVisible:
+    id: "home_room_url_input"
+- assertVisible:
+    id: "home_settings_button"

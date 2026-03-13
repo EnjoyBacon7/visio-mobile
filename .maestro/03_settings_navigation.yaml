@@ -1,0 +1,15 @@
+appId: io.visio.mobile
+---
+- launchApp
+- tapOn:
+    id: "home_settings_button"
+- assertVisible:
+    id: "settings_display_name_input"
+- tapOn:
+    id: "settings_display_name_input"
+- clearInput
+- inputText: "E2E Tester"
+- tapOn:
+    id: "settings_back_button"
+- assertVisible:
+    id: "home_room_url_input"

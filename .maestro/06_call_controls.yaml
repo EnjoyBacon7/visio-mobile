@@ -1,0 +1,17 @@
+appId: io.visio.mobile
+tags:
+  - requires-call
+---
+# Assumes already in a call
+- tapOn:
+    id: "call_mic_button"
+- tapOn:
+    id: "call_mic_button"
+- tapOn:
+    id: "call_camera_button"
+- tapOn:
+    id: "call_camera_button"
+# Hand raise is in the overflow menu; open it first
+- tapOn:
+    id: "call_hand_raise_button"
+    optional: true

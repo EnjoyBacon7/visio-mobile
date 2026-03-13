@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -102,7 +103,7 @@ fun ChatScreen(onBack: () -> Unit) {
                 Text(Strings.t("chat", lang), color = MaterialTheme.colorScheme.onSurface)
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("chat_back_button")) {
                     Icon(
                         painter = painterResource(R.drawable.ri_arrow_left_s_line),
                         contentDescription = Strings.t("accessibility.back", lang),
@@ -122,7 +123,8 @@ fun ChatScreen(onBack: () -> Unit) {
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 12.dp)
+                    .testTag("chat_message_list"),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -168,7 +170,7 @@ fun ChatScreen(onBack: () -> Unit) {
                 placeholder = {
                     Text(Strings.t("chat.placeholder", lang), color = VisioColors.Greyscale400)
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("chat_message_input"),
                 singleLine = true,
                 colors =
                     TextFieldDefaults.colors(
@@ -195,6 +197,7 @@ fun ChatScreen(onBack: () -> Unit) {
                     }
                 },
                 enabled = inputText.isNotBlank(),
+                modifier = Modifier.testTag("chat_send_button"),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ri_send_plane_2_fill),

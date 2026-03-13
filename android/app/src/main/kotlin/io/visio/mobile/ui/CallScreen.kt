@@ -74,6 +74,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1095,7 +1096,8 @@ private fun ControlBar(
                                 .background(
                                     if (isHandRaised) VisioColors.HandRaise else VisioColors.PrimaryDark100,
                                     RoundedCornerShape(8.dp),
-                                ),
+                                )
+                                .testTag("call_hand_raise_button"),
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ri_hand),
@@ -1269,7 +1271,7 @@ private fun ControlBar(
             ) {
                 IconButton(
                     onClick = onToggleMic,
-                    modifier = Modifier.size(btnSize),
+                    modifier = Modifier.size(btnSize).testTag("call_mic_button"),
                 ) {
                     Icon(
                         painter =
@@ -1308,7 +1310,8 @@ private fun ControlBar(
                             .background(
                                 if (cameraEnabled) VisioColors.PrimaryDark100 else VisioColors.Error200,
                                 RoundedCornerShape(cornerRadius),
-                            ),
+                            )
+                            .testTag("call_camera_button"),
                 ) {
                     Icon(
                         painter =
@@ -1329,7 +1332,8 @@ private fun ControlBar(
                     modifier =
                         Modifier
                             .size(btnSize)
-                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius)),
+                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius))
+                            .testTag("call_participants_button"),
                 ) {
                     BadgedBox(
                         badge = {
@@ -1363,7 +1367,8 @@ private fun ControlBar(
                     modifier =
                         Modifier
                             .size(btnSize)
-                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius)),
+                            .background(VisioColors.PrimaryDark100, RoundedCornerShape(cornerRadius))
+                            .testTag("call_chat_button"),
                 ) {
                     BadgedBox(
                         badge = {
@@ -1422,7 +1427,8 @@ private fun ControlBar(
                 modifier =
                     Modifier
                         .size(btnSize)
-                        .background(VisioColors.Error500, RoundedCornerShape(cornerRadius)),
+                        .background(VisioColors.Error500, RoundedCornerShape(cornerRadius))
+                        .testTag("call_hangup_button"),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ri_phone_fill),

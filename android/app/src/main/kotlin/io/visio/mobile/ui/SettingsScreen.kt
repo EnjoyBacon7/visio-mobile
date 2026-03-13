@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -107,7 +108,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Text(Strings.t("settings", lang), color = MaterialTheme.colorScheme.onSurface)
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("settings_back_button")) {
                     Icon(
                         painter = painterResource(R.drawable.ri_arrow_left_s_line),
                         contentDescription = "Back",
@@ -146,7 +147,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                 },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("settings_display_name_input"),
                 colors =
                     TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -445,6 +446,7 @@ private fun LanguageDropdown(
                         onSelect(code)
                         expanded = false
                     },
+                    modifier = Modifier.testTag("settings_language_$code"),
                 )
             }
         }

@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -221,7 +222,7 @@ fun HomeScreen(
             }
             IconButton(
                 onClick = onSettings,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(48.dp).testTag("home_settings_button"),
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ri_settings_3_line),
@@ -262,7 +263,7 @@ fun HomeScreen(
                         showServerPicker = true
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("home_connect_button"),
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = VisioColors.Primary500,
@@ -321,7 +322,7 @@ fun HomeScreen(
                     autoCorrectEnabled = false,
                     capitalization = KeyboardCapitalization.None,
                 ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("home_room_url_input"),
             colors =
                 TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -382,7 +383,7 @@ fun HomeScreen(
                 )
             },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("home_display_name_input"),
             colors =
                 TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -403,7 +404,7 @@ fun HomeScreen(
         Button(
             onClick = { onJoin(resolvedRoomUrl, username.trim()) },
             enabled = roomStatus == "valid",
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("home_join_button"),
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor = VisioColors.Primary500,
@@ -424,7 +425,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { showCreateRoom = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("home_create_room_button"),
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text(
@@ -445,7 +446,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(8.dp))
-            roomHistory.forEach { url ->
+            roomHistory.forEachIndexed { index, url ->
                 val slug = if ('/' in url) url.substringAfterLast('/') else url
                 val host =
                     try {
@@ -457,6 +458,7 @@ fun HomeScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .testTag("home_room_history_item_$index")
                             .clickable {
                                 roomUrl = url
                             }
