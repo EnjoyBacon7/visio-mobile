@@ -14,6 +14,9 @@ ktlint {
 android {
     namespace = "io.visio.mobile"
     compileSdk = 35
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "io.visio.mobile"
