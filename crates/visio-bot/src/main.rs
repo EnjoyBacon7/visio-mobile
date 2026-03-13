@@ -911,6 +911,34 @@ async fn main() {
                 chat_msg_idx += 1;
                 last_chat_time = std::time::Instant::now();
             }
+
+            // Toggle screen share off for 20s to let desktop take over
+            if args.screen_share {
+                tracing::info!("[TOGGLE] Stopping screen share (letting desktop share)");
+                if let Err(e) = controls.stop_screen_share().await {
+                    tracing::warn!("[TOGGLE] Failed to stop screen share: {e}");
+                }
+
+                if let Err(e) = rm.chat().send_message("Screen share test: bot stopped sharing, desktop can take over").await {
+                    tracing::warn!("[CHAT] Failed to send screen share message: {e}");
+                }
+
+                if sleep_or_expire(start_time, total_duration, Duration::from_secs(20)).await {
+                    break;
+                }
+
+                tracing::info!("[TOGGLE] Resuming bot screen share");
+                match controls.publish_screen_share().await {
+                    Ok(source) => {
+                        if let Some(ref path) = args.media_file {
+                            spawn_file_video(source, path.clone(), args.loop_media);
+                        } else {
+                            spawn_synthetic_video(source);
+                        }
+                    }
+                    Err(e) => tracing::warn!("[TOGGLE] Failed to resume screen share: {e}"),
+                }
+            }
         }
 
         tracing::info!("Toggle cycling complete after {:.1}s", start_time.elapsed().as_secs_f64());
