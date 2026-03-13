@@ -16,3 +16,4 @@ tracing-subscriber = { workspace = true }
 livekit = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 livekit-api = { workspace = true }
 clap = { version = "4", features = ["derive"] }
+futures-util = { workspace = true }

@@ -231,6 +231,27 @@ impl RoomManager {
         self.participants.lock().await.active_speakers().to_vec()
     }
 
+    /// Get a subscribed remote audio track by its SID.
+    ///
+    /// Returns `None` if the track is not currently subscribed.
+    pub async fn get_audio_track(&self, track_sid: &str) -> Option<livekit::track::RemoteAudioTrack> {
+        let room = self.room.lock().await;
+        if let Some(lk_room) = room.as_ref() {
+            for (_, participant) in lk_room.remote_participants() {
+                for (sid, publication) in participant.track_publications() {
+                    if sid.as_str() == track_sid {
+                        if let Some(track) = publication.track() {
+                            if let livekit::track::RemoteTrack::Audio(audio_track) = track {
+                                return Some(audio_track);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Get a subscribed remote video track by its SID.
     ///
     /// Returns `None` if the track is not currently subscribed.

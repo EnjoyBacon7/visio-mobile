@@ -26,7 +26,7 @@ use std::time::Duration;
 use clap::Parser;
 use livekit::webrtc::prelude::*;
 use livekit::webrtc::video_source::native::NativeVideoSource;
-use visio_core::{ConnectionState, RoomManager, VisioEvent, VisioEventListener};
+use visio_core::{ConnectionState, RoomManager, TrackKind, VisioEvent, VisioEventListener};
 
 /// Visio E2E Bot — headless test participant.
 #[derive(Parser, Debug)]
@@ -115,7 +115,6 @@ struct Args {
 }
 
 /// Tracks received audio frame statistics for quality monitoring.
-#[allow(dead_code)]
 struct AudioStats {
     frames_received: AtomicU64,
     silent_frames: AtomicU64,
@@ -123,7 +122,6 @@ struct AudioStats {
     max_gap_ms: AtomicU64,
 }
 
-#[allow(dead_code)]
 impl AudioStats {
     fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -169,6 +167,7 @@ struct BotEventLogger {
     tracks_subscribed: AtomicU64,
     tracks_unsubscribed: AtomicU64,
     participants_joined: AtomicU64,
+    audio_track_sids: std::sync::Mutex<Vec<String>>,
 }
 
 impl BotEventLogger {
@@ -177,6 +176,7 @@ impl BotEventLogger {
             tracks_subscribed: AtomicU64::new(0),
             tracks_unsubscribed: AtomicU64::new(0),
             participants_joined: AtomicU64::new(0),
+            audio_track_sids: std::sync::Mutex::new(Vec::new()),
         })
     }
 }
@@ -201,6 +201,9 @@ impl VisioEventListener for BotEventLogger {
             VisioEvent::TrackSubscribed(info) => {
                 let count = self.tracks_subscribed.fetch_add(1, Ordering::Relaxed) + 1;
                 tracing::info!("[EVENT] TrackSubscribed: {:?} from {} (total: {count})", info.source, info.participant_sid);
+                if info.kind == TrackKind::Audio {
+                    self.audio_track_sids.lock().unwrap().push(info.sid.clone());
+                }
             }
             VisioEvent::TrackUnsubscribed(sid) => {
                 self.tracks_unsubscribed.fetch_add(1, Ordering::Relaxed);
@@ -647,15 +650,46 @@ async fn main() {
     // Monitor received audio/video track subscriptions
     let audio_stats = if args.monitor_audio {
         let stats = AudioStats::new();
-        let stats_clone = stats.clone();
+
         // Periodic reporting
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                let report = stats_clone.report();
-                tracing::info!("[AUDIO QUALITY] {report}");
+        tokio::spawn({
+            let stats = stats.clone();
+            async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    let report = stats.report();
+                    tracing::info!("[AUDIO QUALITY] {report}");
+                }
             }
         });
+
+        // Wait for track subscriptions
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        let audio_sids = event_logger.audio_track_sids.lock().unwrap().clone();
+        tracing::info!("[AUDIO MONITOR] Found {} remote audio tracks", audio_sids.len());
+
+        for sid in &audio_sids {
+            if let Some(track) = rm.get_audio_track(sid).await {
+                let rtc_track = track.rtc_track();
+                let stats_for_stream = stats.clone();
+                let sid_clone = sid.clone();
+                tokio::spawn(async move {
+                    use futures_util::StreamExt;
+                    let mut stream = livekit::webrtc::audio_stream::native::NativeAudioStream::new(
+                        rtc_track, 48_000, 1,
+                    );
+                    tracing::info!("[AUDIO MONITOR] Listening on track {sid_clone}");
+                    while let Some(frame) = stream.next().await {
+                        let is_silent = frame.data.iter().all(|&s| s.unsigned_abs() < 100);
+                        stats_for_stream.record_frame(is_silent);
+                    }
+                    tracing::info!("[AUDIO MONITOR] Stream ended for track {sid_clone}");
+                });
+            } else {
+                tracing::warn!("[AUDIO MONITOR] Could not find audio track {sid}");
+            }
+        }
+
         Some(stats)
     } else {
         None
