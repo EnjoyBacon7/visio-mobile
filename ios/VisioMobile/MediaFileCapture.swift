@@ -14,7 +14,7 @@ final class MediaFileCapture {
 
     private let sampleRate: Int = 48000
     private let numChannels: Int = 1
-    private let frameDurationMs: Int = 20
+    private let frameDurationMs: Int = 10
     private let videoFps: Double = 15.0
 
     init(filePath: String) {
@@ -29,10 +29,17 @@ final class MediaFileCapture {
             audioRunning = true
             NSLog("MediaFileCapture: audio start, file=%@", filePath)
 
-            let samplesPerFrame = sampleRate * frameDurationMs / 1000  // 960
+            let samplesPerFrame = sampleRate * frameDurationMs / 1000  // 480
 
             while audioRunning {
-                guard let (asset, reader, output) = createAudioReader() else {
+                guard let (asset, reader, output) = createReader(mediaType: .audio, outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: sampleRate,
+                    AVNumberOfChannelsKey: numChannels,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                ]) else {
                     NSLog("MediaFileCapture: failed to create audio reader, retrying in 1s")
                     Thread.sleep(forTimeInterval: 1.0)
                     continue
@@ -43,6 +50,7 @@ final class MediaFileCapture {
 
                 var buffer = [Int16](repeating: 0, count: samplesPerFrame)
                 var residual = [Int16]()
+                var residualOffset = 0
 
                 while audioRunning && reader.status == .reading {
                     guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
@@ -67,12 +75,13 @@ final class MediaFileCapture {
                     // Append decoded samples to residual buffer.
                     residual.append(contentsOf: UnsafeBufferPointer(start: samplesPtr, count: sampleCount))
 
-                    // Push complete 960-sample frames.
-                    while audioRunning && residual.count >= samplesPerFrame {
+                    // Push complete frames.
+                    let available = residual.count - residualOffset
+                    while audioRunning && available >= samplesPerFrame && (residual.count - residualOffset) >= samplesPerFrame {
                         for i in 0..<samplesPerFrame {
-                            buffer[i] = residual[i]
+                            buffer[i] = residual[residualOffset + i]
                         }
-                        residual.removeFirst(samplesPerFrame)
+                        residualOffset += samplesPerFrame
 
                         buffer.withUnsafeBufferPointer { ptr in
                             guard let base = ptr.baseAddress else { return }
@@ -85,6 +94,12 @@ final class MediaFileCapture {
                         }
 
                         Thread.sleep(forTimeInterval: Double(frameDurationMs) / 1000.0)
+                    }
+
+                    // Compact residual when offset grows large.
+                    if residualOffset > 4096 {
+                        residual.removeFirst(residualOffset)
+                        residualOffset = 0
                     }
                 }
 
@@ -112,8 +127,14 @@ final class MediaFileCapture {
 
             let frameDuration = 1.0 / videoFps
 
+            // Pre-allocate U/V plane buffers (resized if resolution changes).
+            var uPlane = [UInt8]()
+            var vPlane = [UInt8]()
+
             while videoRunning {
-                guard let (asset, reader, output) = createVideoReader() else {
+                guard let (asset, reader, output) = createReader(mediaType: .video, outputSettings: [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                ]) else {
                     NSLog("MediaFileCapture: failed to create video reader, retrying in 1s")
                     Thread.sleep(forTimeInterval: 1.0)
                     continue
@@ -129,7 +150,7 @@ final class MediaFileCapture {
                     guard let sampleBuffer = output.copyNextSampleBuffer() else { break }
                     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { continue }
 
-                    pushVideoFrame(pixelBuffer)
+                    pushNV12FrameToRust(pixelBuffer, uPlane: &uPlane, vPlane: &vPlane)
                     frameCount += 1
 
                     if frameCount % 30 == 1 {
@@ -162,114 +183,29 @@ final class MediaFileCapture {
 
     // MARK: - Private helpers
 
-    private func createAudioReader() -> (AVAsset, AVAssetReader, AVAssetReaderTrackOutput)? {
+    private func createReader(mediaType: AVMediaType, outputSettings: [String: Any]) -> (AVAsset, AVAssetReader, AVAssetReaderTrackOutput)? {
         let url = URL(fileURLWithPath: filePath)
         let asset = AVAsset(url: url)
 
-        guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
-            NSLog("MediaFileCapture: no audio track in %@", filePath)
+        guard let track = asset.tracks(withMediaType: mediaType).first else {
+            NSLog("MediaFileCapture: no %@ track in %@", mediaType.rawValue, filePath)
             return nil
         }
 
-        let outputSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: numChannels,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-        ]
-
-        let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: outputSettings)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
 
         guard let reader = try? AVAssetReader(asset: asset) else {
-            NSLog("MediaFileCapture: failed to create AVAssetReader for audio")
+            NSLog("MediaFileCapture: failed to create AVAssetReader for %@", mediaType.rawValue)
             return nil
         }
 
         if reader.canAdd(output) {
             reader.add(output)
         } else {
-            NSLog("MediaFileCapture: cannot add audio output to reader")
+            NSLog("MediaFileCapture: cannot add %@ output to reader", mediaType.rawValue)
             return nil
         }
 
         return (asset, reader, output)
-    }
-
-    private func createVideoReader() -> (AVAsset, AVAssetReader, AVAssetReaderTrackOutput)? {
-        let url = URL(fileURLWithPath: filePath)
-        let asset = AVAsset(url: url)
-
-        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
-            NSLog("MediaFileCapture: no video track in %@", filePath)
-            return nil
-        }
-
-        let outputSettings: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-        ]
-
-        let output = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: outputSettings)
-
-        guard let reader = try? AVAssetReader(asset: asset) else {
-            NSLog("MediaFileCapture: failed to create AVAssetReader for video")
-            return nil
-        }
-
-        if reader.canAdd(output) {
-            reader.add(output)
-        } else {
-            NSLog("MediaFileCapture: cannot add video output to reader")
-            return nil
-        }
-
-        return (asset, reader, output)
-    }
-
-    /// Convert NV12 pixel buffer to I420 and push via FFI.
-    private func pushVideoFrame(_ pixelBuffer: CVPixelBuffer) {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        let chromaW = width / 2
-        let chromaH = height / 2
-
-        guard let yBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
-              let uvBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else { return }
-
-        let yStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-
-        let yPtr = yBase.assumingMemoryBound(to: UInt8.self)
-        let uvPtr = uvBase.assumingMemoryBound(to: UInt8.self)
-
-        // De-interleave NV12 UV plane into separate U and V planes (I420).
-        var uPlane = [UInt8](repeating: 0, count: chromaW * chromaH)
-        var vPlane = [UInt8](repeating: 0, count: chromaW * chromaH)
-
-        for row in 0..<chromaH {
-            let uvRow = uvPtr.advanced(by: row * uvStride)
-            let dstOffset = row * chromaW
-            for col in 0..<chromaW {
-                uPlane[dstOffset + col] = uvRow[col * 2]
-                vPlane[dstOffset + col] = uvRow[col * 2 + 1]
-            }
-        }
-
-        uPlane.withUnsafeBufferPointer { uBuf in
-            vPlane.withUnsafeBufferPointer { vBuf in
-                guard let uBase = uBuf.baseAddress,
-                      let vBase = vBuf.baseAddress else { return }
-                visio_push_ios_camera_frame(
-                    yPtr, UInt32(yStride),
-                    uBase, UInt32(chromaW),
-                    vBase, UInt32(chromaW),
-                    UInt32(width), UInt32(height)
-                )
-            }
-        }
     }
 }

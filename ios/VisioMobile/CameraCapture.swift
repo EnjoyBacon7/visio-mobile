@@ -1,5 +1,4 @@
 import AVFoundation
-import visioFFI
 
 /// Captures camera frames via AVCaptureSession and pushes I420 data to Rust.
 ///
@@ -11,6 +10,8 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     private var frameCount: UInt64 = 0
     private var currentPosition: AVCaptureDevice.Position = .front
     private var currentInput: AVCaptureDeviceInput?
+    private var uPlane = [UInt8]()
+    private var vPlane = [UInt8]()
 
     func start() {
         // Configure and start on the camera queue (Apple warns against
@@ -132,55 +133,16 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        let chromaW = width / 2
-        let chromaH = height / 2
-
-        guard let yBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
-              let uvBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else { return }
-
-        let yStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-
-        let yPtr = yBase.assumingMemoryBound(to: UInt8.self)
-        let uvPtr = uvBase.assumingMemoryBound(to: UInt8.self)
-
         frameCount += 1
         if frameCount % 30 == 1 {
+            let width = CVPixelBufferGetWidth(pixelBuffer)
+            let height = CVPixelBufferGetHeight(pixelBuffer)
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
             NSLog("CameraCapture: frame #%llu, %dx%d, yStride=%d, uvStride=%d",
                   frameCount, width, height, yStride, uvStride)
         }
 
-        var uPlane = [UInt8](repeating: 0, count: chromaW * chromaH)
-        var vPlane = [UInt8](repeating: 0, count: chromaW * chromaH)
-
-        for row in 0..<chromaH {
-            let uvRow = uvPtr.advanced(by: row * uvStride)
-            let dstOffset = row * chromaW
-            for col in 0..<chromaW {
-                uPlane[dstOffset + col] = uvRow[col * 2]
-                vPlane[dstOffset + col] = uvRow[col * 2 + 1]
-            }
-        }
-
-        uPlane.withUnsafeBufferPointer { uBuf in
-            vPlane.withUnsafeBufferPointer { vBuf in
-                guard let uPtr = uBuf.baseAddress,
-                      let vPtr = vBuf.baseAddress else {
-                    NSLog("CameraCapture: nil buffer base address, skipping frame")
-                    return
-                }
-                visio_push_ios_camera_frame(
-                    yPtr, UInt32(yStride),
-                    uPtr, UInt32(chromaW),
-                    vPtr, UInt32(chromaW),
-                    UInt32(width), UInt32(height)
-                )
-            }
-        }
+        pushNV12FrameToRust(pixelBuffer, uPlane: &uPlane, vPlane: &vPlane)
     }
 }

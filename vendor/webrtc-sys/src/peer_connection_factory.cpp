@@ -133,9 +133,9 @@ RtpCapabilities PeerConnectionFactory::rtp_sender_capabilities(
   auto caps = peer_factory_->GetRtpSenderCapabilities(
       static_cast<webrtc::MediaType>(type));
   if (type == MediaType::Video) {
-    RTC_LOG(LS_INFO) << "VISIO rtp_sender_capabilities: " << caps.codecs.size() << " video codecs:";
+    RTC_LOG(LS_VERBOSE) << "rtp_sender_capabilities: " << caps.codecs.size() << " video codecs";
     for (const auto& codec : caps.codecs) {
-      RTC_LOG(LS_INFO) << "  VISIO codec: " << codec.mime_type();
+      RTC_LOG(LS_VERBOSE) << "  codec: " << codec.mime_type();
     }
   }
   return to_rust_rtp_capabilities(caps);
