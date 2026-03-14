@@ -14,6 +14,50 @@ final class AudioPlayout {
     private let sampleRate: Double = 48_000
     private let channelCount: AVAudioChannelCount = 1
 
+    init() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            print("AudioPlayout: interruption began, stopping engine")
+            engine.stop()
+        case .ended:
+            let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if options.contains(.shouldResume) {
+                print("AudioPlayout: interruption ended, restarting engine")
+                configureSession()
+                do {
+                    try engine.start()
+                    print("AudioPlayout: engine restarted after interruption")
+                } catch {
+                    print("AudioPlayout: failed to restart engine after interruption: \(error)")
+                }
+            } else {
+                print("AudioPlayout: interruption ended, shouldResume not set")
+            }
+        @unknown default:
+            break
+        }
+    }
+
     func start() {
         configureSession()
 

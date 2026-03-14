@@ -12,6 +12,8 @@ final class VideoFrameRouter {
 
     /// Registered views, keyed by track SID.
     private var views: [String: VideoDisplayView] = [:]
+    /// Buffered last sample buffer per track SID, so late-registering views get the latest frame.
+    private var lastBuffers: [String: CMSampleBuffer] = [:]
     private let lock = NSLock()
 
     private init() {}
@@ -19,12 +21,21 @@ final class VideoFrameRouter {
     func register(trackSid: String, view: VideoDisplayView) {
         lock.lock()
         views[trackSid] = view
+        let buffered = lastBuffers[trackSid]
         lock.unlock()
+
+        // If frames arrived before the view registered, deliver the last one immediately.
+        if let buffered {
+            DispatchQueue.main.async {
+                view.enqueueSampleBuffer(buffered)
+            }
+        }
     }
 
     func unregister(trackSid: String) {
         lock.lock()
         views.removeValue(forKey: trackSid)
+        lastBuffers.removeValue(forKey: trackSid)
         lock.unlock()
     }
 
@@ -36,12 +47,6 @@ final class VideoFrameRouter {
         vPtr: UnsafePointer<UInt8>, vStride: UInt32,
         trackSid: String
     ) {
-        lock.lock()
-        let view = views[trackSid]
-        lock.unlock()
-
-        guard let view else { return }
-
         // Create a bi-planar (NV12) CVPixelBuffer from I420 planes.
         // AVSampleBufferDisplayLayer prefers kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange.
         guard let pixelBuffer = createNV12PixelBuffer(
@@ -52,6 +57,15 @@ final class VideoFrameRouter {
         ) else { return }
 
         guard let sampleBuffer = createSampleBuffer(from: pixelBuffer) else { return }
+
+        // Buffer the latest frame so late-registering views can display immediately,
+        // and look up the view under the same lock to avoid races.
+        lock.lock()
+        lastBuffers[trackSid] = sampleBuffer
+        let view = views[trackSid]
+        lock.unlock()
+
+        guard let view else { return }
 
         DispatchQueue.main.async {
             view.enqueueSampleBuffer(sampleBuffer)

@@ -236,6 +236,8 @@ struct HomeView: View {
                 onCreated: { roomUrl in
                     showCreateRoom = false
                     roomURL = roomUrl
+                    resolvedRoomURL = roomUrl
+                    roomStatus = "valid"
                     navigateToCall = true
                 },
                 onCancel: { showCreateRoom = false }

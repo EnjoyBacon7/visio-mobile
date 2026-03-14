@@ -71,6 +71,7 @@ struct CallView: View {
     @State private var showOverflow: Bool = false
     @State private var showReactionPicker: Bool = false
     @State private var adaptiveModeOverride: AdaptiveMode? = nil
+    @State private var showAdaptiveModePicker: Bool = false
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -156,21 +157,70 @@ struct CallView: View {
                     // Reaction overlay
                     ReactionOverlay(reactions: manager.reactions)
 
-                    // Persistent adaptive mode indicator
+                    // Persistent adaptive mode indicator (tappable to override)
                     VStack {
                         HStack {
                             Spacer()
-                            HStack(spacing: 4) {
-                                Image(systemName: modeIcon(manager.adaptiveMode))
-                                Text(modeLabel(manager.adaptiveMode))
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showAdaptiveModePicker.toggle()
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: modeIcon(manager.adaptiveMode))
+                                        Text(modeLabel(manager.adaptiveMode))
+                                    }
+                                    .font(.caption2)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.black.opacity(0.5))
+                                    .cornerRadius(12)
+                                }
+                                .padding(8)
+
+                                if showAdaptiveModePicker {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(Strings.t("adaptive.override", lang: lang))
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(.white)
+                                        HStack(spacing: 6) {
+                                            let modeOptions: [(AdaptiveMode?, String)] = [
+                                                (nil, Strings.t("adaptive.auto", lang: lang)),
+                                                (.office, Strings.t("adaptive.office", lang: lang)),
+                                                (.pedestrian, Strings.t("adaptive.pedestrian", lang: lang)),
+                                                (.car, Strings.t("adaptive.car", lang: lang)),
+                                            ]
+                                            ForEach(Array(modeOptions.enumerated()), id: \.offset) { _, option in
+                                                let (mode, label) = option
+                                                let isSelected = mode == adaptiveModeOverride
+                                                Button {
+                                                    adaptiveModeOverride = mode
+                                                    manager.client.setAdaptiveModeOverride(mode: mode)
+                                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                                        showAdaptiveModePicker = false
+                                                    }
+                                                } label: {
+                                                    Text(label)
+                                                        .font(.system(size: 11, weight: isSelected ? .bold : .regular))
+                                                        .foregroundStyle(isSelected ? .black : .white)
+                                                        .padding(.horizontal, 8)
+                                                        .padding(.vertical, 5)
+                                                        .background(isSelected ? VisioColors.primary500 : VisioColors.primaryDark100)
+                                                        .clipShape(Capsule())
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(0.8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .padding(.trailing, 8)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing)))
+                                }
                             }
-                            .font(.caption2)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(12)
-                            .padding(8)
                         }
                         Spacer()
                     }

@@ -607,11 +607,13 @@ class VisioManager: ObservableObject {
         guard case .connected = connectionState else { return }
         cameraCapture?.stop()
         cameraCapture = nil
+        stopAudioPlayout()
     }
 
     func onAppForegrounded() {
         switch connectionState {
         case .connected:
+            startAudioPlayout()
             if isCameraEnabled {
                 let capture = CameraCapture()
                 capture.start()

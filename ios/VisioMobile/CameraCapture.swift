@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 
 /// Captures camera frames via AVCaptureSession and pushes I420 data to Rust.
 ///
@@ -10,6 +11,7 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     private var frameCount: UInt64 = 0
     private var currentPosition: AVCaptureDevice.Position = .front
     private var currentInput: AVCaptureDeviceInput?
+    private var videoOutput: AVCaptureVideoDataOutput?
     private var uPlane = [UInt8]()
     private var vPlane = [UInt8]()
 
@@ -69,10 +71,10 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
 
             if session.canAddOutput(output) {
                 session.addOutput(output)
-                // Set video orientation to portrait so frames match the device's natural orientation.
+                self.videoOutput = output
                 if let connection = output.connection(with: .video) {
                     if connection.isVideoOrientationSupported {
-                        connection.videoOrientation = .portrait
+                        connection.videoOrientation = Self.currentVideoOrientation()
                     }
                     if connection.isVideoMirroringSupported && device.position == .front {
                         connection.isVideoMirrored = true
@@ -83,6 +85,17 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             session.commitConfiguration()
             session.startRunning()
             NSLog("CameraCapture: session started, isRunning=%d", session.isRunning ? 1 : 0)
+
+            // Observe device orientation changes to update capture orientation.
+            DispatchQueue.main.async {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(self.orientationDidChange),
+                    name: UIDevice.orientationDidChangeNotification,
+                    object: nil
+                )
+            }
         }
     }
 
@@ -122,9 +135,38 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     }
 
     func stop() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        }
         queue.async { [self] in
             session.stopRunning()
             NSLog("CameraCapture: stopped (pushed %llu frames)", frameCount)
+        }
+    }
+
+    // MARK: - Orientation
+
+    /// Map current device orientation to AVCaptureVideoOrientation.
+    static func currentVideoOrientation() -> AVCaptureVideoOrientation {
+        switch UIDevice.current.orientation {
+        case .portrait:            return .portrait
+        case .portraitUpsideDown:  return .portraitUpsideDown
+        case .landscapeLeft:      return .landscapeRight  // UIKit and AVFoundation use opposite conventions
+        case .landscapeRight:     return .landscapeLeft
+        default:                  return .portrait
+        }
+    }
+
+    @objc private func orientationDidChange() {
+        queue.async { [self] in
+            guard let connection = videoOutput?.connection(with: .video),
+                  connection.isVideoOrientationSupported else { return }
+            let newOrientation = Self.currentVideoOrientation()
+            if connection.videoOrientation != newOrientation {
+                connection.videoOrientation = newOrientation
+                NSLog("CameraCapture: orientation updated to %d", newOrientation.rawValue)
+            }
         }
     }
 
