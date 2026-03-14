@@ -183,5 +183,8 @@
   "call.windows": "Finestre",
   "bandwidth.reducedVideo": "Banda bassa — video ridotto",
   "bandwidth.audioOnly": "Banda molto bassa — solo audio",
-  "home.recentRooms": "Stanze recenti"
+  "home.recentRooms": "Stanze recenti",
+  "participant.pin": "Fissa",
+  "participant.unpin": "Sblocca",
+  "participant.mute": "Silenzia"
 }

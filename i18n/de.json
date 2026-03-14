@@ -183,5 +183,8 @@
   "call.windows": "Fenster",
   "bandwidth.reducedVideo": "Geringe Bandbreite — reduziertes Video",
   "bandwidth.audioOnly": "Sehr geringe Bandbreite — nur Audio",
-  "home.recentRooms": "Letzte Räume"
+  "home.recentRooms": "Letzte Räume",
+  "participant.pin": "Anheften",
+  "participant.unpin": "Loslösen",
+  "participant.mute": "Stummschalten"
 }

@@ -562,6 +562,32 @@ impl RoomManager {
         Ok(())
     }
 
+    /// Request a specific participant to mute their microphone (admin action).
+    /// Sends a targeted data message only to that participant.
+    pub async fn mute_participant(&self, identity: &str) -> Result<(), VisioError> {
+        let room = self.room.lock().await;
+        let room = room
+            .as_ref()
+            .ok_or_else(|| VisioError::Room("not connected".into()))?;
+
+        let payload = serde_json::json!({ "type": "muteEveryone" });
+        let data = payload.to_string().into_bytes();
+        room.local_participant()
+            .publish_data(livekit::DataPacket {
+                payload: data,
+                topic: None,
+                reliable: true,
+                destination_identities: vec![
+                    livekit::id::ParticipantIdentity(identity.to_string()),
+                ],
+            })
+            .await
+            .map_err(|e| VisioError::Room(format!("mute participant: {e}")))?;
+
+        tracing::info!("mute request sent to participant {identity}");
+        Ok(())
+    }
+
     /// Set subscribe video quality for all remote video tracks.
     /// `quality` is "high", "medium", or "low".
     pub async fn set_subscribe_video_quality(&self, quality: &str) -> Result<(), VisioError> {

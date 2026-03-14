@@ -34,6 +34,9 @@ import {
   RiEmotionLine,
   RiFullscreenLine,
   RiFullscreenExitLine,
+  RiPushpinLine,
+  RiUnpinFill,
+  RiVolumeMuteLine,
 } from "@remixicon/react";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +55,7 @@ interface Participant {
   has_screen_share: boolean;
   screen_share_track_sid: string | null;
   connection_quality: string;
+  is_admin?: boolean;
 }
 
 type FocusItem = {
@@ -1329,6 +1333,7 @@ function CallView({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [reactions, setReactions] = useState<ReactionData[]>([]);
   const reactionIdCounter = useRef(0);
+  const [participantMenu, setParticipantMenu] = useState<string | null>(null);
 
   // Listen for reaction events
   useEffect(() => {
@@ -1420,6 +1425,9 @@ function CallView({
       if (!target.closest(".overflow-menu, .reaction-picker, .control-btn")) {
         setShowOverflow(false);
         setShowReactionPicker(false);
+      }
+      if (!target.closest(".participant-menu-wrapper")) {
+        setParticipantMenu(null);
       }
     };
     document.addEventListener("click", handleClickOutside);
@@ -1661,6 +1669,9 @@ function CallView({
               {allParticipants.map((p) => {
                 const name = p.name || p.identity || t("unknown");
                 const isLocal = localParticipant && p.sid === localParticipant.sid;
+                const isLocalAdmin = localParticipant?.is_admin;
+                const isPinned = focusedItem?.participantSid === p.sid;
+                const menuOpen = participantMenu === p.sid;
                 return (
                   <div key={p.sid} className="participant-row">
                     <div
@@ -1681,6 +1692,38 @@ function CallView({
                       ) : null}
                       {handRaisedMap[p.sid] > 0 && <RiHand size={14} style={{ color: "var(--hand-raise)" }} />}
                       <ConnectionQualityBars quality={p.connection_quality} />
+                      {!isLocal && (
+                        <div className="participant-menu-wrapper">
+                          <button
+                            className="participant-menu-btn"
+                            onClick={(e) => { e.stopPropagation(); setParticipantMenu(menuOpen ? null : p.sid); }}
+                          >
+                            <RiMore2Fill size={16} />
+                          </button>
+                          {menuOpen && (
+                            <div className="participant-context-menu" onClick={() => setParticipantMenu(null)}>
+                              <button className="context-menu-item" onClick={() => {
+                                if (isPinned) {
+                                  setFocusedItem(null);
+                                } else {
+                                  setFocusedItem({ participantSid: p.sid, source: "camera" });
+                                }
+                              }}>
+                                {isPinned ? <RiUnpinFill size={16} /> : <RiPushpinLine size={16} />}
+                                <span>{isPinned ? t("participant.unpin") : t("participant.pin")}</span>
+                              </button>
+                              {isLocalAdmin && !p.is_muted && (
+                                <button className="context-menu-item" onClick={async () => {
+                                  await invoke("mute_participant", { identity: p.identity });
+                                }}>
+                                  <RiVolumeMuteLine size={16} />
+                                  <span>{t("participant.mute")}</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

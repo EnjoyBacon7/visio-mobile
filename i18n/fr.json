@@ -183,5 +183,8 @@
   "call.windows": "Fenêtres",
   "bandwidth.reducedVideo": "Faible débit — vidéo réduite",
   "bandwidth.audioOnly": "Très faible débit — audio uniquement",
-  "home.recentRooms": "Salles récentes"
+  "home.recentRooms": "Salles récentes",
+  "participant.pin": "Épingler",
+  "participant.unpin": "Désépingler",
+  "participant.mute": "Couper le micro"
 }

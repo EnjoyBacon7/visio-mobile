@@ -183,5 +183,8 @@
   "call.windows": "Vensters",
   "bandwidth.reducedVideo": "Lage bandbreedte — verminderde video",
   "bandwidth.audioOnly": "Zeer lage bandbreedte — alleen audio",
-  "home.recentRooms": "Recente kamers"
+  "home.recentRooms": "Recente kamers",
+  "participant.pin": "Vastzetten",
+  "participant.unpin": "Losmaken",
+  "participant.mute": "Dempen"
 }

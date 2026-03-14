@@ -183,5 +183,8 @@
   "call.windows": "Windows",
   "bandwidth.reducedVideo": "Low bandwidth — reduced video",
   "bandwidth.audioOnly": "Very low bandwidth — audio only",
-  "home.recentRooms": "Recent rooms"
+  "home.recentRooms": "Recent rooms",
+  "participant.pin": "Pin",
+  "participant.unpin": "Unpin",
+  "participant.mute": "Mute"
 }

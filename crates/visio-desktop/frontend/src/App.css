@@ -1141,6 +1141,64 @@ main {
   50% { opacity: 0.6; transform: scale(1.15); }
 }
 
+.participant-menu-wrapper {
+  position: relative;
+}
+
+.participant-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.participant-row:hover .participant-menu-btn {
+  opacity: 1;
+}
+
+.participant-menu-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text);
+}
+
+.participant-context-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-tertiary);
+}
+
 /* -- Info / Transcription Sidebar ------------------------------------------ */
 
 .info-sidebar {

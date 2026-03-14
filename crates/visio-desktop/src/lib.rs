@@ -468,6 +468,7 @@ async fn get_participants(
                 "connection_quality": format!("{:?}", p.connection_quality),
                 "has_screen_share": p.has_screen_share,
                 "screen_share_track_sid": p.screen_share_track_sid,
+                "is_admin": p.is_admin,
             })
         })
         .collect();
@@ -491,6 +492,7 @@ async fn get_local_participant(
             "connection_quality": format!("{:?}", p.connection_quality),
             "has_screen_share": p.has_screen_share,
             "screen_share_track_sid": p.screen_share_track_sid,
+            "is_admin": p.is_admin,
         })
     }))
 }
@@ -826,6 +828,24 @@ async fn set_chat_open(state: tauri::State<'_, VisioState>, open: bool) -> Resul
 async fn send_reaction(state: tauri::State<'_, VisioState>, emoji: String) -> Result<(), String> {
     let room = state.room.lock().await;
     room.send_reaction(&emoji).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn lower_all_hands(state: tauri::State<'_, VisioState>) -> Result<(), String> {
+    let room = state.room.lock().await;
+    room.lower_all_hands().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn mute_everyone(state: tauri::State<'_, VisioState>) -> Result<(), String> {
+    let room = state.room.lock().await;
+    room.mute_everyone().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn mute_participant(state: tauri::State<'_, VisioState>, identity: String) -> Result<(), String> {
+    let room = state.room.lock().await;
+    room.mute_participant(&identity).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1649,6 +1669,9 @@ pub fn run() {
             create_room,
             get_session_state,
             send_reaction,
+            lower_all_hands,
+            mute_everyone,
+            mute_participant,
             list_screen_sources,
             start_screen_share,
             stop_screen_share,
