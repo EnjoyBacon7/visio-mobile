@@ -90,11 +90,12 @@ pub fn start_drain_thread(
                         frame.pcm
                     };
 
+                    let samples_per_channel = pcm.len() as u32;
                     let lk_frame = AudioFrame {
                         data: pcm.into(),
                         sample_rate: frame.sample_rate,
                         num_channels: frame.num_channels,
-                        samples_per_channel: frame.samples_per_channel,
+                        samples_per_channel,
                     };
                     let _ = audio_source.capture_frame(&lk_frame).await;
                 } else {

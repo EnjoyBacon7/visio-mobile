@@ -282,6 +282,10 @@ impl VoiceAudioEngine for WindowsAudioEngine {
         if let Some(h) = self.render_thread.take() { let _ = h.join(); }
         tracing::info!("Windows WASAPI stopped");
     }
+
+    fn set_device_change_callback(&mut self, _callback: super::audio_engine::DeviceChangeCallback) {
+        tracing::warn!("device change detection not yet implemented on Windows");
+    }
 }
 
 impl Drop for WindowsAudioEngine {

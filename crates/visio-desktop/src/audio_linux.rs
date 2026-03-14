@@ -194,6 +194,10 @@ impl VoiceAudioEngine for LinuxAudioEngine {
         if let Some(h) = self.playback_thread.take() { let _ = h.join(); }
         tracing::info!("Linux PulseAudio stopped");
     }
+
+    fn set_device_change_callback(&mut self, _callback: super::audio_engine::DeviceChangeCallback) {
+        tracing::warn!("device change detection not yet implemented on Linux");
+    }
 }
 
 impl Drop for LinuxAudioEngine {

@@ -382,6 +382,9 @@ impl MacAudioEngine {
         }
     }
 
+    /// Remove the CoreAudio device change listener.
+    /// Safety: `AudioObjectRemovePropertyListener` is synchronous — the callback
+    /// is guaranteed not to fire after it returns, so dropping the Box is safe.
     fn remove_device_listener(&mut self) {
         if let Some(ref cb) = self.device_change_cb {
             let address = AudioObjectPropertyAddress {
