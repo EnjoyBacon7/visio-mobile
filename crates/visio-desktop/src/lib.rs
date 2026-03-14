@@ -914,18 +914,30 @@ async fn stop_screen_share(state: tauri::State<'_, VisioState>) -> Result<(), St
 }
 
 #[tauri::command]
+async fn set_subscribe_quality(
+    state: tauri::State<'_, VisioState>,
+    quality: String,
+) -> Result<(), String> {
+    let room = state.room.lock().await;
+    room.set_subscribe_video_quality(&quality)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_background_mode(
     state: tauri::State<'_, VisioState>,
     app: AppHandle,
     mode: String,
 ) -> Result<(), String> {
     // Validate mode
-    if mode != "off" && mode != "blur" && !mode.starts_with("image:") {
+    if mode != "off" && mode != "blur" && mode != "blur-light" && !mode.starts_with("image:") {
         return Err("Invalid background mode".into());
     }
     // Update BlurProcessor
     let bg_mode = match mode.as_str() {
         "blur" => visio_ffi::blur::process::BackgroundMode::Blur,
+        "blur-light" => visio_ffi::blur::process::BackgroundMode::BlurLight,
         m if m.starts_with("image:") => {
             if let Ok(id) = m[6..].parse::<u8>() {
                 visio_ffi::blur::process::BackgroundMode::Image(id)
@@ -1635,6 +1647,7 @@ pub fn run() {
             list_screen_sources,
             start_screen_share,
             stop_screen_share,
+            set_subscribe_quality,
             set_background_mode,
             get_background_mode,
             load_blur_model,

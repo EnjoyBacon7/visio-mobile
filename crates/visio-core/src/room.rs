@@ -539,6 +539,35 @@ impl RoomManager {
         Ok(())
     }
 
+    /// Set subscribe video quality for all remote video tracks.
+    /// `quality` is "high", "medium", or "low".
+    pub async fn set_subscribe_video_quality(&self, quality: &str) -> Result<(), VisioError> {
+        use livekit::track::VideoQuality;
+
+        let vq = match quality {
+            "high" => VideoQuality::High,
+            "medium" => VideoQuality::Medium,
+            "low" => VideoQuality::Low,
+            _ => return Err(VisioError::Room(format!("unknown quality: {quality}"))),
+        };
+
+        let room = self.room.lock().await;
+        let room = room
+            .as_ref()
+            .ok_or_else(|| VisioError::Room("not connected".into()))?;
+
+        for (_sid, participant) in room.remote_participants() {
+            for (_tsid, pub_) in participant.track_publications() {
+                if pub_.kind() == LkTrackKind::Video {
+                    pub_.set_video_quality(vq);
+                }
+            }
+        }
+
+        tracing::info!("subscribe video quality set to {quality}");
+        Ok(())
+    }
+
     /// Check if the local participant's hand is currently raised.
     pub async fn is_hand_raised(&self) -> bool {
         let hm = self.hand_raise.lock().await;

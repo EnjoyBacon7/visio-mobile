@@ -1655,7 +1655,11 @@ function CallView({
                       {isLocal && <div className="participant-you-label">{t("call.you")}</div>}
                     </div>
                     <div className="participant-icons">
-                      {p.is_muted && <RiMicOffFill size={14} className="muted-icon" />}
+                      {p.is_muted ? (
+                        <RiMicOffFill size={14} className="muted-icon" />
+                      ) : activeSpeakers.includes(p.sid) ? (
+                        <RiMicLine size={14} className="speaking-icon" />
+                      ) : null}
                       {handRaisedMap[p.sid] > 0 && <RiHand size={14} style={{ color: "var(--hand-raise)" }} />}
                       <ConnectionQualityBars quality={p.connection_quality} />
                     </div>

@@ -1,10 +1,13 @@
 use super::{convert, gaussian, model, segment};
 use std::sync::Mutex;
 
-/// Background mode: Off, Blur, or Image replacement (by image ID 1-8).
+/// Background mode: Off, Blur (light/strong), or Image replacement (by image ID 1-8).
 #[derive(Clone, Debug, PartialEq)]
 pub enum BackgroundMode {
     Off,
+    /// Light blur (radius 5) — subtle background softening.
+    BlurLight,
+    /// Strong blur (radius 15) — full background concealment.
     Blur,
     Image(u8), // 1-8, corresponds to assets/backgrounds/{id}.jpg
 }
@@ -28,8 +31,10 @@ struct ReplacementImage {
     v: Vec<u8>,
 }
 
-const Y_BLUR_RADIUS: usize = 15;
-const UV_BLUR_RADIUS: usize = 7;
+const Y_BLUR_RADIUS_STRONG: usize = 15;
+const UV_BLUR_RADIUS_STRONG: usize = 7;
+const Y_BLUR_RADIUS_LIGHT: usize = 5;
+const UV_BLUR_RADIUS_LIGHT: usize = 3;
 
 /// Linearly interpolate between background and foreground pixel values.
 /// `mask` is in [0.0, 1.0]: 0.0 = full background, 1.0 = full foreground.
@@ -169,11 +174,16 @@ impl BlurProcessor {
         let uv_h = height / 2;
 
         match mode {
-            BackgroundMode::Blur => {
+            BackgroundMode::Blur | BackgroundMode::BlurLight => {
+                let (y_radius, uv_radius) = if mode == BackgroundMode::BlurLight {
+                    (Y_BLUR_RADIUS_LIGHT, UV_BLUR_RADIUS_LIGHT)
+                } else {
+                    (Y_BLUR_RADIUS_STRONG, UV_BLUR_RADIUS_STRONG)
+                };
                 // 6. Blur each I420 plane to get background
-                let bg_y = gaussian::blur_plane(y, width, height, stride_y, Y_BLUR_RADIUS);
-                let bg_u = gaussian::blur_plane(u, uv_w, uv_h, stride_u, UV_BLUR_RADIUS);
-                let bg_v = gaussian::blur_plane(v, uv_w, uv_h, stride_v, UV_BLUR_RADIUS);
+                let bg_y = gaussian::blur_plane(y, width, height, stride_y, y_radius);
+                let bg_u = gaussian::blur_plane(u, uv_w, uv_h, stride_u, uv_radius);
+                let bg_v = gaussian::blur_plane(v, uv_w, uv_h, stride_v, uv_radius);
 
                 // 8. Composite Y plane
                 for row in 0..height {
