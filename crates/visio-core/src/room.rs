@@ -2,6 +2,7 @@ use futures_util::StreamExt;
 use livekit::data_stream::StreamReader;
 use livekit::participant::ConnectionQuality as LkConnectionQuality;
 use livekit::prelude::{DataPacket, RemoteParticipant, Room, RoomEvent, RoomOptions};
+use livekit::DisconnectReason;
 use livekit::track::{
     RemoteVideoTrack, TrackKind as LkTrackKind, TrackSource as LkTrackSource, VideoQuality,
 };
@@ -23,6 +24,16 @@ use crate::events::{
 };
 use crate::hand_raise::HandRaiseManager;
 use crate::participants::ParticipantManager;
+
+/// Returns true if the disconnect reason means we should NOT auto-reconnect.
+fn should_not_reconnect(reason: DisconnectReason) -> bool {
+    matches!(
+        reason,
+        DisconnectReason::ClientInitiated
+            | DisconnectReason::DuplicateIdentity
+            | DisconnectReason::ParticipantRemoved
+    )
+}
 
 /// Manages the lifecycle of a LiveKit room connection.
 #[derive(Clone)]
@@ -972,8 +983,14 @@ impl RoomManager {
                         emitter.emit(VisioEvent::ConnectionStateChanged(
                             ConnectionState::Disconnected,
                         ));
+                    } else if reason == DisconnectReason::DuplicateIdentity {
+                        tracing::warn!("disconnected: duplicate identity (connected from another device)");
+                        emitter.emit(VisioEvent::DisconnectedDuplicateIdentity);
+                    } else if reason == DisconnectReason::ParticipantRemoved {
+                        tracing::warn!("disconnected: removed by admin");
+                        emitter.emit(VisioEvent::DisconnectedByAdmin);
                     } else {
-                        // Network loss — emit ConnectionLost so native UI
+                        // Network loss or server-side — emit ConnectionLost so native UI
                         // can trigger reconnect().
                         emitter.emit(VisioEvent::ConnectionLost);
                     }
@@ -1523,6 +1540,39 @@ mod tests {
         // No room means no local participant, no remote participants
         let participants = rm.participants().await;
         assert!(participants.is_empty());
+    }
+
+    #[test]
+    fn disconnect_reason_should_not_reconnect() {
+        use livekit::DisconnectReason;
+        // These reasons should NOT trigger reconnection
+        let no_reconnect = [
+            DisconnectReason::DuplicateIdentity,
+            DisconnectReason::ParticipantRemoved,
+            DisconnectReason::ClientInitiated,
+        ];
+        for reason in &no_reconnect {
+            assert!(
+                should_not_reconnect(*reason),
+                "should not reconnect for {reason:?}"
+            );
+        }
+        // These reasons SHOULD trigger reconnection
+        let reconnect = [
+            DisconnectReason::ServerShutdown,
+            DisconnectReason::StateMismatch,
+            DisconnectReason::UnknownReason,
+            DisconnectReason::SignalClose,
+            DisconnectReason::Migration,
+            DisconnectReason::ConnectionTimeout,
+            DisconnectReason::MediaFailure,
+        ];
+        for reason in &reconnect {
+            assert!(
+                !should_not_reconnect(*reason),
+                "should reconnect for {reason:?}"
+            );
+        }
     }
 
     #[test]

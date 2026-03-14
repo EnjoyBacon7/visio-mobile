@@ -53,6 +53,10 @@ pub enum VisioEvent {
     BandwidthModeChanged {
         mode: crate::bandwidth::BandwidthMode,
     },
+    /// Disconnected because another device connected with the same identity.
+    DisconnectedDuplicateIdentity,
+    /// Disconnected because the participant was removed by an admin.
+    DisconnectedByAdmin,
     /// Connection lost unexpectedly — native UI should call reconnect().
     ConnectionLost,
 }
