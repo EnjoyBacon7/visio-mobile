@@ -7,7 +7,6 @@ use visio_core::{
     SettingsStore, TrackInfo, TrackKind, TrackSource, VisioEvent, VisioEventListener,
 };
 
-mod audio_cpal;
 mod audio_engine;
 #[cfg(target_os = "macos")]
 mod audio_macos;
@@ -66,9 +65,10 @@ struct VisioState {
     settings: SettingsStore,
     #[cfg(target_os = "macos")]
     camera_capture: std::sync::Mutex<Option<camera_macos::MacCameraCapture>>,
-    audio_playout: std::sync::Mutex<audio_cpal::CpalAudioPlayout>,
+    audio_engine: std::sync::Mutex<Box<dyn audio_engine::VoiceAudioEngine>>,
     playout_buffer: Arc<AudioPlayoutBuffer>,
-    audio_capture: std::sync::Mutex<Option<audio_cpal::CpalAudioCapture>>,
+    selected_input_device: std::sync::Mutex<Option<String>>,
+    selected_output_device: std::sync::Mutex<Option<String>>,
     screen_capture: std::sync::Mutex<Option<screen_capture::ScreenCapture>>,
 }
 
@@ -471,35 +471,24 @@ async fn toggle_mic(state: tauri::State<'_, VisioState>, enabled: bool) -> Resul
         .set_microphone_enabled(enabled)
         .await
         .map_err(|e| e.to_string())?;
-
     if enabled {
-        // Start capture if not already running
-        let already_running = state
-            .audio_capture
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some();
-        if !already_running {
-            if let Some(source) = controls.audio_source().await {
-                let capture = audio_cpal::CpalAudioCapture::start(source)
-                    .map_err(|e| format!("audio capture: {e}"))?;
-                *state
-                    .audio_capture
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = Some(capture);
-            }
+        if let Some(source) = controls.audio_source().await {
+            let mut engine = state
+                .audio_engine
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            // Stop first to ensure idempotency (avoids leaking drain thread
+            // if toggle_mic(true) is called twice without an intervening false)
+            engine.stop_capture();
+            engine.start_capture(source).map_err(|e| format!("audio capture: {e}"))?;
         }
     } else {
-        // Stop capture
-        let mut cap = state
-            .audio_capture
+        let mut engine = state
+            .audio_engine
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        if let Some(capture) = cap.take() {
-            capture.stop();
-        }
+        engine.stop_capture();
     }
-
     Ok(())
 }
 
@@ -852,13 +841,13 @@ fn load_background_image(id: u8, jpeg_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn list_audio_input_devices() -> Vec<audio_cpal::AudioDeviceInfo> {
-    audio_cpal::list_input_devices()
+fn list_audio_input_devices() -> Vec<audio_engine::AudioDeviceInfo> {
+    audio_engine::list_input_devices()
 }
 
 #[tauri::command]
-fn list_audio_output_devices() -> Vec<audio_cpal::AudioDeviceInfo> {
-    audio_cpal::list_output_devices()
+fn list_audio_output_devices() -> Vec<audio_engine::AudioDeviceInfo> {
+    audio_engine::list_output_devices()
 }
 
 #[cfg(target_os = "macos")]
@@ -882,52 +871,47 @@ async fn select_audio_input(
     state: tauri::State<'_, VisioState>,
     device_name: String,
 ) -> Result<(), String> {
-    let device = audio_cpal::find_input_device(&device_name)
-        .ok_or_else(|| format!("Audio input device not found: {device_name}"))?;
-
-    // Stop existing capture
-    {
-        let mut cap = state
-            .audio_capture
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if let Some(capture) = cap.take() {
-            capture.stop();
-        }
-    }
-
-    // Restart with selected device if mic is active
+    // Get the audio source before locking the engine (async)
     let controls = state.controls.lock().await;
-    if let Some(source) = controls.audio_source().await {
-        let capture = audio_cpal::CpalAudioCapture::start_with_device(device, source)
-            .map_err(|e| format!("audio capture: {e}"))?;
-        let mut cap = state
-            .audio_capture
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        *cap = Some(capture);
-    }
+    let audio_source = controls.audio_source().await;
+    drop(controls);
 
+    // Store selected device name
+    *state.selected_input_device.lock().unwrap_or_else(|e| e.into_inner()) = Some(device_name.clone());
+
+    // Recreate engine with both device names preserved
+    let output_device = state.selected_output_device.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut engine = state.audio_engine.lock().unwrap_or_else(|e| e.into_inner());
+    engine.stop_playout();
+    let new_engine = audio_engine::create_audio_engine(Some(&device_name), output_device.as_deref());
+    *engine = new_engine;
+    engine.start_playout(state.playout_buffer.clone())?;
+    if let Some(source) = audio_source {
+        engine.start_capture(source)?;
+    }
     Ok(())
 }
 
 #[tauri::command]
-fn select_audio_output(
+async fn select_audio_output(
     state: tauri::State<'_, VisioState>,
     device_name: String,
 ) -> Result<(), String> {
-    let device = audio_cpal::find_output_device(&device_name)
-        .ok_or_else(|| format!("Audio output device not found: {device_name}"))?;
+    let controls = state.controls.lock().await;
+    let audio_source = controls.audio_source().await;
+    drop(controls);
 
-    let new_playout =
-        audio_cpal::CpalAudioPlayout::start_with_device(device, state.playout_buffer.clone())?;
+    *state.selected_output_device.lock().unwrap_or_else(|e| e.into_inner()) = Some(device_name.clone());
 
-    let mut playout = state
-        .audio_playout
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    *playout = new_playout;
-
+    let input_device = state.selected_input_device.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut engine = state.audio_engine.lock().unwrap_or_else(|e| e.into_inner());
+    engine.stop_playout();
+    let new_engine = audio_engine::create_audio_engine(input_device.as_deref(), Some(&device_name));
+    *engine = new_engine;
+    engine.start_playout(state.playout_buffer.clone())?;
+    if let Some(source) = audio_source {
+        engine.start_capture(source)?;
+    }
     Ok(())
 }
 
@@ -1305,7 +1289,9 @@ pub fn run() {
     let controls = room_manager.controls();
     let chat = room_manager.chat();
 
-    let audio_playout = audio_cpal::CpalAudioPlayout::start(playout_buffer.clone())
+    let mut audio_engine_instance = audio_engine::create_audio_engine(None, None);
+    audio_engine_instance
+        .start_playout(playout_buffer.clone())
         .expect("failed to start audio playout");
 
     let room_arc = Arc::new(Mutex::new(room_manager));
@@ -1334,9 +1320,10 @@ pub fn run() {
         settings,
         #[cfg(target_os = "macos")]
         camera_capture: std::sync::Mutex::new(None),
-        audio_playout: std::sync::Mutex::new(audio_playout),
+        audio_engine: std::sync::Mutex::new(audio_engine_instance),
         playout_buffer,
-        audio_capture: std::sync::Mutex::new(None),
+        selected_input_device: std::sync::Mutex::new(None),
+        selected_output_device: std::sync::Mutex::new(None),
         screen_capture: std::sync::Mutex::new(None),
     };
 
@@ -1371,7 +1358,7 @@ pub fn run() {
             let _ = APP_HANDLE.set(app.handle().clone());
 
             // Store handle for audio error event emission
-            audio_cpal::set_app_handle(app.handle().clone());
+            audio_engine::set_app_handle(app.handle().clone());
 
             // Register the desktop video frame callback
             unsafe {
@@ -1414,13 +1401,11 @@ pub fn run() {
                 let room = state.room.clone();
                 // Stop audio/camera capture before disconnect
                 {
-                    let mut cap = state
-                        .audio_capture
+                    let mut engine = state
+                        .audio_engine
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
-                    if let Some(capture) = cap.take() {
-                        capture.stop();
-                    }
+                    engine.stop_capture();
                 }
                 #[cfg(target_os = "macos")]
                 {
