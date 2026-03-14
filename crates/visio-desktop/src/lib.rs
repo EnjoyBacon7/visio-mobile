@@ -8,6 +8,13 @@ use visio_core::{
 };
 
 mod audio_cpal;
+mod audio_engine;
+#[cfg(target_os = "macos")]
+mod audio_macos;
+#[cfg(target_os = "windows")]
+mod audio_windows;
+#[cfg(target_os = "linux")]
+mod audio_linux;
 #[cfg(target_os = "macos")]
 mod camera_macos;
 mod screen_capture;
