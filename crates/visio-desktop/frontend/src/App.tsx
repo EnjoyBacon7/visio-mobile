@@ -99,6 +99,7 @@ interface ScreenSource {
   source_type: string;
   width: number;
   height: number;
+  thumbnail: string;
 }
 
 interface ChatMessage {
@@ -1155,43 +1156,53 @@ function SourcePickerModal({
           <span>{t("call.selectSource")}</span>
           <button onClick={onClose}><RiCloseLine size={20} /></button>
         </div>
-        <div className="settings-body" style={{ maxHeight: "400px", overflowY: "auto" }}>
+        <div className="source-grid">
           {monitors.length > 0 && (
             <>
-              <h4 style={{ margin: "0 0 8px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                {t("call.monitors")}
-              </h4>
-              {monitors.map((s, i) => (
-                <button
-                  key={s.id}
-                  className="source-item"
-                  data-testid={`screen-share-source-${i}`}
-                  onClick={() => onSelect(s.id)}
-                >
-                  <ScreenShareIcon size={18} />
-                  <span>{s.name}</span>
-                  <span className="source-dim">{s.width}×{s.height}</span>
-                </button>
-              ))}
+              <h4 className="source-section-title">{t("call.monitors")}</h4>
+              <div className="source-grid-items">
+                {monitors.map((s, i) => (
+                  <button
+                    key={s.id}
+                    className="source-card"
+                    data-testid={`screen-share-source-${i}`}
+                    onClick={() => onSelect(s.id)}
+                  >
+                    {s.thumbnail ? (
+                      <img src={s.thumbnail} alt={s.name} className="source-thumb" />
+                    ) : (
+                      <div className="source-thumb source-thumb-placeholder">
+                        <ScreenShareIcon size={32} />
+                      </div>
+                    )}
+                    <span className="source-card-label">{s.name}</span>
+                  </button>
+                ))}
+              </div>
             </>
           )}
           {windows.length > 0 && (
             <>
-              <h4 style={{ margin: "16px 0 8px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                {t("call.windows")}
-              </h4>
-              {windows.map((s, i) => (
-                <button
-                  key={s.id}
-                  className="source-item"
-                  data-testid={`screen-share-source-${monitors.length + i}`}
-                  onClick={() => onSelect(s.id)}
-                >
-                  <RiApps2Line size={18} />
-                  <span>{s.name}</span>
-                  <span className="source-dim">{s.width}×{s.height}</span>
-                </button>
-              ))}
+              <h4 className="source-section-title">{t("call.windows")}</h4>
+              <div className="source-grid-items">
+                {windows.map((s, i) => (
+                  <button
+                    key={s.id}
+                    className="source-card"
+                    data-testid={`screen-share-source-${monitors.length + i}`}
+                    onClick={() => onSelect(s.id)}
+                  >
+                    {s.thumbnail ? (
+                      <img src={s.thumbnail} alt={s.name} className="source-thumb" />
+                    ) : (
+                      <div className="source-thumb source-thumb-placeholder">
+                        <RiApps2Line size={32} />
+                      </div>
+                    )}
+                    <span className="source-card-label">{s.name}</span>
+                  </button>
+                ))}
+              </div>
             </>
           )}
         </div>
