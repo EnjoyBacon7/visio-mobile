@@ -56,6 +56,7 @@ class VisioManager: ObservableObject {
     let client: VisioClient
     private var audioPlayout: AudioPlayout?
     private var cameraCapture: CameraCapture?
+    private var syntheticAudio: SyntheticAudioCapture?
     private var contextDetector: ContextDetector?
     private var reactionIdCounter: Int64 = 0
     private var cameraWasEnabledBeforeCar = false
@@ -148,6 +149,9 @@ class VisioManager: ObservableObject {
                         self.cameraCapture = capture
                     }
 
+                    // Start audio playout now that connection is established
+                    self.startAudioPlayout()
+
                     // Start context detection for adaptive modes
                     self.startContextDetection()
                 }
@@ -188,6 +192,8 @@ class VisioManager: ObservableObject {
                         capture.start()
                         self.cameraCapture = capture
                     }
+                    // Start audio playout now that connection is established
+                    self.startAudioPlayout()
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -273,15 +279,32 @@ class VisioManager: ObservableObject {
         }
     }
 
+    /// Start synthetic audio capture (440Hz sine wave for E2E testing on simulators).
+    func startSyntheticAudio() {
+        guard syntheticAudio == nil else { return }
+        let capture = SyntheticAudioCapture()
+        capture.start()
+        syntheticAudio = capture
+    }
+
+    /// Stop synthetic audio capture.
+    func stopSyntheticAudio() {
+        syntheticAudio?.stop()
+        syntheticAudio = nil
+    }
+
     func toggleCamera() {
-        let newValue = !isCameraEnabled
+        setCameraEnabled(!isCameraEnabled)
+    }
+
+    func setCameraEnabled(_ enabled: Bool) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
-                try self.client.setCameraEnabled(enabled: newValue)
+                try self.client.setCameraEnabled(enabled: enabled)
                 DispatchQueue.main.async {
-                    self.isCameraEnabled = newValue
-                    if newValue {
+                    self.isCameraEnabled = enabled
+                    if enabled {
                         let capture = CameraCapture()
                         capture.start()
                         self.cameraCapture = capture
@@ -648,6 +671,11 @@ extension VisioManager: VisioEventListener {
             guard let self else { return }
             switch event {
             case .connectionStateChanged(let state):
+                // Ignore stale .connecting events that arrive after we're already .connected
+                // (race between sync state read in connect() and async event dispatch)
+                if case .connecting = state, case .connected = self.connectionState {
+                    break
+                }
                 self.connectionState = state
                 if case .connected = state {
                     self.connectionTimestamp = Date()

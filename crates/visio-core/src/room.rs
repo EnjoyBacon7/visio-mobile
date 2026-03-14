@@ -25,6 +25,7 @@ use crate::hand_raise::HandRaiseManager;
 use crate::participants::ParticipantManager;
 
 /// Manages the lifecycle of a LiveKit room connection.
+#[derive(Clone)]
 pub struct RoomManager {
     room: Arc<Mutex<Option<Arc<Room>>>>,
     emitter: EventEmitter,
@@ -1058,6 +1059,7 @@ impl RoomManager {
                     let info = TrackInfo {
                         sid: track_sid,
                         participant_sid: psid,
+                        participant_identity: participant.identity().to_string(),
                         kind: track_kind,
                         source,
                     };

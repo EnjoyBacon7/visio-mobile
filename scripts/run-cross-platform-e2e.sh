@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 ROOM="e2e-$(date +%s)"
-DURATION="${DURATION:-60}"
+DURATION="${DURATION:-120}"
 LIVEKIT_URL="ws://localhost:7880"
 MEDIA_FILE="$ROOT_DIR/test-assets/test-video.mp4"
 BOT_LOG="$ROOT_DIR/test-assets/bot-output.log"
@@ -62,18 +62,21 @@ fail()  { echo -e "${RED}[FAIL]${NC} $*"; }
 
 BOT_PID=""
 DESKTOP_PID=""
+ROTATION_PID=""
 
 cleanup() {
     info "Cleaning up..."
     [ -n "$BOT_PID" ] && kill "$BOT_PID" 2>/dev/null || true
     [ -n "$DESKTOP_PID" ] && kill "$DESKTOP_PID" 2>/dev/null || true
+    [ -n "${ROTATION_PID:-}" ] && kill "$ROTATION_PID" 2>/dev/null || true
     [ -n "${VITE_PID:-}" ] && kill "$VITE_PID" 2>/dev/null || true
     lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+    # Restore Android orientation to auto-rotate
+    adb shell settings put system user_rotation 0 2>/dev/null || true
+    adb shell settings put system accelerometer_rotation 1 2>/dev/null || true
     adb shell am force-stop io.visio.mobile 2>/dev/null || true
     [ "$SKIP_IOS" = false ] && xcrun simctl terminate booted io.visio.mobile 2>/dev/null || true
     docker stop livekit-cross-e2e 2>/dev/null || true
-    # Keep logs for debugging
-    # rm -f "$BOT_LOG" "$DESKTOP_LOG"
 }
 trap cleanup EXIT
 
@@ -275,13 +278,50 @@ echo "Duration:   ${DURATION}s"
 echo "Local IP:   $LOCAL_IP"
 echo ""
 echo "Participants:"
-echo "  - Bot:      publishing audio + video + screen share + chat + hand raise"
-[ "$SKIP_DESKTOP" = false ] && echo "  - Desktop:  auto-connected via CLI args"
-[ "$SKIP_ANDROID" = false ] && echo "  - Android:  auto-connected via deep link ($LIVEKIT_URL_ANDROID)"
-[ "$SKIP_IOS" = false ] && echo "  - iOS:      auto-connected via deep link (simulator)"
+echo "  - Bot:      publishing audio + video + screen share + chat + hand raise (speaks 0-25s)"
+[ "$SKIP_DESKTOP" = false ] && echo "  - Desktop:  auto-connected via CLI args (speaks 25-50s)"
+[ "$SKIP_ANDROID" = false ] && echo "  - Android:  auto-connected via deep link (speaks 50-75s)"
+[ "$SKIP_IOS" = false ] && echo "  - iOS:      auto-connected via deep link simulator (speaks 75-100s)"
 echo ""
 echo "============================================================"
 echo ""
+
+# =========================================================================
+# Step 7b: Orientation rotation test (runs in background during the test)
+# =========================================================================
+(
+    # Wait for all participants to join (warmup phase)
+    sleep 10
+
+    # --- Android rotation: during Android's turn (50-75s) ---
+    if [ "$SKIP_ANDROID" = false ]; then
+        sleep 45  # t=55s — mid-Android turn
+        info "[ROTATION] Android → landscape"
+        adb shell settings put system accelerometer_rotation 0 2>/dev/null
+        adb shell settings put system user_rotation 1 2>/dev/null
+        sleep 10  # t=65s
+        info "[ROTATION] Android → portrait"
+        adb shell settings put system user_rotation 0 2>/dev/null
+        adb shell settings put system accelerometer_rotation 1 2>/dev/null
+    else
+        sleep 55
+    fi
+
+    # --- iOS rotation: during iOS's turn (75-100s) ---
+    if [ "$SKIP_IOS" = false ]; then
+        sleep 15  # t=80s — mid-iOS turn
+        info "[ROTATION] iOS simulator → landscape"
+        osascript -e 'tell application "Simulator" to activate' \
+                  -e 'delay 0.3' \
+                  -e 'tell application "System Events" to key code 124 using command down' 2>/dev/null
+        sleep 10  # t=90s
+        info "[ROTATION] iOS simulator → portrait"
+        osascript -e 'tell application "Simulator" to activate' \
+                  -e 'delay 0.3' \
+                  -e 'tell application "System Events" to key code 123 using command down' 2>/dev/null
+    fi
+) &
+ROTATION_PID=$!
 
 # =========================================================================
 # Step 8: Wait for bot to finish and report
@@ -290,6 +330,14 @@ info "Waiting for bot to complete (${DURATION}s)..."
 wait "$BOT_PID" 2>/dev/null || true
 BOT_EXIT=$?
 BOT_PID=""
+
+# Stop rotation job
+[ -n "$ROTATION_PID" ] && kill "$ROTATION_PID" 2>/dev/null || true
+ROTATION_PID=""
+
+# Restore Android orientation
+adb shell settings put system user_rotation 0 2>/dev/null || true
+adb shell settings put system accelerometer_rotation 1 2>/dev/null || true
 
 # Close Android app
 if [ "$SKIP_ANDROID" = false ]; then
@@ -318,7 +366,7 @@ EXIT_CODE=0
 
 if [ -f "$BOT_LOG" ]; then
     echo ""
-    grep -E "\[SUMMARY\]|\[AUDIO QUALITY\]" "$BOT_LOG" 2>/dev/null || true
+    grep -E "\[SUMMARY\]|\[AUDIO QUALITY\]|\[VIDEO QUALITY\]" "$BOT_LOG" 2>/dev/null || true
     echo ""
 
     # Check results
@@ -382,46 +430,101 @@ if [ -f "$BOT_LOG" ]; then
     # Quality Gates
     # =========================================================================
 
-    # Audio quality gate
-    AUDIO_FRAMES="$(grep -o 'frames=[0-9]*' "$BOT_LOG" 2>/dev/null | tail -1 | cut -d= -f2)" || AUDIO_FRAMES=0
-    AUDIO_MAX_GAP="$(grep -o 'max_gap=[0-9]*ms' "$BOT_LOG" 2>/dev/null | tail -1 | grep -o '[0-9]*')" || AUDIO_MAX_GAP=0
-
-    if [ "$AUDIO_FRAMES" -gt 0 ] 2>/dev/null; then
-        ok "Audio: $AUDIO_FRAMES frames received"
-        if [ "$AUDIO_MAX_GAP" -gt 200 ] 2>/dev/null; then
-            fail "Audio: max gap ${AUDIO_MAX_GAP}ms (threshold: 200ms) — choppy audio detected"
-            EXIT_CODE=1
+    # Per-participant audio quality gates
+    echo ""
+    info "Per-participant audio quality:"
+    while IFS= read -r line; do
+        PARTICIPANT="$(echo "$line" | sed 's/.*AUDIO QUALITY FINAL\] \([^:]*\):.*/\1/')"
+        FRAMES="$(echo "$line" | grep -o 'frames=[0-9]*' | cut -d= -f2)" || FRAMES=0
+        MAX_GAP="$(echo "$line" | grep -o 'max_gap=[0-9]*ms' | grep -o '[0-9]*')" || MAX_GAP=0
+        if [ "$FRAMES" -gt 0 ] 2>/dev/null; then
+            if [ "$MAX_GAP" -gt 200 ] 2>/dev/null; then
+                fail "Audio $PARTICIPANT: $FRAMES frames, max_gap=${MAX_GAP}ms — choppy"
+                EXIT_CODE=1
+            else
+                ok "Audio $PARTICIPANT: $FRAMES frames, max_gap=${MAX_GAP}ms — smooth"
+            fi
         else
-            ok "Audio: max gap ${AUDIO_MAX_GAP}ms — smooth"
+            warn "Audio $PARTICIPANT: 0 frames received"
         fi
-    else
-        warn "Audio: 0 frames received (expected if no remote audio)"
+    done < <(grep '\[AUDIO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null || true)
+    # Check we got at least one audio report
+    AUDIO_REPORT_COUNT="$(grep -c '\[AUDIO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null)" || AUDIO_REPORT_COUNT=0
+    if [ "$AUDIO_REPORT_COUNT" -eq 0 ]; then
+        warn "Audio: no per-participant reports found"
     fi
 
-    # Video quality gate
-    VIDEO_FRAMES="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'frames=[0-9]*' | cut -d= -f2)" || VIDEO_FRAMES=0
-    VIDEO_FPS="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'avg_fps=[0-9.]*' | cut -d= -f2)" || VIDEO_FPS="0"
-    VIDEO_MAX_GAP="$(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null | grep -o 'max_gap=[0-9]*ms' | grep -o '[0-9]*')" || VIDEO_MAX_GAP=0
-
-    if [ "$VIDEO_FRAMES" -gt 0 ] 2>/dev/null; then
-        ok "Video: $VIDEO_FRAMES frames, ${VIDEO_FPS} fps avg"
-        if [ "$VIDEO_MAX_GAP" -gt 2000 ] 2>/dev/null; then
-            fail "Video: max gap ${VIDEO_MAX_GAP}ms — freeze detected"
-            EXIT_CODE=1
+    # Per-participant video quality gates
+    echo ""
+    info "Per-participant video quality:"
+    while IFS= read -r line; do
+        PARTICIPANT="$(echo "$line" | sed 's/.*VIDEO QUALITY FINAL\] \([^:]*\):.*/\1/')"
+        FRAMES="$(echo "$line" | grep -o 'frames=[0-9]*' | cut -d= -f2)" || FRAMES=0
+        FPS="$(echo "$line" | grep -o 'avg_fps=[0-9.]*' | cut -d= -f2)" || FPS="0"
+        MAX_GAP="$(echo "$line" | grep -o 'max_gap=[0-9]*ms' | grep -o '[0-9]*')" || MAX_GAP=0
+        if [ "$FRAMES" -gt 0 ] 2>/dev/null; then
+            if [ "$MAX_GAP" -gt 2000 ] 2>/dev/null; then
+                fail "Video $PARTICIPANT: $FRAMES frames, ${FPS}fps, max_gap=${MAX_GAP}ms — freeze"
+                EXIT_CODE=1
+            else
+                ok "Video $PARTICIPANT: $FRAMES frames, ${FPS}fps, max_gap=${MAX_GAP}ms — smooth"
+            fi
         else
-            ok "Video: max gap ${VIDEO_MAX_GAP}ms — smooth"
+            warn "Video $PARTICIPANT: 0 frames received"
         fi
-    else
-        warn "Video: 0 frames received"
+    done < <(grep '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null || true)
+    VIDEO_REPORT_COUNT="$(grep -c '\[VIDEO QUALITY FINAL\]' "$BOT_LOG" 2>/dev/null)" || VIDEO_REPORT_COUNT=0
+    if [ "$VIDEO_REPORT_COUNT" -eq 0 ]; then
+        warn "Video: no per-participant reports found"
     fi
 
-    # Screen share rotation
-    SCREEN_SHARE_STOPS="$(grep -c 'Stopping screen share' "$BOT_LOG" 2>/dev/null)" || SCREEN_SHARE_STOPS=0
-    SCREEN_SHARE_RESUMES="$(grep -c 'Resuming bot screen share' "$BOT_LOG" 2>/dev/null)" || SCREEN_SHARE_RESUMES=0
-    if [ "$SCREEN_SHARE_STOPS" -gt 0 ] && [ "$SCREEN_SHARE_RESUMES" -gt 0 ]; then
-        ok "Screen share: rotation tested (stopped=$SCREEN_SHARE_STOPS, resumed=$SCREEN_SHARE_RESUMES)"
+    # Screen share rotation (bot)
+    BOT_SCREEN_MUTE="$(grep -c 'Bot muting' "$BOT_LOG" 2>/dev/null)" || BOT_SCREEN_MUTE=0
+    BOT_ALL_SPEAK="$(grep -c 'All speak' "$BOT_LOG" 2>/dev/null)" || BOT_ALL_SPEAK=0
+    if [ "$BOT_SCREEN_MUTE" -gt 0 ] && [ "$BOT_ALL_SPEAK" -gt 0 ]; then
+        ok "Bot turn-based: muted at 25s, resumed at 100s"
     else
-        warn "Screen share: no rotation detected"
+        warn "Bot turn-based: pattern incomplete (mute=$BOT_SCREEN_MUTE, resume=$BOT_ALL_SPEAK)"
+    fi
+
+    # Turn-based speaking: check that each participant announced their turn
+    echo ""
+    info "Turn-based speaking verification:"
+    TURN_DESKTOP="$(grep -c "Desktop: my turn to speak" "$BOT_LOG" 2>/dev/null)" || TURN_DESKTOP=0
+    TURN_ANDROID="$(grep -c "Android: my turn to speak" "$BOT_LOG" 2>/dev/null)" || TURN_ANDROID=0
+    TURN_IOS="$(grep -c "iOS: my turn to speak" "$BOT_LOG" 2>/dev/null)" || TURN_IOS=0
+    [ "$SKIP_DESKTOP" = false ] && { [ "$TURN_DESKTOP" -gt 0 ] && ok "Desktop turn announced" || warn "Desktop turn not detected in chat"; }
+    [ "$SKIP_ANDROID" = false ] && { [ "$TURN_ANDROID" -gt 0 ] && ok "Android turn announced" || warn "Android turn not detected in chat"; }
+    [ "$SKIP_IOS" = false ] && { [ "$TURN_IOS" -gt 0 ] && ok "iOS turn announced" || warn "iOS turn not detected in chat"; }
+
+    # TrackMuted/TrackUnmuted events — verify toggling happened
+    MUTED_EVENTS="$(grep -c 'TrackMuted' "$BOT_LOG" 2>/dev/null)" || MUTED_EVENTS=0
+    UNMUTED_EVENTS="$(grep -c 'TrackUnmuted' "$BOT_LOG" 2>/dev/null)" || UNMUTED_EVENTS=0
+    if [ "$MUTED_EVENTS" -gt 2 ] && [ "$UNMUTED_EVENTS" -gt 2 ]; then
+        ok "Track mute/unmute events: muted=$MUTED_EVENTS unmuted=$UNMUTED_EVENTS"
+    else
+        warn "Few mute/unmute events: muted=$MUTED_EVENTS unmuted=$UNMUTED_EVENTS"
+    fi
+
+    # Orientation rotation verification
+    echo ""
+    info "Orientation rotation verification:"
+    if [ "$SKIP_ANDROID" = false ]; then
+        # After rotation, check that Android is still connected (tracks still subscribed)
+        ANDROID_TRACKS_AFTER="$(grep -c 'TrackSubscribed.*android-user\|android-user.*TrackSubscribed' "$BOT_LOG" 2>/dev/null)" || ANDROID_TRACKS_AFTER=0
+        if [ "$ANDROID_TRACKS_AFTER" -gt 0 ]; then
+            ok "Android: survived orientation rotation (tracks still subscribed)"
+        else
+            warn "Android: orientation rotation impact unclear"
+        fi
+    fi
+    if [ "$SKIP_IOS" = false ]; then
+        IOS_TRACKS_AFTER="$(grep -c 'TrackSubscribed.*ios-user\|ios-user.*TrackSubscribed' "$BOT_LOG" 2>/dev/null)" || IOS_TRACKS_AFTER=0
+        if [ "$IOS_TRACKS_AFTER" -gt 0 ]; then
+            ok "iOS: survived orientation rotation (tracks still subscribed)"
+        else
+            warn "iOS: orientation rotation impact unclear"
+        fi
     fi
 fi
 

@@ -216,7 +216,7 @@ struct CallView: View {
         .onAppear {
             let name = displayName.isEmpty ? nil : displayName
             manager.connect(url: roomURL, username: name)
-            manager.startAudioPlayout()
+            // Audio playout is now started automatically after connection succeeds (in VisioManager)
             CallKitManager.shared.reportCallStarted(roomName: roomURL)
             UIApplication.shared.isIdleTimerDisabled = true
             PiPManager.shared.setup()
@@ -262,19 +262,15 @@ struct CallView: View {
             guard let (livekitUrl, token) = manager.pendingTestConnect else { return }
             manager.pendingTestConnect = nil
 
-            // Connect
+            // Connect (audio playout starts automatically after connection)
             manager.connectWithToken(livekitUrl: livekitUrl, token: token)
 
-            // Start audio playout after short delay
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            manager.startAudioPlayout()
-
-            // Auto-chat messages
+            // Auto-chat messages (turn-based)
             let chatMessages: [(Int, String)] = [
-                (3, "Hello from iOS! Auto-test started"),
-                (15, "iOS: still connected, testing cross-platform"),
-                (30, "iOS: mid-test check-in"),
-                (45, "iOS: finishing up test cycle"),
+                (3, "iOS joined the room!"),
+                (75, "iOS: my turn to speak!"),
+                (85, "iOS: mid-turn check-in"),
+                (100, "iOS: everyone speaking together!"),
             ]
             for (delay, text) in chatMessages {
                 Task {
@@ -283,23 +279,25 @@ struct CallView: View {
                 }
             }
 
-            // Auto-toggles: mic/camera
-            let toggles: [(Int, String)] = [
-                (8, "mic_off"), (13, "mic_on"),
-                (20, "cam_off"), (25, "cam_on"),
-                (35, "mic_off"), (38, "mic_on"),
-            ]
-            for (delay, action) in toggles {
-                Task {
-                    try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
-                    switch action {
-                    case "mic_off": manager.setMicEnabled(false)
-                    case "mic_on": manager.setMicEnabled(true)
-                    case "cam_off": manager.toggleCamera()
-                    case "cam_on": manager.toggleCamera()
-                    default: break
-                    }
-                }
+            // Turn-based speaking: iOS speaks at 75-100s, muted otherwise (except warmup 0-5s and final 100-120s)
+            // Uses synthetic audio (440Hz sine) since simulators have no real microphone.
+            Task {
+                // 5s: mute mic+cam (bot's turn)
+                try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
+                print("[TURN] iOS muted (bot's turn)")
+                manager.setMicEnabled(false)
+                manager.stopSyntheticAudio()
+                manager.setCameraEnabled(false)
+                // 75s: unmute — iOS's turn to speak (with synthetic audio)
+                try? await Task.sleep(nanoseconds: 70 * 1_000_000_000)
+                print("[TURN] iOS speaking (synthetic audio)")
+                manager.setMicEnabled(true)
+                manager.startSyntheticAudio()
+                manager.setCameraEnabled(true)
+                // 100s: everyone speaks (keep synthetic audio on)
+                try? await Task.sleep(nanoseconds: 25 * 1_000_000_000)
+                print("[TURN] iOS unmuted (all speak)")
+                // Already on — stays on for final phase
             }
         }
         // Lobby banner is now persistent — driven by waitingParticipants list

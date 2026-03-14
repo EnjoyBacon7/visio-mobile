@@ -2299,12 +2299,13 @@ export default function App() {
         setCurrentMeetUrl(livekit_url);
         setView("call");
 
-        // Auto-chat messages for E2E test
+        // Auto-chat messages for E2E test (turn-based)
         const messages = [
           { delay: 3000, text: "Desktop joined the room!" },
-          { delay: 15000, text: "Desktop: I can see the bot's video" },
-          { delay: 30000, text: "Desktop: Screen share is visible" },
-          { delay: 45000, text: "Desktop: Audio toggles detected" },
+          { delay: 25000, text: "Desktop: my turn to speak!" },
+          { delay: 35000, text: "Desktop: screen sharing active" },
+          { delay: 50000, text: "Desktop: muted — Android's turn" },
+          { delay: 100000, text: "Desktop: everyone speaking together!" },
         ];
         for (const msg of messages) {
           setTimeout(async () => {
@@ -2312,44 +2313,33 @@ export default function App() {
           }, msg.delay);
         }
 
-        // Auto-toggle mic and camera for E2E test
-        const toggleSequence = [
-          { delay: 8000, action: async () => { await invoke("toggle_mic", { enabled: false }); } },
-          { delay: 13000, action: async () => { await invoke("toggle_mic", { enabled: true }); } },
-          { delay: 20000, action: async () => { await invoke("toggle_camera", { enabled: false }); } },
-          { delay: 25000, action: async () => { await invoke("toggle_camera", { enabled: true }); } },
-          { delay: 35000, action: async () => { await invoke("toggle_mic", { enabled: false }); } },
-          { delay: 38000, action: async () => { await invoke("toggle_mic", { enabled: true }); } },
-        ];
-        for (const t of toggleSequence) {
-          setTimeout(async () => { try { await t.action(); } catch {} }, t.delay);
-        }
+        // Turn-based speaking: Desktop speaks at 25-50s, muted otherwise (except warmup 0-5s and final 100-120s)
+        // 5s: mute mic+cam (bot's turn)
+        setTimeout(async () => { try { await invoke("toggle_mic", { enabled: false }); await invoke("toggle_camera", { enabled: false }); console.log("[TURN] Desktop muted (bot's turn)"); } catch {} }, 5000);
+        // 25s: unmute — Desktop's turn to speak
+        setTimeout(async () => { try { await invoke("toggle_mic", { enabled: true }); await invoke("toggle_camera", { enabled: true }); console.log("[TURN] Desktop speaking"); } catch {} }, 25000);
+        // 50s: mute — Android's turn
+        setTimeout(async () => { try { await invoke("toggle_mic", { enabled: false }); await invoke("toggle_camera", { enabled: false }); console.log("[TURN] Desktop muted (Android's turn)"); } catch {} }, 50000);
+        // 100s: unmute — everyone speaks
+        setTimeout(async () => { try { await invoke("toggle_mic", { enabled: true }); await invoke("toggle_camera", { enabled: true }); console.log("[TURN] Desktop unmuted (all speak)"); } catch {} }, 100000);
 
-        // Auto screen share: start when bot stops sharing (~30s into test), stop after 20s
+        // Auto screen share during Desktop's turn (30-48s)
         setTimeout(async () => {
           try {
-            // Get available sources and pick the first monitor
             const sources = await invoke<Array<{id: string, name: string, source_type: string}>>("list_screen_sources");
             const monitor = sources.find(s => s.source_type === "Monitor") || sources[0];
             if (monitor) {
-              console.log("Auto screen share: starting with source", monitor.name);
+              console.log("[TURN] Desktop screen share started");
               await invoke("start_screen_share", { sourceId: monitor.id });
-              setIsScreenSharing(true);
-              // Stop after 20s
               setTimeout(async () => {
                 try {
                   await invoke("stop_screen_share");
-                  setIsScreenSharing(false);
-                  console.log("Auto screen share: stopped");
-                } catch (err) {
-                  console.error("Auto screen share stop failed:", err);
-                }
-              }, 20000);
+                  console.log("[TURN] Desktop screen share stopped");
+                } catch (err) { console.error("Screen share stop failed:", err); }
+              }, 18000);
             }
-          } catch (err) {
-            console.error("Auto screen share failed:", err);
-          }
-        }, 35000); // Start at 35s — after bot stops its share at ~30s
+          } catch (err) { console.error("Screen share failed:", err); }
+        }, 30000);
       } catch (err) {
         console.error("Auto-connect failed:", err);
       }

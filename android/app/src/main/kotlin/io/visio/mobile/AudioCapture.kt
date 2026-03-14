@@ -12,6 +12,9 @@ import java.nio.ByteOrder
 /**
  * Captures microphone audio via AudioRecord and pushes PCM frames
  * into the Rust NativeAudioSource via JNI.
+ *
+ * Also supports synthetic audio mode (440Hz sine wave) for E2E testing
+ * on emulators that have no real microphone.
  */
 class AudioCapture {
     companion object {
@@ -22,6 +25,8 @@ class AudioCapture {
 
         // 480 samples per 10ms frame at 48kHz mono
         private const val SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_SIZE_MS / 1000 * CHANNELS
+        private const val SINE_FREQ = 440.0
+        private const val SINE_AMPLITUDE = 3000.0
     }
 
     private val lock = Any()
@@ -30,12 +35,14 @@ class AudioCapture {
     private var running = false
     private var recordThread: Thread? = null
     private var recorder: AudioRecord? = null
+    private var synthetic = false
 
     @SuppressLint("MissingPermission") // Caller must check RECORD_AUDIO permission
     fun start(device: AudioDeviceInfo? = null) {
         synchronized(lock) {
             if (running) return
             running = true
+            synthetic = false
 
             val bufferSize =
                 maxOf(
@@ -104,6 +111,53 @@ class AudioCapture {
 
                 Log.i(TAG, "Audio capture stopped")
             }, "AudioCapture").also { it.start() }
+    }
+
+    /**
+     * Start synthetic audio capture (440Hz sine wave).
+     * Used for E2E testing on emulators with no real microphone.
+     */
+    fun startSynthetic() {
+        synchronized(lock) {
+            if (running) return
+            running = true
+            synthetic = true
+        }
+
+        Log.i(TAG, "Synthetic audio capture started: ${SINE_FREQ}Hz sine, ${SAMPLE_RATE}Hz, ${FRAME_SIZE_MS}ms frames")
+
+        recordThread = Thread({
+            val buffer = ByteBuffer.allocateDirect(SAMPLES_PER_FRAME * 2)
+            buffer.order(ByteOrder.nativeOrder())
+            val shortBuffer = buffer.asShortBuffer()
+
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+
+            val tempArray = ShortArray(SAMPLES_PER_FRAME)
+            var sampleOffset = 0L
+
+            while (running) {
+                for (i in 0 until SAMPLES_PER_FRAME) {
+                    val t = (sampleOffset + i) / SAMPLE_RATE.toDouble()
+                    tempArray[i] = (Math.sin(t * SINE_FREQ * 2.0 * Math.PI) * SINE_AMPLITUDE).toInt().toShort()
+                }
+                sampleOffset += SAMPLES_PER_FRAME
+
+                buffer.clear()
+                shortBuffer.clear()
+                shortBuffer.put(tempArray, 0, SAMPLES_PER_FRAME)
+                buffer.position(0)
+                buffer.limit(SAMPLES_PER_FRAME * 2)
+
+                NativeVideo.nativePushAudioFrame(
+                    buffer, SAMPLES_PER_FRAME, SAMPLE_RATE, CHANNELS,
+                )
+
+                Thread.sleep(FRAME_SIZE_MS.toLong())
+            }
+
+            Log.i(TAG, "Synthetic audio capture stopped")
+        }, "SyntheticAudioCapture").also { it.start() }
     }
 
     fun setPreferredDevice(device: AudioDeviceInfo?) {

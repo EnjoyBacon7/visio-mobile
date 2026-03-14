@@ -17,6 +17,13 @@ typedef void (*VisioIosFrameCallback)(
 );
 void visio_video_set_ios_callback(VisioIosFrameCallback callback, void *user_data);
 
+// Audio capture — push PCM i16 audio frame into LiveKit NativeAudioSource.
+// Used by SyntheticAudioCapture for E2E testing on simulators.
+void visio_push_ios_audio_frame(
+    const int16_t *data, uint32_t num_samples,
+    uint32_t sample_rate, uint32_t num_channels
+);
+
 // Camera capture — push I420 frame from AVCaptureSession into LiveKit
 void visio_push_ios_camera_frame(
     const uint8_t *y_ptr, uint32_t y_stride,

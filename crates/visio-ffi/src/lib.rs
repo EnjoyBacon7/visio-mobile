@@ -903,6 +903,20 @@ impl VisioClient {
                 }
             }
 
+            #[cfg(target_os = "ios")]
+            {
+                let mut guard = AUDIO_SOURCE_IOS.lock().unwrap();
+                if enabled {
+                    if let Some(source) = self.controls.audio_source().await {
+                        visio_log("VISIO FFI: audio source stored for iOS pipeline");
+                        *guard = Some(source);
+                    }
+                } else {
+                    visio_log("VISIO FFI: audio source cleared (iOS)");
+                    *guard = None;
+                }
+            }
+
             Ok(())
         })
     }
@@ -1544,10 +1558,12 @@ mod pending {
 }
 
 /// Dedicated tokio runtime for async audio capture_frame calls.
-#[cfg(target_os = "android")]
+/// Used by both Android JNI and iOS C FFI audio capture, which run on
+/// non-tokio threads (AudioCapture thread / Swift DispatchQueue).
+#[cfg(any(target_os = "android", target_os = "ios"))]
 static AUDIO_RT: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn audio_runtime() -> &'static tokio::runtime::Runtime {
     AUDIO_RT.get_or_init(|| {
         tokio::runtime::Builder::new_current_thread()
@@ -1845,6 +1861,14 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_nativePullAudioPlaybac
 static PLAYOUT_BUFFER_IOS: StdMutex<Option<Arc<visio_core::AudioPlayoutBuffer>>> =
     StdMutex::new(None);
 
+/// Stores the NativeAudioSource after `set_microphone_enabled(true)` publishes
+/// the audio track. The iOS SyntheticAudioCapture pushes PCM frames
+/// into this source via C FFI → `visio_push_ios_audio_frame()`.
+#[cfg(target_os = "ios")]
+static AUDIO_SOURCE_IOS: StdMutex<
+    Option<livekit::webrtc::audio_source::native::NativeAudioSource>,
+> = StdMutex::new(None);
+
 /// Stores the NativeVideoSource after `set_camera_enabled(true)` publishes
 /// the camera track. The iOS CameraCapture Swift class pushes I420 frames
 /// into this source via C FFI → `visio_push_ios_camera_frame()`.
@@ -1873,6 +1897,41 @@ pub unsafe extern "C" fn visio_pull_audio_playback(buffer: *mut i16, capacity: u
 
     let out = unsafe { std::slice::from_raw_parts_mut(buffer, capacity as usize) };
     playout.pull_samples(out) as i32
+}
+
+/// Push a PCM audio frame from iOS into the LiveKit NativeAudioSource.
+///
+/// Used by SyntheticAudioCapture to push generated sine wave frames.
+///
+/// # Safety
+/// - `data` must point to a valid i16 array of at least `num_samples` elements.
+#[cfg(target_os = "ios")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn visio_push_ios_audio_frame(
+    data: *const i16,
+    num_samples: u32,
+    sample_rate: u32,
+    num_channels: u32,
+) {
+    let source = {
+        let guard = AUDIO_SOURCE_IOS.lock().unwrap();
+        match guard.as_ref() {
+            Some(s) => s.clone(),
+            None => return,
+        }
+    };
+
+    let samples = unsafe { std::slice::from_raw_parts(data, num_samples as usize) };
+    let frame = livekit::webrtc::prelude::AudioFrame {
+        data: samples.to_vec().into(),
+        sample_rate,
+        num_channels,
+        samples_per_channel: num_samples / num_channels,
+    };
+
+    // capture_frame is async — run on dedicated single-thread runtime
+    // (same pattern as Android JNI audio capture)
+    let _ = audio_runtime().block_on(source.capture_frame(&frame));
 }
 
 /// Push an I420 video frame from the iOS camera into the LiveKit NativeVideoSource.

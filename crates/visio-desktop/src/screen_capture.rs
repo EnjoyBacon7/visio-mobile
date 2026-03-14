@@ -294,6 +294,8 @@ async fn capture_loop(source_id: &str, video_source: NativeVideoSource, stop: Ar
                     buffer: i420,
                 };
                 video_source.capture_frame(&frame);
+                // Self-view: render locally so the user sees their own screen share
+                visio_video::render_local_i420(&frame.buffer, "local-screen");
             }
             Ok(Err(e)) => {
                 tracing::warn!("screen capture failed: {e}");

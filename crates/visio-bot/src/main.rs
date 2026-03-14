@@ -150,6 +150,11 @@ impl AudioStats {
         *last = Some(now);
     }
 
+    /// Reset the gap timer so that intentional mute periods are not counted as gaps.
+    fn reset_gap_timer(&self) {
+        *self.last_frame_time.lock().unwrap() = None;
+    }
+
     fn report(&self) -> String {
         let total = self.frames_received.load(Ordering::Relaxed);
         let silent = self.silent_frames.load(Ordering::Relaxed);
@@ -197,6 +202,11 @@ impl VideoStats {
         *last = Some(now);
     }
 
+    /// Reset the gap timer so that intentional mute periods are not counted as gaps.
+    fn reset_gap_timer(&self) {
+        *self.last_frame_time.lock().unwrap() = None;
+    }
+
     fn report(&self) -> String {
         let total = self.frames_received.load(Ordering::Relaxed);
         let max_gap = self.max_gap_ms.load(Ordering::Relaxed);
@@ -210,13 +220,24 @@ impl VideoStats {
     }
 }
 
+/// Per-participant stats map: participant_identity → Stats
+type ParticipantAudioStats = std::sync::Mutex<std::collections::HashMap<String, Arc<AudioStats>>>;
+type ParticipantVideoStats = std::sync::Mutex<std::collections::HashMap<String, Arc<VideoStats>>>;
+
 /// Event logger that prints all received events and tracks subscription stats.
 struct BotEventLogger {
     tracks_subscribed: AtomicU64,
     tracks_unsubscribed: AtomicU64,
     participants_joined: AtomicU64,
-    audio_track_sids: std::sync::Mutex<Vec<String>>,
-    video_track_sids: std::sync::Mutex<Vec<String>>,
+    /// track_sid → participant_identity
+    audio_track_sids: std::sync::Mutex<Vec<(String, String)>>,
+    video_track_sids: std::sync::Mutex<Vec<(String, String)>>,
+    /// participant_sid → participant_identity mapping
+    participant_identities: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// Per-participant audio stats
+    per_participant_audio: ParticipantAudioStats,
+    /// Per-participant video stats
+    per_participant_video: ParticipantVideoStats,
 }
 
 impl BotEventLogger {
@@ -227,7 +248,24 @@ impl BotEventLogger {
             participants_joined: AtomicU64::new(0),
             audio_track_sids: std::sync::Mutex::new(Vec::new()),
             video_track_sids: std::sync::Mutex::new(Vec::new()),
+            participant_identities: std::sync::Mutex::new(std::collections::HashMap::new()),
+            per_participant_audio: std::sync::Mutex::new(std::collections::HashMap::new()),
+            per_participant_video: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
+    }
+
+    fn get_or_create_audio_stats(&self, identity: &str) -> Arc<AudioStats> {
+        let mut map = self.per_participant_audio.lock().unwrap();
+        map.entry(identity.to_string())
+            .or_insert_with(AudioStats::new)
+            .clone()
+    }
+
+    fn get_or_create_video_stats(&self, identity: &str) -> Arc<VideoStats> {
+        let mut map = self.per_participant_video.lock().unwrap();
+        map.entry(identity.to_string())
+            .or_insert_with(VideoStats::new)
+            .clone()
     }
 }
 
@@ -250,12 +288,18 @@ impl VisioEventListener for BotEventLogger {
             }
             VisioEvent::TrackSubscribed(info) => {
                 let count = self.tracks_subscribed.fetch_add(1, Ordering::Relaxed) + 1;
-                tracing::info!("[EVENT] TrackSubscribed: {:?} from {} (total: {count})", info.source, info.participant_sid);
+                tracing::info!(
+                    "[EVENT] TrackSubscribed: {:?} from {} ({}) (total: {count})",
+                    info.source, info.participant_identity, info.participant_sid
+                );
+                // Store participant_sid → identity mapping
+                self.participant_identities.lock().unwrap()
+                    .insert(info.participant_sid.clone(), info.participant_identity.clone());
                 if info.kind == TrackKind::Audio {
-                    self.audio_track_sids.lock().unwrap().push(info.sid.clone());
+                    self.audio_track_sids.lock().unwrap().push((info.sid.clone(), info.participant_identity.clone()));
                 }
                 if info.kind == TrackKind::Video {
-                    self.video_track_sids.lock().unwrap().push(info.sid.clone());
+                    self.video_track_sids.lock().unwrap().push((info.sid.clone(), info.participant_identity.clone()));
                 }
             }
             VisioEvent::TrackUnsubscribed(sid) => {
@@ -264,9 +308,29 @@ impl VisioEventListener for BotEventLogger {
             }
             VisioEvent::TrackMuted { participant_sid, source } => {
                 tracing::info!("[EVENT] TrackMuted: {source:?} from {participant_sid}");
+                // Reset per-participant gap timers so intentional mute periods don't count as gaps/freezes
+                let identity = self.participant_identities.lock().unwrap().get(participant_sid).cloned();
+                if let Some(id) = &identity {
+                    if let Some(stats) = self.per_participant_audio.lock().unwrap().get(id) {
+                        stats.reset_gap_timer();
+                    }
+                    if let Some(stats) = self.per_participant_video.lock().unwrap().get(id) {
+                        stats.reset_gap_timer();
+                    }
+                }
             }
             VisioEvent::TrackUnmuted { participant_sid, source } => {
                 tracing::info!("[EVENT] TrackUnmuted: {source:?} from {participant_sid}");
+                // Reset per-participant gap timers so intentional mute periods don't count as gaps/freezes
+                let identity = self.participant_identities.lock().unwrap().get(participant_sid).cloned();
+                if let Some(id) = &identity {
+                    if let Some(stats) = self.per_participant_audio.lock().unwrap().get(id) {
+                        stats.reset_gap_timer();
+                    }
+                    if let Some(stats) = self.per_participant_video.lock().unwrap().get(id) {
+                        stats.reset_gap_timer();
+                    }
+                }
             }
             VisioEvent::ChatMessageReceived(msg) => {
                 tracing::info!("[EVENT] ChatMessage: '{}' from {}", msg.text, msg.sender_name);
@@ -700,93 +764,100 @@ async fn main() {
         }
     }
 
-    // Monitor received audio/video track subscriptions
-    let audio_stats = if args.monitor_audio {
-        let stats = AudioStats::new();
-
-        // Periodic reporting
+    // Monitor received audio/video track subscriptions — per-participant stats
+    let monitor_active = args.monitor_audio;
+    if monitor_active {
+        // Periodic per-participant reporting
         tokio::spawn({
-            let stats = stats.clone();
+            let event_logger = event_logger.clone();
             async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(5)).await;
-                    let report = stats.report();
-                    tracing::info!("[AUDIO QUALITY] {report}");
+                    let audio_map = event_logger.per_participant_audio.lock().unwrap();
+                    for (identity, stats) in audio_map.iter() {
+                        tracing::info!("[AUDIO QUALITY] {identity}: {}", stats.report());
+                    }
+                    let video_map = event_logger.per_participant_video.lock().unwrap();
+                    for (identity, stats) in video_map.iter() {
+                        tracing::info!("[VIDEO QUALITY] {identity}: {}", stats.report());
+                    }
                 }
             }
         });
 
-        // Wait for track subscriptions
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        let audio_sids = event_logger.audio_track_sids.lock().unwrap().clone();
-        tracing::info!("[AUDIO MONITOR] Found {} remote audio tracks", audio_sids.len());
-
-        for sid in &audio_sids {
-            if let Some(track) = rm.get_audio_track(sid).await {
-                let rtc_track = track.rtc_track();
-                let stats_for_stream = stats.clone();
-                let sid_clone = sid.clone();
-                tokio::spawn(async move {
-                    use futures_util::StreamExt;
-                    let mut stream = livekit::webrtc::audio_stream::native::NativeAudioStream::new(
-                        rtc_track, 48_000, 1,
-                    );
-                    tracing::info!("[AUDIO MONITOR] Listening on track {sid_clone}");
-                    while let Some(frame) = stream.next().await {
-                        let is_silent = frame.data.iter().all(|&s| s.unsigned_abs() < 100);
-                        stats_for_stream.record_frame(is_silent);
-                    }
-                    tracing::info!("[AUDIO MONITOR] Stream ended for track {sid_clone}");
-                });
-            } else {
-                tracing::warn!("[AUDIO MONITOR] Could not find audio track {sid}");
-            }
-        }
-
-        Some(stats)
-    } else {
-        None
-    };
-
-    // Monitor received video track subscriptions
-    let video_stats = if args.monitor_audio {
-        let stats = VideoStats::new();
-
+        // Dynamic audio track subscription: poll for new audio tracks every 2s
         tokio::spawn({
-            let stats = stats.clone();
+            let event_logger = event_logger.clone();
+            let rm = rm.clone();
             async move {
+                let mut monitored_sids: std::collections::HashSet<String> = std::collections::HashSet::new();
                 loop {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    let report = stats.report();
-                    tracing::info!("[VIDEO QUALITY] {report}");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let current_entries = event_logger.audio_track_sids.lock().unwrap().clone();
+                    for (sid, identity) in current_entries {
+                        if monitored_sids.contains(&sid) {
+                            continue;
+                        }
+                        monitored_sids.insert(sid.clone());
+                        if let Some(track) = rm.get_audio_track(&sid).await {
+                            let rtc_track = track.rtc_track();
+                            let stats = event_logger.get_or_create_audio_stats(&identity);
+                            let sid_clone = sid.clone();
+                            let id_clone = identity.clone();
+                            tokio::spawn(async move {
+                                use futures_util::StreamExt;
+                                let mut stream = livekit::webrtc::audio_stream::native::NativeAudioStream::new(
+                                    rtc_track, 48_000, 1,
+                                );
+                                tracing::info!("[AUDIO MONITOR] Listening on track {sid_clone} from {id_clone}");
+                                while let Some(frame) = stream.next().await {
+                                    let is_silent = frame.data.iter().all(|&s| s.unsigned_abs() < 100);
+                                    stats.record_frame(is_silent);
+                                }
+                                tracing::info!("[AUDIO MONITOR] Stream ended for track {sid_clone} ({id_clone})");
+                            });
+                        } else {
+                            tracing::warn!("[AUDIO MONITOR] Could not find audio track {sid} ({identity})");
+                        }
+                    }
                 }
             }
         });
 
-        let video_sids = event_logger.video_track_sids.lock().unwrap().clone();
-        tracing::info!("[VIDEO MONITOR] Found {} remote video tracks", video_sids.len());
-
-        for sid in &video_sids {
-            if let Some(track) = rm.get_video_track(sid).await {
-                let rtc_track = track.rtc_track();
-                let stats_for_stream = stats.clone();
-                let sid_clone = sid.clone();
-                tokio::spawn(async move {
-                    use futures_util::StreamExt;
-                    let mut stream = livekit::webrtc::video_stream::native::NativeVideoStream::new(rtc_track);
-                    tracing::info!("[VIDEO MONITOR] Listening on track {sid_clone}");
-                    while let Some(_frame) = stream.next().await {
-                        stats_for_stream.record_frame();
+        // Dynamic video track subscription: poll for new video tracks every 2s
+        tokio::spawn({
+            let event_logger = event_logger.clone();
+            let rm = rm.clone();
+            async move {
+                let mut monitored_sids: std::collections::HashSet<String> = std::collections::HashSet::new();
+                loop {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let current_entries = event_logger.video_track_sids.lock().unwrap().clone();
+                    for (sid, identity) in current_entries {
+                        if monitored_sids.contains(&sid) {
+                            continue;
+                        }
+                        monitored_sids.insert(sid.clone());
+                        if let Some(track) = rm.get_video_track(&sid).await {
+                            let rtc_track = track.rtc_track();
+                            let stats = event_logger.get_or_create_video_stats(&identity);
+                            let sid_clone = sid.clone();
+                            let id_clone = identity.clone();
+                            tokio::spawn(async move {
+                                use futures_util::StreamExt;
+                                let mut stream = livekit::webrtc::video_stream::native::NativeVideoStream::new(rtc_track);
+                                tracing::info!("[VIDEO MONITOR] Listening on track {sid_clone} from {id_clone}");
+                                while let Some(_frame) = stream.next().await {
+                                    stats.record_frame();
+                                }
+                                tracing::info!("[VIDEO MONITOR] Stream ended for track {sid_clone} ({id_clone})");
+                            });
+                        }
                     }
-                    tracing::info!("[VIDEO MONITOR] Stream ended for track {sid_clone}");
-                });
+                }
             }
-        }
-
-        Some(stats)
-    } else {
-        None
-    };
+        });
+    }
 
     // Wait a bit for tracks to propagate
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -815,9 +886,9 @@ async fn main() {
         }
     }
 
-    // Stay in room, cycling mic and camera toggles
+    // Stay in room with turn-based speaking pattern
     if args.duration > 0 {
-        tracing::info!("Staying in room for {}s (cycling mic/camera toggles)...", args.duration);
+        tracing::info!("Staying in room for {}s (turn-based speaking)...", args.duration);
         let start_time = std::time::Instant::now();
         let total_duration = Duration::from_secs(args.duration);
 
@@ -836,112 +907,71 @@ async fn main() {
             start.elapsed() >= total
         }
 
-        let chat_interval = Duration::from_secs(args.chat_interval);
-        let mut last_chat_time = std::time::Instant::now();
+        // Turn-based pattern:
+        //   0-5s:    Warmup — all participants ON
+        //   5-25s:   Bot's turn (mic+cam ON, screen share ON)
+        //   25-50s:  Desktop's turn — bot mutes
+        //   50-75s:  Android's turn — bot stays muted
+        //   75-100s: iOS's turn — bot stays muted
+        //   100+:    All speak together
 
-        // Contextual messages sent after each toggle action
-        const CHAT_MESSAGES: &[&str] = &[
-            "Audio test: mic was toggled off and on",
-            "Video test: camera was toggled off and on",
-            "Still here! Testing cross-platform communication",
-            "Screen share is active, can you see it?",
-        ];
-        let mut chat_msg_idx: usize = 0;
+        // 0-5s: warmup — bot already has mic+cam+screenshare on from above
+        rm.chat().send_message("Bot: warmup phase — all participants ON").await.ok();
+        if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
+            // duration < 5s, skip turn pattern
+        } else {
+            // 5-25s: Bot's turn to speak (already ON)
+            tracing::info!("[TURN] Bot speaking (0-25s)");
+            rm.chat().send_message("Bot: my turn to speak!").await.ok();
 
-        loop {
-            // Sleep 10s before first toggle
-            if sleep_or_expire(start_time, total_duration, Duration::from_secs(10)).await {
-                break;
-            }
-
-            // Toggle mic off
-            tracing::info!("[TOGGLE] Muting microphone");
-            if let Err(e) = controls.set_microphone_enabled(false).await {
-                tracing::warn!("[TOGGLE] Failed to mute mic: {e}");
-            }
-
-            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
-                break;
-            }
-
-            // Toggle mic on
-            tracing::info!("[TOGGLE] Unmuting microphone");
-            if let Err(e) = controls.set_microphone_enabled(true).await {
-                tracing::warn!("[TOGGLE] Failed to unmute mic: {e}");
-            }
-
-            // Send chat after mic toggle cycle if interval has elapsed
-            if last_chat_time.elapsed() >= chat_interval {
-                let msg = CHAT_MESSAGES[chat_msg_idx % CHAT_MESSAGES.len()];
-                match rm.chat().send_message(msg).await {
-                    Ok(_) => tracing::info!("[CHAT] Sent periodic: '{msg}'"),
-                    Err(e) => tracing::warn!("[CHAT] Failed to send periodic chat: {e}"),
+            if !sleep_or_expire(start_time, total_duration, Duration::from_secs(20)).await {
+                // 25s: Bot mutes — Desktop's turn
+                tracing::info!("[TURN] Bot muting (Desktop's turn 25-50s)");
+                controls.set_microphone_enabled(false).await.ok();
+                controls.set_camera_enabled(false).await.ok();
+                if args.screen_share {
+                    controls.stop_screen_share().await.ok();
                 }
-                chat_msg_idx += 1;
-                last_chat_time = std::time::Instant::now();
-            }
+                rm.chat().send_message("Bot: muted — Desktop's turn to speak").await.ok();
 
-            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
-                break;
-            }
+                if !sleep_or_expire(start_time, total_duration, Duration::from_secs(25)).await {
+                    // 50s: Android's turn — bot stays muted
+                    tracing::info!("[TURN] Bot still muted (Android's turn 50-75s)");
+                    rm.chat().send_message("Bot: still muted — Android's turn to speak").await.ok();
 
-            // Toggle camera off
-            tracing::info!("[TOGGLE] Disabling camera");
-            if let Err(e) = controls.set_camera_enabled(false).await {
-                tracing::warn!("[TOGGLE] Failed to disable camera: {e}");
-            }
+                    if !sleep_or_expire(start_time, total_duration, Duration::from_secs(25)).await {
+                        // 75s: iOS's turn — bot stays muted
+                        tracing::info!("[TURN] Bot still muted (iOS's turn 75-100s)");
+                        rm.chat().send_message("Bot: still muted — iOS's turn to speak").await.ok();
 
-            if sleep_or_expire(start_time, total_duration, Duration::from_secs(5)).await {
-                break;
-            }
+                        if !sleep_or_expire(start_time, total_duration, Duration::from_secs(25)).await {
+                            // 100s: All speak together
+                            tracing::info!("[TURN] All speak (100s+)");
+                            controls.set_microphone_enabled(true).await.ok();
+                            controls.set_camera_enabled(true).await.ok();
+                            if args.screen_share {
+                                match controls.publish_screen_share().await {
+                                    Ok(source) => {
+                                        if let Some(ref path) = args.media_file {
+                                            spawn_file_video(source, path.clone(), args.loop_media);
+                                        } else {
+                                            spawn_synthetic_video(source);
+                                        }
+                                    }
+                                    Err(e) => tracing::warn!("[TURN] Failed to resume screen share: {e}"),
+                                }
+                            }
+                            rm.chat().send_message("Bot: everyone speaking together!").await.ok();
 
-            // Toggle camera on
-            tracing::info!("[TOGGLE] Enabling camera");
-            if let Err(e) = controls.set_camera_enabled(true).await {
-                tracing::warn!("[TOGGLE] Failed to enable camera: {e}");
-            }
-
-            // Send chat after camera toggle cycle if interval has elapsed
-            if last_chat_time.elapsed() >= chat_interval {
-                let msg = CHAT_MESSAGES[chat_msg_idx % CHAT_MESSAGES.len()];
-                match rm.chat().send_message(msg).await {
-                    Ok(_) => tracing::info!("[CHAT] Sent periodic: '{msg}'"),
-                    Err(e) => tracing::warn!("[CHAT] Failed to send periodic chat: {e}"),
-                }
-                chat_msg_idx += 1;
-                last_chat_time = std::time::Instant::now();
-            }
-
-            // Toggle screen share off for 20s to let desktop take over
-            if args.screen_share {
-                tracing::info!("[TOGGLE] Stopping screen share (letting desktop share)");
-                if let Err(e) = controls.stop_screen_share().await {
-                    tracing::warn!("[TOGGLE] Failed to stop screen share: {e}");
-                }
-
-                if let Err(e) = rm.chat().send_message("Screen share test: bot stopped sharing, desktop can take over").await {
-                    tracing::warn!("[CHAT] Failed to send screen share message: {e}");
-                }
-
-                if sleep_or_expire(start_time, total_duration, Duration::from_secs(20)).await {
-                    break;
-                }
-
-                tracing::info!("[TOGGLE] Resuming bot screen share");
-                match controls.publish_screen_share().await {
-                    Ok(source) => {
-                        if let Some(ref path) = args.media_file {
-                            spawn_file_video(source, path.clone(), args.loop_media);
-                        } else {
-                            spawn_synthetic_video(source);
+                            // Stay until end
+                            sleep_or_expire(start_time, total_duration, total_duration).await;
                         }
                     }
-                    Err(e) => tracing::warn!("[TOGGLE] Failed to resume screen share: {e}"),
                 }
             }
         }
 
-        tracing::info!("Toggle cycling complete after {:.1}s", start_time.elapsed().as_secs_f64());
+        tracing::info!("Turn-based speaking complete after {:.1}s", start_time.elapsed().as_secs_f64());
     } else {
         tracing::info!("Staying in room indefinitely (Ctrl+C to exit)...");
         tokio::signal::ctrl_c().await.ok();
@@ -955,33 +985,43 @@ async fn main() {
         "[SUMMARY] participants_joined={joins}, tracks_subscribed={subs}, tracks_unsubscribed={unsubs}"
     );
 
-    // Final audio quality report
-    if let Some(ref stats) = audio_stats {
-        let report = stats.report();
-        tracing::info!("[AUDIO QUALITY FINAL] {report}");
-        let total = stats.frames_received.load(Ordering::Relaxed);
-        let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
-        if total == 0 {
-            tracing::warn!("[AUDIO QUALITY] NO audio frames received — possible pipeline failure");
-        } else if max_gap > 200 {
-            tracing::warn!("[AUDIO QUALITY] Large gap detected: {max_gap}ms — possible audio stutter");
-        } else {
-            tracing::info!("[AUDIO QUALITY] Audio quality OK");
+    // Final per-participant audio quality reports
+    if monitor_active {
+        let audio_map = event_logger.per_participant_audio.lock().unwrap();
+        if audio_map.is_empty() {
+            tracing::warn!("[AUDIO QUALITY] NO audio tracks monitored — possible pipeline failure");
         }
-    }
+        for (identity, stats) in audio_map.iter() {
+            let report = stats.report();
+            tracing::info!("[AUDIO QUALITY FINAL] {identity}: {report}");
+            let total = stats.frames_received.load(Ordering::Relaxed);
+            let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
+            if total == 0 {
+                tracing::warn!("[AUDIO QUALITY] {identity}: NO audio frames received");
+            } else if max_gap > 200 {
+                tracing::warn!("[AUDIO QUALITY] {identity}: Large gap {max_gap}ms — possible stutter");
+            } else {
+                tracing::info!("[AUDIO QUALITY] {identity}: OK");
+            }
+        }
 
-    // Final video quality report
-    if let Some(ref stats) = video_stats {
-        let report = stats.report();
-        tracing::info!("[VIDEO QUALITY FINAL] {report}");
-        let total = stats.frames_received.load(Ordering::Relaxed);
-        let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
-        if total == 0 {
-            tracing::warn!("[VIDEO QUALITY] NO video frames received");
-        } else if max_gap > 2000 {
-            tracing::warn!("[VIDEO QUALITY] Large gap detected: {max_gap}ms — possible video freeze");
-        } else {
-            tracing::info!("[VIDEO QUALITY] Video quality OK");
+        // Final per-participant video quality reports
+        let video_map = event_logger.per_participant_video.lock().unwrap();
+        if video_map.is_empty() {
+            tracing::warn!("[VIDEO QUALITY] NO video tracks monitored");
+        }
+        for (identity, stats) in video_map.iter() {
+            let report = stats.report();
+            tracing::info!("[VIDEO QUALITY FINAL] {identity}: {report}");
+            let total = stats.frames_received.load(Ordering::Relaxed);
+            let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
+            if total == 0 {
+                tracing::warn!("[VIDEO QUALITY] {identity}: NO video frames received");
+            } else if max_gap > 2000 {
+                tracing::warn!("[VIDEO QUALITY] {identity}: Large gap {max_gap}ms — possible freeze");
+            } else {
+                tracing::info!("[VIDEO QUALITY] {identity}: OK");
+            }
         }
     }
 

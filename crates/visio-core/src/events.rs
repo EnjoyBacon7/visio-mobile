@@ -91,6 +91,7 @@ pub enum ConnectionQuality {
 pub struct TrackInfo {
     pub sid: String,
     pub participant_sid: String,
+    pub participant_identity: String,
     pub kind: TrackKind,
     pub source: TrackSource,
 }

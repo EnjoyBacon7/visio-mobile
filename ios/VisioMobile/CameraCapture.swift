@@ -30,7 +30,7 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             }
 
             session.beginConfiguration()
-            session.sessionPreset = .vga640x480
+            session.sessionPreset = .medium
 
             // Try front camera first, then any camera.
             var device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
@@ -68,6 +68,15 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
 
             if session.canAddOutput(output) {
                 session.addOutput(output)
+                // Set video orientation to portrait so frames match the device's natural orientation.
+                if let connection = output.connection(with: .video) {
+                    if connection.isVideoOrientationSupported {
+                        connection.videoOrientation = .portrait
+                    }
+                    if connection.isVideoMirroringSupported && device.position == .front {
+                        connection.isVideoMirrored = true
+                    }
+                }
             }
 
             session.commitConfiguration()

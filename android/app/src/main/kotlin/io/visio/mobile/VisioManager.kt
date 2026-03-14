@@ -336,6 +336,14 @@ object VisioManager : VisioEventListener {
     }
 
     /**
+     * Start synthetic audio capture (440Hz sine wave for E2E testing on emulators).
+     */
+    fun startSyntheticAudioCapture() {
+        if (audioCapture != null) return
+        audioCapture = AudioCapture().also { it.startSynthetic() }
+    }
+
+    /**
      * Stop AudioRecord capture. Call when mic is disabled or room disconnects.
      */
     fun stopAudioCapture() {

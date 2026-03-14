@@ -129,6 +129,7 @@ impl VisioEventListener for DesktopEventListener {
                 ref participant_sid,
                 kind: TrackKind::Video,
                 ref source,
+                ..
             }) => {
                 let room = self.room.clone();
                 let sid = track_sid.clone();
@@ -497,20 +498,29 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
     let controls = state.controls.lock().await;
     if enabled {
         // Publish camera track if not yet published
-        if controls.video_source().await.is_none() {
+        let source = if controls.video_source().await.is_none() {
             let source = controls.publish_camera().await.map_err(|e| e.to_string())?;
             tracing::info!("camera track published via toggle_camera");
+            Some(source)
+        } else {
+            // Track already published — get existing source for camera restart
+            controls.video_source().await
+        };
 
-            // Start native camera capture
-            #[cfg(target_os = "macos")]
-            {
-                let capture = camera_macos::MacCameraCapture::start(source)
-                    .map_err(|e| format!("camera capture: {e}"))?;
-                let mut cam = state
-                    .camera_capture
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
-                *cam = Some(capture);
+        // Start native camera capture if not already running
+        #[cfg(target_os = "macos")]
+        {
+            let mut cam = state
+                .camera_capture
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if cam.is_none() {
+                if let Some(source) = source {
+                    let capture = camera_macos::MacCameraCapture::start(source)
+                        .map_err(|e| format!("camera capture: {e}"))?;
+                    *cam = Some(capture);
+                    tracing::info!("camera capture (re)started");
+                }
             }
         }
     } else {

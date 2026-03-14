@@ -67,3 +67,4 @@ Gemfile.lock
 
 # Test media assets (downloaded, not committed)
 test-assets/
+crates/visio-desktop/frontend/test-results/

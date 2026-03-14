@@ -358,32 +358,42 @@ fun CallScreen(
                 micEnabled = settings?.micEnabledOnJoin ?: true
                 cameraEnabled = settings?.cameraEnabledOnJoin ?: false
 
-                // Auto-chat messages for E2E test
+                // Auto-chat messages for E2E test (turn-based)
                 coroutineScope.launch(Dispatchers.IO) {
                     delay(3000)
                     try { VisioManager.client.sendChatMessage("Android joined the room!") } catch (_: Exception) {}
-                    delay(12000)
-                    try { VisioManager.client.sendChatMessage("Android: I can see the bot's video") } catch (_: Exception) {}
-                    delay(15000)
-                    try { VisioManager.client.sendChatMessage("Android: Audio is working fine") } catch (_: Exception) {}
-                    delay(15000)
-                    try { VisioManager.client.sendChatMessage("Android: All tracks received") } catch (_: Exception) {}
+                    delay(47000) // 50s total
+                    try { VisioManager.client.sendChatMessage("Android: my turn to speak!") } catch (_: Exception) {}
+                    delay(15000) // 65s total
+                    try { VisioManager.client.sendChatMessage("Android: mid-turn check-in") } catch (_: Exception) {}
+                    delay(10000) // 75s total
+                    try { VisioManager.client.sendChatMessage("Android: muted — iOS's turn") } catch (_: Exception) {}
+                    delay(25000) // 100s total
+                    try { VisioManager.client.sendChatMessage("Android: everyone speaking together!") } catch (_: Exception) {}
                 }
 
-                // Auto-toggle mic and camera for E2E test
+                // Turn-based speaking: Android speaks at 50-75s, muted otherwise (except warmup 0-5s and final 100-120s)
                 coroutineScope.launch(Dispatchers.IO) {
-                    delay(8000)
+                    // 5s: mute mic+cam (bot's turn)
+                    delay(5000)
+                    Log.i(TAG, "[TURN] Android muted (bot's turn)")
                     try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
-                    delay(5000)  // 13s total
-                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startAudioCapture() } catch (_: Exception) {}
-                    delay(7000)  // 20s total
                     try { VisioManager.stopCameraCapture(); VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
-                    delay(5000)  // 25s total
+                    // 50s: unmute — Android's turn to speak
+                    delay(45000)
+                    Log.i(TAG, "[TURN] Android speaking")
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startSyntheticAudioCapture() } catch (_: Exception) {}
                     try { VisioManager.client.setCameraEnabled(true); VisioManager.startCameraCapture() } catch (_: Exception) {}
-                    delay(10000) // 35s total
+                    // 75s: mute — iOS's turn
+                    delay(25000)
+                    Log.i(TAG, "[TURN] Android muted (iOS's turn)")
                     try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
-                    delay(3000)  // 38s total
-                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startAudioCapture() } catch (_: Exception) {}
+                    try { VisioManager.stopCameraCapture(); VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
+                    // 100s: unmute — everyone speaks
+                    delay(25000)
+                    Log.i(TAG, "[TURN] Android unmuted (all speak)")
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startSyntheticAudioCapture() } catch (_: Exception) {}
+                    try { VisioManager.client.setCameraEnabled(true); VisioManager.startCameraCapture() } catch (_: Exception) {}
                 }
 
                 return@withContext

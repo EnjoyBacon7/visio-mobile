@@ -72,10 +72,11 @@ final class AudioPlayout {
     private func configureSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // .playback — no microphone access needed (simulator has no mic).
-            try session.setCategory(.playback, mode: .voiceChat)
+            // .playAndRecord for physical devices (mic + speaker), .voiceChat optimizes for voice.
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
             try session.setPreferredSampleRate(sampleRate)
             try session.setActive(true)
+            print("AudioPlayout: session configured (.playAndRecord, defaultToSpeaker)")
         } catch {
             print("AudioPlayout: session config failed: \(error)")
         }
