@@ -64,6 +64,18 @@ impl Default for RoomManager {
     }
 }
 
+/// Build RoomOptions with our configuration.
+/// Meet uses maxRetries=5, peerConnectionTimeout=60s.
+fn create_room_options(high_quality: bool) -> RoomOptions {
+    let mut options = RoomOptions::default();
+    options.auto_subscribe = true;
+    options.adaptive_stream = !high_quality;
+    options.dynacast = true;
+    options.join_retries = 5;
+    options.connect_timeout = std::time::Duration::from_secs(60);
+    options
+}
+
 impl RoomManager {
     pub fn new() -> Self {
         Self {
@@ -327,10 +339,7 @@ impl RoomManager {
             .high_quality_mode
             .load(std::sync::atomic::Ordering::Relaxed);
 
-        let mut options = RoomOptions::default();
-        options.auto_subscribe = true;
-        options.adaptive_stream = !high_quality;
-        options.dynacast = true;
+        let options = create_room_options(high_quality);
 
         let (room, events) = Room::connect(livekit_url, token, options)
             .await
@@ -1514,5 +1523,13 @@ mod tests {
         // No room means no local participant, no remote participants
         let participants = rm.participants().await;
         assert!(participants.is_empty());
+    }
+
+    #[test]
+    fn room_options_have_extended_timeouts() {
+        // Meet: maxRetries=5, peerConnectionTimeout=60s
+        let options = create_room_options(false);
+        assert_eq!(options.join_retries, 5);
+        assert_eq!(options.connect_timeout, std::time::Duration::from_secs(60));
     }
 }
