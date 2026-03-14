@@ -49,7 +49,7 @@ fn w(r: windows::core::Result<()>) -> Result<(), String> {
 
 /// Initialize COM on the current thread (each thread needs its own init).
 fn init_com() -> Result<(), String> {
-    w(unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) })
+    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.ok().map_err(|e| format!("{e}"))
 }
 
 /// Get the default audio endpoint for the given data flow.
