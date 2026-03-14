@@ -18,6 +18,8 @@ mod audio_linux;
 mod camera_macos;
 mod noise_reduction;
 mod screen_capture;
+#[cfg(target_os = "macos")]
+mod screen_audio_macos;
 
 // ---------------------------------------------------------------------------
 // Global AppHandle for the C video callback
@@ -71,6 +73,8 @@ struct VisioState {
     selected_input_device: std::sync::Mutex<Option<String>>,
     selected_output_device: std::sync::Mutex<Option<String>>,
     screen_capture: std::sync::Mutex<Option<screen_capture::ScreenCapture>>,
+    #[cfg(target_os = "macos")]
+    screen_audio_capture: std::sync::Mutex<Option<screen_audio_macos::ScreenAudioCapture>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -830,11 +834,38 @@ async fn start_screen_share(
     let capture = screen_capture::ScreenCapture::start(&source_id, source)
         .map_err(|e| format!("screen capture: {e}"))?;
 
-    let mut cap = state
-        .screen_capture
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    *cap = Some(capture);
+    {
+        let mut cap = state
+            .screen_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *cap = Some(capture);
+    }
+
+    // Start screen audio capture (macOS only)
+    #[cfg(target_os = "macos")]
+    {
+        match controls.publish_screen_share_audio().await {
+            Ok(audio_source) => {
+                match screen_audio_macos::ScreenAudioCapture::start(audio_source) {
+                    Ok(audio_cap) => {
+                        let mut sa = state
+                            .screen_audio_capture
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        *sa = Some(audio_cap);
+                        tracing::info!("screen audio capture started");
+                    }
+                    Err(e) => {
+                        tracing::warn!("screen audio capture failed (continuing without): {e}");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("publish screen share audio failed (continuing without): {e}");
+            }
+        }
+    }
 
     Ok(())
 }
@@ -851,7 +882,21 @@ async fn stop_screen_share(state: tauri::State<'_, VisioState>) -> Result<(), St
         }
     }
 
+    // Stop screen audio capture (macOS only)
+    #[cfg(target_os = "macos")]
+    {
+        let mut sa = state
+            .screen_audio_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(mut audio_cap) = sa.take() {
+            audio_cap.stop();
+        }
+    }
+
     let controls = state.controls.lock().await;
+    // Stop screen share audio track
+    let _ = controls.stop_screen_share_audio().await;
     controls
         .stop_screen_share()
         .await
@@ -1425,6 +1470,8 @@ pub fn run() {
         selected_input_device: std::sync::Mutex::new(None),
         selected_output_device: std::sync::Mutex::new(None),
         screen_capture: std::sync::Mutex::new(None),
+        #[cfg(target_os = "macos")]
+        screen_audio_capture: std::sync::Mutex::new(None),
     };
 
     // Parse CLI args for auto-connect (--livekit-url <url> --token <token>)

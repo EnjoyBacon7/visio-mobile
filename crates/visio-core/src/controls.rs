@@ -37,6 +37,7 @@ pub struct MeetingControls {
     audio_source: Arc<Mutex<Option<NativeAudioSource>>>,
     video_source: Arc<Mutex<Option<NativeVideoSource>>>,
     screen_share_source: Arc<Mutex<Option<NativeVideoSource>>>,
+    screen_share_audio_source: Arc<Mutex<Option<NativeAudioSource>>>,
 }
 
 /// Build TrackPublishOptions for the camera track.
@@ -62,6 +63,7 @@ impl MeetingControls {
             audio_source: Arc::new(Mutex::new(None)),
             video_source: Arc::new(Mutex::new(None)),
             screen_share_source: Arc::new(Mutex::new(None)),
+            screen_share_audio_source: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -324,6 +326,73 @@ impl MeetingControls {
     /// Get the screen share video source for feeding captured frames.
     pub async fn screen_share_source(&self) -> Option<NativeVideoSource> {
         self.screen_share_source.lock().await.clone()
+    }
+
+    /// Publish an audio track for screen share audio (system/loopback audio).
+    /// Returns the NativeAudioSource to feed captured system audio into.
+    pub async fn publish_screen_share_audio(&self) -> Result<NativeAudioSource, VisioError> {
+        let room = self.room.lock().await;
+        let room = room
+            .as_ref()
+            .ok_or_else(|| VisioError::Room("not connected".into()))?;
+
+        let source = NativeAudioSource::new(
+            AudioSourceOptions {
+                echo_cancellation: false,
+                noise_suppression: false,
+                auto_gain_control: false,
+            },
+            AUDIO_SAMPLE_RATE,
+            AUDIO_CHANNELS,
+            AUDIO_QUEUE_SIZE_MS,
+        );
+
+        let track = LocalAudioTrack::create_audio_track(
+            "screen_share_audio",
+            RtcAudioSource::Native(source.clone()),
+        );
+
+        room.local_participant()
+            .publish_track(
+                LocalTrack::Audio(track),
+                TrackPublishOptions {
+                    source: LkTrackSource::ScreenshareAudio,
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|e| VisioError::Room(format!("publish screen share audio: {e}")))?;
+
+        *self.screen_share_audio_source.lock().await = Some(source.clone());
+        tracing::info!("screen share audio track published");
+        Ok(source)
+    }
+
+    /// Stop publishing the screen share audio track.
+    pub async fn stop_screen_share_audio(&self) -> Result<(), VisioError> {
+        let room = self.room.lock().await;
+        let room = room
+            .as_ref()
+            .ok_or_else(|| VisioError::Room("not connected".into()))?;
+
+        let local = room.local_participant();
+        for (_sid, pub_) in local.track_publications() {
+            if pub_.source() == LkTrackSource::ScreenshareAudio {
+                local
+                    .unpublish_track(&pub_.sid())
+                    .await
+                    .map_err(|e| VisioError::Room(format!("unpublish screen share audio: {e}")))?;
+                *self.screen_share_audio_source.lock().await = None;
+                tracing::info!("screen share audio track unpublished");
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Get the screen share audio source.
+    pub async fn screen_share_audio_source(&self) -> Option<NativeAudioSource> {
+        self.screen_share_audio_source.lock().await.clone()
     }
 }
 
