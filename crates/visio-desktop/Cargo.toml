@@ -29,5 +29,12 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSObject", "NSString"] }
 block2 = "0.6"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+] }
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
