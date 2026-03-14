@@ -42,24 +42,29 @@ impl WindowsAudioEngine {
     }
 }
 
+/// Map a windows::core::Error to String.
+fn w(r: windows::core::Result<()>) -> Result<(), String> {
+    r.map_err(|e| format!("{e}"))
+}
+
 /// Initialize COM on the current thread (each thread needs its own init).
 fn init_com() -> Result<(), String> {
-    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.map_err(|e| e.to_string())
+    w(unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) })
 }
 
 /// Get the default audio endpoint for the given data flow.
-fn get_default_device(data_flow: EDataFlow) -> Result<IMMDevice, String> {
+fn get_default_device(data_flow: EDataFlow) -> windows::core::Result<IMMDevice> {
     unsafe {
         let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
-        enumerator.GetDefaultAudioEndpoint(data_flow, eCommunications).map_err(|e| e.to_string())
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+        enumerator.GetDefaultAudioEndpoint(data_flow, eCommunications)
     }
 }
 
 /// Create and configure an IAudioClient with Communications category.
-fn create_audio_client(device: &IMMDevice) -> Result<IAudioClient2, String> {
+fn create_audio_client(device: &IMMDevice) -> windows::core::Result<IAudioClient2> {
     unsafe {
-        let client: IAudioClient2 = device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())?;
+        let client: IAudioClient2 = device.Activate(CLSCTX_ALL, None)?;
 
         // Set communications category — this activates AEC DSP
         let props = AudioClientProperties {
@@ -68,10 +73,15 @@ fn create_audio_client(device: &IMMDevice) -> Result<IAudioClient2, String> {
             eCategory: AudioCategory_Communications,
             Options: AUDCLNT_STREAMOPTIONS_NONE,
         };
-        client.SetClientProperties(&props).map_err(|e| e.to_string())?;
+        client.SetClientProperties(&props)?;
 
         Ok(client)
     }
+}
+
+/// Run a WASAPI closure, mapping errors to String.
+fn run_wasapi(f: impl FnOnce() -> windows::core::Result<()>) -> Result<(), String> {
+    f().map_err(|e| format!("{e}"))
 }
 
 /// Polling interval for WASAPI shared-mode buffer checks (~5ms).
@@ -88,36 +98,36 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                 return;
             }
 
-            let result = (|| -> Result<(), String> {
+            let result = run_wasapi(|| {
                 let device = get_default_device(eRender)?;
                 let client = create_audio_client(&device)?;
 
                 // Get mix format and initialize in shared mode (polling)
-                let mix_format = unsafe { client.GetMixFormat().map_err(|e| e.to_string())? };
+                let mix_format = unsafe { client.GetMixFormat()? };
 
                 unsafe {
                     client.Initialize(
                         AUDCLNT_SHAREMODE_SHARED,
-                        AUDCLNT_STREAMFLAGS(0), // no event callback — we poll instead
+                        0, // no event callback — we poll instead
                         0, // buffer duration (0 = default)
                         0, // periodicity
                         mix_format,
                         None,
-                    ).map_err(|e| e.to_string())?;
+                    )?;
                 }
 
-                let render_client: IAudioRenderClient = unsafe { client.GetService().map_err(|e| e.to_string())? };
-                let buffer_size = unsafe { client.GetBufferSize().map_err(|e| e.to_string())? } as usize;
+                let render_client: IAudioRenderClient = unsafe { client.GetService()? };
+                let buffer_size = unsafe { client.GetBufferSize()? } as usize;
                 let format = unsafe { &*mix_format };
                 let device_channels = format.nChannels as usize;
                 let device_rate = format.nSamplesPerSec;
 
-                unsafe { client.Start().map_err(|e| e.to_string())? };
+                unsafe { client.Start()? };
 
                 while !stop.load(Ordering::Relaxed) {
                     std::thread::sleep(POLL_INTERVAL);
 
-                    let padding = unsafe { client.GetCurrentPadding().map_err(|e| e.to_string())? } as usize;
+                    let padding = unsafe { client.GetCurrentPadding()? } as usize;
                     let available = buffer_size - padding;
                     if available == 0 { continue; }
 
@@ -131,7 +141,7 @@ impl VoiceAudioEngine for WindowsAudioEngine {
 
                     // Convert to f32 and expand to device channels
                     let buf_ptr = unsafe {
-                        render_client.GetBuffer(available as u32).map_err(|e| e.to_string())?
+                        render_client.GetBuffer(available as u32)?
                     };
                     let dst = unsafe {
                         std::slice::from_raw_parts_mut(
@@ -146,12 +156,12 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                         }
                     }
 
-                    unsafe { render_client.ReleaseBuffer(available as u32, 0).map_err(|e| e.to_string())? };
+                    unsafe { render_client.ReleaseBuffer(available as u32, 0)? };
                 }
 
-                unsafe { client.Stop().map_err(|e| e.to_string())? };
+                unsafe { client.Stop()? };
                 Ok(())
-            })();
+            });
 
             if let Err(e) = result {
                 tracing::error!("WASAPI render thread error: {e}");
@@ -176,33 +186,33 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                 return;
             }
 
-            let result = (|| -> Result<(), String> {
+            let result = run_wasapi(|| {
                 let device = get_default_device(eCapture)?;
                 let client = create_audio_client(&device)?;
 
-                let mix_format = unsafe { client.GetMixFormat().map_err(|e| e.to_string())? };
+                let mix_format = unsafe { client.GetMixFormat()? };
 
                 unsafe {
                     client.Initialize(
                         AUDCLNT_SHAREMODE_SHARED,
-                        AUDCLNT_STREAMFLAGS(0), // polling mode
+                        0, // polling mode
                         0, 0,
                         mix_format,
                         None,
-                    ).map_err(|e| e.to_string())?;
+                    )?;
                 }
 
-                let capture_client: IAudioCaptureClient = unsafe { client.GetService().map_err(|e| e.to_string())? };
+                let capture_client: IAudioCaptureClient = unsafe { client.GetService()? };
                 let format = unsafe { &*mix_format };
                 let device_channels = format.nChannels as usize;
                 let device_rate = format.nSamplesPerSec;
 
-                unsafe { client.Start().map_err(|e| e.to_string())? };
+                unsafe { client.Start()? };
 
                 while !stop.load(Ordering::Relaxed) {
                     std::thread::sleep(POLL_INTERVAL);
 
-                    let mut packet_size = unsafe { capture_client.GetNextPacketSize().map_err(|e| e.to_string())? };
+                    let mut packet_size = unsafe { capture_client.GetNextPacketSize()? };
                     while packet_size > 0 {
                         let mut buf_ptr = std::ptr::null_mut();
                         let mut num_frames = 0u32;
@@ -215,7 +225,7 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                                 &mut flags,
                                 None,
                                 None,
-                            ).map_err(|e| e.to_string())?;
+                            )?;
                         }
 
                         let frames = num_frames as usize;
@@ -247,14 +257,14 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                         };
                         capture_buffer.push(frame);
 
-                        unsafe { capture_client.ReleaseBuffer(num_frames).map_err(|e| e.to_string())? };
-                        packet_size = unsafe { capture_client.GetNextPacketSize().map_err(|e| e.to_string())? };
+                        unsafe { capture_client.ReleaseBuffer(num_frames)? };
+                        packet_size = unsafe { capture_client.GetNextPacketSize()? };
                     }
                 }
 
-                unsafe { client.Stop().map_err(|e| e.to_string())? };
+                unsafe { client.Stop()? };
                 Ok(())
-            })();
+            });
 
             if let Err(e) = result {
                 tracing::error!("WASAPI capture thread error: {e}");
