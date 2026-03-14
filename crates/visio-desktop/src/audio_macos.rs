@@ -392,7 +392,7 @@ impl VoiceAudioEngine for MacAudioEngine {
         Ok(())
     }
 
-    fn start_capture(&mut self, source: NativeAudioSource) -> Result<(), String> {
+    fn start_capture(&mut self, source: NativeAudioSource, noise_reduction: bool) -> Result<(), String> {
         let unit = self.audio_unit.ok_or("playout must be started before capture")?;
         let state = self.callback_state.clone().ok_or("no callback state")?;
 
@@ -422,7 +422,7 @@ impl VoiceAudioEngine for MacAudioEngine {
         }
 
         // Start drain thread
-        let drain_running = audio_engine::start_drain_thread(state.capture_buffer.clone(), source);
+        let drain_running = audio_engine::start_drain_thread(state.capture_buffer.clone(), source, noise_reduction);
 
         self.input_wrapper = Some(wrapper);
         self.drain_running = Some(drain_running);

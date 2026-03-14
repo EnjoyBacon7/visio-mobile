@@ -109,6 +109,8 @@ interface VisioEvent {
     AdaptiveModeChanged(AdaptiveMode mode);
     BandwidthModeChanged(BandwidthMode mode);
     ConnectionLost();
+    DisconnectedDuplicateIdentity();
+    DisconnectedByAdmin();
 };
 
 [Error]

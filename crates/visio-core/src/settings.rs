@@ -29,6 +29,8 @@ pub struct Settings {
     pub adaptive_mode_enabled: bool,
     #[serde(default)]
     pub room_history: Vec<String>,
+    #[serde(default = "default_true")]
+    pub noise_reduction_enabled: bool,
 }
 
 fn default_meet_instances() -> Vec<String> {
@@ -65,6 +67,7 @@ impl Default for Settings {
             background_mode: "off".to_string(),
             adaptive_mode_enabled: true,
             room_history: Vec::new(),
+            noise_reduction_enabled: true,
         }
     }
 }
@@ -217,6 +220,21 @@ impl SettingsStore {
             .unwrap_or_else(|e| e.into_inner())
             .room_history
             .clone()
+    }
+
+    pub fn is_noise_reduction_enabled(&self) -> bool {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .noise_reduction_enabled
+    }
+
+    pub fn set_noise_reduction_enabled(&self, enabled: bool) {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .noise_reduction_enabled = enabled;
+        self.save();
     }
 
     pub fn clear_room_history(&self) {
@@ -514,6 +532,25 @@ mod tests {
         let history = store.get_room_history();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0], "https://meet.example.com/room1");
+    }
+
+    #[test]
+    fn noise_reduction_enabled_by_default() {
+        let settings = Settings::default();
+        assert!(settings.noise_reduction_enabled);
+    }
+
+    #[test]
+    fn test_set_noise_reduction_persists() {
+        let dir = temp_dir();
+        let path = dir.path().to_str().unwrap();
+        {
+            let store = SettingsStore::new(path);
+            assert!(store.is_noise_reduction_enabled());
+            store.set_noise_reduction_enabled(false);
+        }
+        let store = SettingsStore::new(path);
+        assert!(!store.is_noise_reduction_enabled());
     }
 
     #[test]

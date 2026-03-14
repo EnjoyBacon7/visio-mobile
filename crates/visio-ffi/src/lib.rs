@@ -487,6 +487,8 @@ pub enum VisioEvent {
         mode: BandwidthMode,
     },
     ConnectionLost,
+    DisconnectedDuplicateIdentity,
+    DisconnectedByAdmin,
 }
 
 impl From<CoreVisioEvent> for VisioEvent {
@@ -559,6 +561,8 @@ impl From<CoreVisioEvent> for VisioEvent {
                 Self::BandwidthModeChanged { mode: mode.into() }
             }
             CoreVisioEvent::ConnectionLost => Self::ConnectionLost,
+            CoreVisioEvent::DisconnectedDuplicateIdentity => Self::DisconnectedDuplicateIdentity,
+            CoreVisioEvent::DisconnectedByAdmin => Self::DisconnectedByAdmin,
         }
     }
 }

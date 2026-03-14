@@ -126,12 +126,12 @@ impl VoiceAudioEngine for LinuxAudioEngine {
         Ok(())
     }
 
-    fn start_capture(&mut self, source: NativeAudioSource) -> Result<(), String> {
+    fn start_capture(&mut self, source: NativeAudioSource, noise_reduction: bool) -> Result<(), String> {
         let stop = self.record_stop.clone();
         stop.store(false, Ordering::Relaxed);
 
         let capture_buffer = Arc::new(AudioCaptureBuffer::new(50));
-        let drain_running = audio_engine::start_drain_thread(capture_buffer.clone(), source);
+        let drain_running = audio_engine::start_drain_thread(capture_buffer.clone(), source, noise_reduction);
 
         let handle = std::thread::spawn(move || {
             let spec = LinuxAudioEngine::pulse_spec();

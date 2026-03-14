@@ -22,7 +22,7 @@ pub const LK_CHANNELS: u32 = 1;
 /// Unified audio engine handling both playout and capture with AEC.
 pub trait VoiceAudioEngine: Send + Sync {
     fn start_playout(&mut self, buffer: Arc<AudioPlayoutBuffer>) -> Result<(), String>;
-    fn start_capture(&mut self, source: NativeAudioSource) -> Result<(), String>;
+    fn start_capture(&mut self, source: NativeAudioSource, noise_reduction: bool) -> Result<(), String>;
     fn stop_capture(&mut self);
     fn stop_playout(&mut self);
 }
@@ -51,10 +51,12 @@ pub fn create_audio_engine(
 // ---------------------------------------------------------------------------
 
 /// Start a drain thread that pops frames from `capture_buffer` and sends
-/// them to `audio_source`. Returns a stop flag to shut it down.
+/// them to `audio_source`. When `noise_reduction` is true, frames are
+/// passed through RNNoise before being sent. Returns a stop flag.
 pub fn start_drain_thread(
     capture_buffer: Arc<AudioCaptureBuffer>,
     audio_source: NativeAudioSource,
+    noise_reduction: bool,
 ) -> Arc<AtomicBool> {
     let running = Arc::new(AtomicBool::new(true));
     let running_flag = running.clone();
@@ -63,11 +65,28 @@ pub fn start_drain_thread(
             .enable_all()
             .build()
             .expect("audio drain runtime");
+
+        let mut denoiser = if noise_reduction {
+            Some(super::noise_reduction::NoiseReducer::new())
+        } else {
+            None
+        };
+
         rt.block_on(async move {
             while running_flag.load(Ordering::Relaxed) {
                 if let Some(frame) = capture_buffer.pop() {
+                    let pcm = if let Some(ref mut nr) = denoiser {
+                        let processed = nr.process(&frame.pcm);
+                        if processed.is_empty() {
+                            continue;
+                        }
+                        processed
+                    } else {
+                        frame.pcm
+                    };
+
                     let lk_frame = AudioFrame {
-                        data: frame.pcm.into(),
+                        data: pcm.into(),
                         sample_rate: frame.sample_rate,
                         num_channels: frame.num_channels,
                         samples_per_channel: frame.samples_per_channel,

@@ -15,4 +15,19 @@ platform :android do
       release_notes: ENV["RELEASE_NOTES"].to_s.empty? ? "Build #{ENV['GITHUB_RUN_NUMBER'] || 'local'} — #{`git log -1 --pretty=%s`.strip}" : ENV["RELEASE_NOTES"]
     )
   end
+
+  desc "Build AAB and upload to Google Play (internal track)"
+  lane :release do
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      project_dir: "."
+    )
+    supply(
+      track: "internal",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      json_key: ENV["SUPPLY_JSON_KEY_PATH"],
+      package_name: "io.visio.mobile"
+    )
+  end
 end

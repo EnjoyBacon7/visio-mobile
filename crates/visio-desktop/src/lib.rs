@@ -16,6 +16,7 @@ mod audio_windows;
 mod audio_linux;
 #[cfg(target_os = "macos")]
 mod camera_macos;
+mod noise_reduction;
 mod screen_capture;
 
 // ---------------------------------------------------------------------------
@@ -319,6 +320,18 @@ impl VisioEventListener for DesktopEventListener {
                     }
                 });
             }
+            VisioEvent::DisconnectedDuplicateIdentity => {
+                tracing::warn!("disconnected: duplicate identity");
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("disconnected-reason", "duplicate_identity");
+                }
+            }
+            VisioEvent::DisconnectedByAdmin => {
+                tracing::warn!("disconnected: removed by admin");
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("disconnected-reason", "removed_by_admin");
+                }
+            }
         }
     }
 }
@@ -481,7 +494,8 @@ async fn toggle_mic(state: tauri::State<'_, VisioState>, enabled: bool) -> Resul
             // Stop first to ensure idempotency (avoids leaking drain thread
             // if toggle_mic(true) is called twice without an intervening false)
             engine.stop_capture();
-            engine.start_capture(source).map_err(|e| format!("audio capture: {e}"))?;
+            let nr = state.settings.is_noise_reduction_enabled();
+            engine.start_capture(source, nr).map_err(|e| format!("audio capture: {e}"))?;
         }
     } else {
         let mut engine = state
@@ -897,7 +911,8 @@ async fn select_audio_input(
     *engine = new_engine;
     engine.start_playout(state.playout_buffer.clone())?;
     if let Some(source) = audio_source {
-        engine.start_capture(source)?;
+        let nr = state.settings.is_noise_reduction_enabled();
+        engine.start_capture(source, nr)?;
     }
     Ok(())
 }
@@ -920,7 +935,8 @@ async fn select_audio_output(
     *engine = new_engine;
     engine.start_playout(state.playout_buffer.clone())?;
     if let Some(source) = audio_source {
-        engine.start_capture(source)?;
+        let nr = state.settings.is_noise_reduction_enabled();
+        engine.start_capture(source, nr)?;
     }
     Ok(())
 }
