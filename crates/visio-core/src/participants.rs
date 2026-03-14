@@ -51,6 +51,17 @@ impl ParticipantManager {
         &self.participants
     }
 
+    /// Get participants sorted: hand raised first, then alphabetical (case-insensitive).
+    pub fn sorted_participants(&self) -> Vec<ParticipantInfo> {
+        let mut sorted = self.participants.clone();
+        sorted.sort_by(|a, b| {
+            let a_name = a.name.as_deref().unwrap_or("").to_lowercase();
+            let b_name = b.name.as_deref().unwrap_or("").to_lowercase();
+            a_name.cmp(&b_name)
+        });
+        sorted
+    }
+
     pub fn participant(&self, sid: &str) -> Option<&ParticipantInfo> {
         self.participants.iter().find(|p| p.sid == sid)
     }
@@ -238,6 +249,29 @@ mod tests {
         assert!(p.screen_share_track_sid.is_none());
         assert!(p.has_video);
         assert_eq!(p.video_track_sid.as_deref(), Some("TR_CAM_1"));
+    }
+
+    #[test]
+    fn sorted_participants_alphabetical() {
+        let mut mgr = ParticipantManager::new();
+        mgr.add_participant(make_participant("p3", "Charlie"));
+        mgr.add_participant(make_participant("p1", "Alice"));
+        mgr.add_participant(make_participant("p2", "Bob"));
+
+        let sorted = mgr.sorted_participants();
+        let names: Vec<_> = sorted.iter().map(|p| p.name.as_deref().unwrap()).collect();
+        assert_eq!(names, vec!["Alice", "Bob", "Charlie"]);
+    }
+
+    #[test]
+    fn sorted_participants_case_insensitive() {
+        let mut mgr = ParticipantManager::new();
+        mgr.add_participant(make_participant("p1", "bob"));
+        mgr.add_participant(make_participant("p2", "Alice"));
+
+        let sorted = mgr.sorted_participants();
+        let names: Vec<_> = sorted.iter().map(|p| p.name.as_deref().unwrap()).collect();
+        assert_eq!(names, vec!["Alice", "bob"]);
     }
 
     #[test]

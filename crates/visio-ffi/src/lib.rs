@@ -494,6 +494,8 @@ pub enum VisioEvent {
     ConnectionLost,
     DisconnectedDuplicateIdentity,
     DisconnectedByAdmin,
+    AloneInRoom { remaining_secs: u32 },
+    AloneInRoomCancelled,
 }
 
 impl From<CoreVisioEvent> for VisioEvent {
@@ -569,6 +571,10 @@ impl From<CoreVisioEvent> for VisioEvent {
             CoreVisioEvent::ConnectionLost => Self::ConnectionLost,
             CoreVisioEvent::DisconnectedDuplicateIdentity => Self::DisconnectedDuplicateIdentity,
             CoreVisioEvent::DisconnectedByAdmin => Self::DisconnectedByAdmin,
+            CoreVisioEvent::AloneInRoom { remaining_secs } => {
+                Self::AloneInRoom { remaining_secs }
+            }
+            CoreVisioEvent::AloneInRoomCancelled => Self::AloneInRoomCancelled,
         }
     }
 }

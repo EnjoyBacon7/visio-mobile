@@ -67,6 +67,8 @@ pub struct RoomManager {
     /// When true, disables adaptive streaming and bandwidth degradation
     /// to always receive the highest quality video layers.
     high_quality_mode: Arc<AtomicBool>,
+    /// Rate limit: last reaction timestamp.
+    last_reaction_time: Arc<Mutex<Option<std::time::Instant>>>,
 }
 
 impl Default for RoomManager {
@@ -109,6 +111,7 @@ impl RoomManager {
             adaptive: Arc::new(std::sync::Mutex::new(adaptive::AdaptiveEngine::new())),
             bandwidth: Arc::new(std::sync::Mutex::new(bandwidth::BandwidthController::new())),
             high_quality_mode: Arc::new(AtomicBool::new(false)),
+            last_reaction_time: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -202,9 +205,9 @@ impl RoomManager {
         self.connection_state.lock().await.clone()
     }
 
-    /// Get a snapshot of current participants.
+    /// Get a snapshot of current participants (sorted alphabetically, local first).
     pub async fn participants(&self) -> Vec<ParticipantInfo> {
-        let mut list = self.participants.lock().await.participants().to_vec();
+        let mut list = self.participants.lock().await.sorted_participants();
         // Prepend local participant so the UI can render a self-view tile.
         if let Some(local) = self.local_participant_info().await {
             list.insert(0, local);
@@ -476,11 +479,34 @@ impl RoomManager {
             .await
     }
 
+    /// Allowed emoji IDs for reactions (matches Meet web client).
+    const ALLOWED_EMOJIS: &'static [&'static str] = &[
+        "thumbsUp", "clap", "joy", "openMouth", "tada", "heart",
+    ];
+
     /// Send an animated reaction visible to all participants.
     ///
     /// The payload matches the Meet web client protocol:
     /// `{ "type": "reactionReceived", "data": { "emoji": "<id>" } }`
+    /// Rate limited to 10/sec (100ms minimum interval).
     pub async fn send_reaction(&self, emoji: &str) -> Result<(), VisioError> {
+        // Validate emoji
+        if !Self::ALLOWED_EMOJIS.contains(&emoji) {
+            return Err(VisioError::Room(format!("unknown reaction emoji: {emoji}")));
+        }
+
+        // Rate limit: 100ms between reactions
+        {
+            let mut last = self.last_reaction_time.lock().await;
+            let now = std::time::Instant::now();
+            if let Some(prev) = *last {
+                if now.duration_since(prev) < std::time::Duration::from_millis(100) {
+                    return Err(VisioError::Room("reaction rate limited".into()));
+                }
+            }
+            *last = Some(now);
+        }
+
         let room = self.room.lock().await;
         let room = room
             .as_ref()
@@ -950,6 +976,8 @@ impl RoomManager {
         let mut reconnect_attempt: u32 = 0;
         // Track active audio stream tasks so they get cancelled on disconnect
         let mut audio_stream_tasks: HashMap<String, tokio::task::JoinHandle<()>> = HashMap::new();
+        // Idle disconnect: timer task when alone in room
+        let mut idle_timer: Option<tokio::task::JoinHandle<()>> = None;
 
         while let Some(event) = events.recv().await {
             match event {
@@ -1021,12 +1049,33 @@ impl RoomManager {
                     let info = Self::remote_participant_to_info(&participant);
                     participants.lock().await.add_participant(info.clone());
                     emitter.emit(VisioEvent::ParticipantJoined(info));
+                    // Cancel idle timer if someone joined
+                    if let Some(handle) = idle_timer.take() {
+                        handle.abort();
+                        emitter.emit(VisioEvent::AloneInRoomCancelled);
+                    }
                 }
 
                 RoomEvent::ParticipantDisconnected(participant) => {
                     let sid = participant.sid().to_string();
                     participants.lock().await.remove_participant(&sid);
-                    emitter.emit(VisioEvent::ParticipantLeft(sid));
+                    emitter.emit(VisioEvent::ParticipantLeft(sid.clone()));
+                    // Start idle timer if now alone
+                    let count = participants.lock().await.participant_count();
+                    if count == 0 && idle_timer.is_none() {
+                        let emitter_idle = emitter.clone();
+                        idle_timer = Some(tokio::spawn(async move {
+                            // 2 minute countdown, emit every 10 seconds
+                            const IDLE_SECS: u32 = 120;
+                            let mut remaining = IDLE_SECS;
+                            while remaining > 0 {
+                                emitter_idle.emit(VisioEvent::AloneInRoom { remaining_secs: remaining });
+                                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                                remaining = remaining.saturating_sub(10);
+                            }
+                            emitter_idle.emit(VisioEvent::AloneInRoom { remaining_secs: 0 });
+                        }));
+                    }
                 }
 
                 RoomEvent::TrackSubscribed {
@@ -1475,6 +1524,11 @@ impl RoomManager {
                         && json["type"].as_str() == Some("reactionReceived")
                     {
                         if let Some(emoji) = json["data"]["emoji"].as_str() {
+                            // Validate emoji against allowed set
+                            if !RoomManager::ALLOWED_EMOJIS.contains(&emoji) {
+                                tracing::debug!("ignoring unknown reaction emoji: {emoji}");
+                                continue;
+                            }
                             let sender_name = participant
                                 .as_ref()
                                 .map(|p| p.name().to_string())
@@ -1615,5 +1669,24 @@ mod tests {
         let options = create_room_options(false);
         assert_eq!(options.join_retries, 5);
         assert_eq!(options.connect_timeout, std::time::Duration::from_secs(60));
+    }
+
+    #[test]
+    fn allowed_emojis_are_valid() {
+        for emoji in RoomManager::ALLOWED_EMOJIS {
+            assert!(!emoji.is_empty());
+        }
+        assert!(RoomManager::ALLOWED_EMOJIS.contains(&"thumbsUp"));
+        assert!(RoomManager::ALLOWED_EMOJIS.contains(&"heart"));
+        assert!(!RoomManager::ALLOWED_EMOJIS.contains(&"invalid"));
+    }
+
+    #[tokio::test]
+    async fn send_reaction_rejects_unknown_emoji() {
+        let rm = RoomManager::new();
+        let result = rm.send_reaction("unknown_emoji").await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(err_msg.contains("unknown reaction emoji"));
     }
 }

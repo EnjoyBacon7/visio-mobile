@@ -341,6 +341,16 @@ impl VisioEventListener for DesktopEventListener {
                     let _ = app.emit("disconnected-reason", "removed_by_admin");
                 }
             }
+            VisioEvent::AloneInRoom { remaining_secs } => {
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("alone-in-room", remaining_secs);
+                }
+            }
+            VisioEvent::AloneInRoomCancelled => {
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("alone-in-room-cancelled", ());
+                }
+            }
         }
     }
 }

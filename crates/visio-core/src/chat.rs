@@ -13,6 +13,9 @@ pub type MessageStore = Arc<Mutex<Vec<ChatMessage>>>;
 /// The topic used by LiveKit Meet / LaSuite Meet for chat messages.
 const CHAT_TOPIC: &str = "lk.chat";
 
+/// Maximum chat message length (matches Meet web client).
+const MAX_MESSAGE_LENGTH: usize = 2000;
+
 /// Manages chat messaging via LiveKit data channels.
 pub struct ChatService {
     room: Arc<Mutex<Option<Arc<Room>>>>,
@@ -38,7 +41,19 @@ impl ChatService {
     }
 
     /// Send a chat message to all participants using the Stream API (lk.chat topic).
+    /// Messages are limited to 2000 characters (matching Meet web client).
     pub async fn send_message(&self, text: &str) -> Result<ChatMessage, VisioError> {
+        let text = text.trim();
+        if text.is_empty() {
+            return Err(VisioError::Room("message is empty".into()));
+        }
+        if text.len() > MAX_MESSAGE_LENGTH {
+            return Err(VisioError::Room(format!(
+                "message too long ({} chars, max {MAX_MESSAGE_LENGTH})",
+                text.len()
+            )));
+        }
+
         let room = self.room.lock().await;
         let room = room
             .as_ref()
@@ -106,5 +121,49 @@ impl ChatService {
     /// Get the current unread message count.
     pub fn unread_count(&self) -> u32 {
         self.unread_count.load(Ordering::Relaxed)
+    }
+
+    /// Validate message text before sending. Returns trimmed text or error.
+    pub fn validate_message(text: &str) -> Result<&str, VisioError> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Err(VisioError::Room("message is empty".into()));
+        }
+        if trimmed.len() > MAX_MESSAGE_LENGTH {
+            return Err(VisioError::Room(format!(
+                "message too long ({} chars, max {MAX_MESSAGE_LENGTH})",
+                trimmed.len()
+            )));
+        }
+        Ok(trimmed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_message_rejected() {
+        assert!(ChatService::validate_message("").is_err());
+        assert!(ChatService::validate_message("   ").is_err());
+    }
+
+    #[test]
+    fn long_message_rejected() {
+        let long = "a".repeat(2001);
+        assert!(ChatService::validate_message(&long).is_err());
+    }
+
+    #[test]
+    fn valid_message_accepted() {
+        assert!(ChatService::validate_message("hello").is_ok());
+        assert!(ChatService::validate_message(&"a".repeat(2000)).is_ok());
+    }
+
+    #[test]
+    fn message_trimmed() {
+        let result = ChatService::validate_message("  hello  ").unwrap();
+        assert_eq!(result, "hello");
     }
 }

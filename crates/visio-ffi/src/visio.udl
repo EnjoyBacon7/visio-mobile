@@ -114,6 +114,8 @@ interface VisioEvent {
     ConnectionLost();
     DisconnectedDuplicateIdentity();
     DisconnectedByAdmin();
+    AloneInRoom(u32 remaining_secs);
+    AloneInRoomCancelled();
 };
 
 [Error]
