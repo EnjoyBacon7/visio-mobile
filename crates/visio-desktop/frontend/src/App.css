@@ -351,6 +351,60 @@ main {
   background: var(--surface-hover, rgba(50, 50, 255, 0.1));
 }
 
+/* -- Room History --------------------------------------------------------- */
+
+.room-history {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.room-history h4 {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #888);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.room-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: var(--surface, rgba(30, 30, 40, 0.6));
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.room-history-item:hover {
+  background: var(--surface-hover, rgba(50, 50, 255, 0.1));
+}
+
+.room-history-item svg {
+  color: var(--accent, #5B6EF5);
+  flex-shrink: 0;
+}
+
+.room-history-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.room-history-slug {
+  font-weight: 500;
+}
+
+.room-history-host {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #888);
+}
+
 .server-custom {
   display: flex;
   gap: 8px;

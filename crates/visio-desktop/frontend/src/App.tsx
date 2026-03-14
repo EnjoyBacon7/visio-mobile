@@ -420,6 +420,11 @@ function HomeView({
   const t = useT();
   const [meetUrl, setMeetUrl] = useState("");
   const [resolvedUrl, setResolvedUrl] = useState("");
+  const [roomHistory, setRoomHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    invoke<string[]>("get_room_history").then(setRoomHistory).catch(() => {});
+  }, []);
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomStatus, setRoomStatus] = useState<"idle" | "checking" | "valid" | "not_found" | "auth_required" | "authenticating" | "error">("idle");
@@ -672,6 +677,25 @@ function HomeView({
           </button>
         )}
         <div className="error-msg">{error}</div>
+        {roomHistory.length > 0 && (
+          <div className="room-history">
+            <h4>{t("home.recentRooms")}</h4>
+            {roomHistory.map((url, i) => {
+              const slug = url.includes("/") ? url.split("/").pop() : url;
+              let host = "";
+              try { host = new URL(url).host; } catch {}
+              return (
+                <button key={i} className="room-history-item" onClick={() => setMeetUrl(url)} data-testid={`home_room_history_item_${i}`}>
+                  <RiGlobalLine size={16} />
+                  <div className="room-history-info">
+                    <span className="room-history-slug">{slug}</span>
+                    {host && <span className="room-history-host">{host}</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       {showCreateRoom && authenticatedMeetInstance && (
         <CreateRoomDialog

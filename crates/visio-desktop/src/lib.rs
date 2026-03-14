@@ -792,6 +792,16 @@ fn set_meet_instances(state: tauri::State<'_, VisioState>, instances: Vec<String
 }
 
 #[tauri::command]
+fn get_room_history(state: tauri::State<'_, VisioState>) -> Result<Vec<String>, String> {
+    Ok(state.settings.get_room_history())
+}
+
+#[tauri::command]
+fn clear_room_history(state: tauri::State<'_, VisioState>) {
+    state.settings.clear_room_history();
+}
+
+#[tauri::command]
 async fn raise_hand(state: tauri::State<'_, VisioState>) -> Result<(), String> {
     tracing::info!("Tauri command: raise_hand");
     let room = state.room.lock().await;
@@ -1710,6 +1720,8 @@ pub fn run() {
             select_video_input,
             set_adaptive_mode_enabled,
             check_media_permissions,
+            get_room_history,
+            clear_room_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

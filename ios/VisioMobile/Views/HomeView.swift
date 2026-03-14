@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var customServer: String = ""
     @State private var showCreateRoom: Bool = false
     @State private var pendingOidcInstance: String? = nil
+    @State private var roomHistory: [String] = []
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -176,6 +177,54 @@ struct HomeView: View {
                     .padding(.horizontal, 32)
                 }
 
+                // Room history
+                if !roomHistory.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(Strings.t("home.recentRooms", lang: lang))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(VisioColors.secondaryText(dark: isDark))
+
+                        ForEach(Array(roomHistory.enumerated()), id: \.offset) { index, url in
+                            let slug = url.contains("/") ? String(url.split(separator: "/").last ?? "") : url
+                            let host = URL(string: url)?.host ?? ""
+
+                            Button {
+                                roomURL = url
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "globe")
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(VisioColors.primary500)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(slug)
+                                            .font(.body)
+                                            .fontWeight(.medium)
+                                            .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                                        if !host.isEmpty {
+                                            Text(host)
+                                                .font(.caption)
+                                                .foregroundStyle(VisioColors.secondaryText(dark: isDark))
+                                        }
+                                    }
+
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(isDark
+                                            ? Color(red: 0.12, green: 0.12, blue: 0.18)
+                                            : Color(red: 0.95, green: 0.95, blue: 0.97))
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 32)
+                }
+
                 Spacer()
                 Spacer()
             }
@@ -213,6 +262,8 @@ struct HomeView: View {
             }
             // Load meet instances
             meetInstances = manager.client.getMeetInstances()
+            // Load room history
+            roomHistory = manager.client.getRoomHistory()
         }
         .onChange(of: manager.authenticatedDisplayName) { newValue in
             if !newValue.isEmpty && displayName.isEmpty {
