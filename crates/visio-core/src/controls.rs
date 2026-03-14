@@ -1,4 +1,4 @@
-use livekit::options::{TrackPublishOptions, VideoEncoding};
+use livekit::options::{TrackPublishOptions, VideoCodec, VideoEncoding};
 use livekit::prelude::*;
 use livekit::track::TrackSource as LkTrackSource;
 use livekit::webrtc::audio_source::native::NativeAudioSource;
@@ -32,6 +32,15 @@ pub struct MeetingControls {
     audio_source: Arc<Mutex<Option<NativeAudioSource>>>,
     video_source: Arc<Mutex<Option<NativeVideoSource>>>,
     screen_share_source: Arc<Mutex<Option<NativeVideoSource>>>,
+}
+
+/// Build TrackPublishOptions for the camera track.
+fn camera_publish_options() -> TrackPublishOptions {
+    TrackPublishOptions {
+        source: LkTrackSource::Camera,
+        video_codec: VideoCodec::VP9,
+        ..Default::default()
+    }
 }
 
 impl MeetingControls {
@@ -124,10 +133,7 @@ impl MeetingControls {
         room.local_participant()
             .publish_track(
                 LocalTrack::Video(track),
-                TrackPublishOptions {
-                    source: LkTrackSource::Camera,
-                    ..Default::default()
-                },
+                camera_publish_options(),
             )
             .await
             .map_err(|e| VisioError::Room(format!("publish video: {e}")))?;
@@ -361,6 +367,17 @@ mod tests {
         let result = controls.set_camera_enabled(false).await;
         // Without a connected room, this returns Err
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn camera_publish_options_use_vp9() {
+        use livekit::options::VideoCodec;
+        let opts = super::camera_publish_options();
+        assert!(
+            matches!(opts.video_codec, VideoCodec::VP9),
+            "expected VP9, got {:?}",
+            opts.video_codec
+        );
     }
 
     #[tokio::test]
