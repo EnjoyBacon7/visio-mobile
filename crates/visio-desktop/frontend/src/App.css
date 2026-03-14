@@ -1944,30 +1944,65 @@ main {
 /* -- Source Picker --------------------------------------------------------- */
 
 .source-picker {
-  width: 420px;
+  width: 560px;
 }
-.source-item {
+.source-grid {
+  padding: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+.source-section-title {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.source-section-title:not(:first-child) {
+  margin-top: 16px;
+}
+.source-grid-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+.source-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  background: var(--bg-secondary);
-  color: var(--text);
+  gap: 8px;
+  padding: 8px;
+  border: 2px solid transparent;
   border-radius: 8px;
+  background: var(--bg-secondary);
+  font: inherit;
+  color: inherit;
   cursor: pointer;
-  margin-bottom: 6px;
-  font-size: 0.9rem;
-  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
 }
-.source-item:hover {
+.source-card:hover {
+  border-color: var(--accent);
   background: var(--bg-tertiary);
 }
-.source-dim {
-  margin-left: auto;
-  font-size: 0.75rem;
+.source-thumb {
+  width: 100%;
+  aspect-ratio: 16/10;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--bg-primary);
+}
+.source-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary);
+}
+.source-card-label {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 /* -- Reaction Overlay ------------------------------------------------------ */

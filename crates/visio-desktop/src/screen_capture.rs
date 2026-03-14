@@ -3,11 +3,14 @@
 //! Lists available monitors and windows, captures frames at ~15 fps,
 //! converts RGBA->I420, and feeds into a LiveKit NativeVideoSource.
 
+use std::io::Cursor;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use base64::Engine as _;
 use image::DynamicImage;
+use image::imageops::FilterType;
 use livekit::webrtc::prelude::*;
 use livekit::webrtc::video_source::native::NativeVideoSource;
 use serde::Serialize;
@@ -21,6 +24,36 @@ pub struct ScreenSource {
     pub source_type: String,
     pub width: u32,
     pub height: u32,
+    pub thumbnail: String, // "data:image/jpeg;base64,..." or "" on failure
+}
+
+const THUMBNAIL_WIDTH: u32 = 240;
+const THUMBNAIL_QUALITY: u8 = 60;
+
+/// Capture a screenshot, resize to thumbnail, encode as JPEG base64 data URI.
+fn capture_thumbnail(img: xcap::XCapResult<image::RgbaImage>) -> String {
+    let Ok(rgba) = img else {
+        return String::new();
+    };
+    let dyn_img = DynamicImage::ImageRgba8(rgba);
+
+    // Resize proportionally to THUMBNAIL_WIDTH
+    let aspect = dyn_img.height() as f32 / dyn_img.width() as f32;
+    let thumb_height = (THUMBNAIL_WIDTH as f32 * aspect).max(1.0) as u32;
+    let thumb = dyn_img.resize(THUMBNAIL_WIDTH, thumb_height, FilterType::Triangle);
+
+    // Encode as JPEG
+    let rgb = thumb.to_rgb8();
+    let mut buf = Cursor::new(Vec::new());
+    let encoder =
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, THUMBNAIL_QUALITY);
+    if rgb.write_with_encoder(encoder).is_err() {
+        return String::new();
+    }
+
+    // Base64 encode
+    let b64 = base64::engine::general_purpose::STANDARD.encode(buf.into_inner());
+    format!("data:image/jpeg;base64,{b64}")
 }
 
 /// List all available screen sources (monitors + windows).
@@ -37,12 +70,14 @@ pub fn list_sources() -> Vec<ScreenSource> {
             } else {
                 format!("Screen {}", i + 1)
             };
+            let thumbnail = capture_thumbnail(monitor.capture_image());
             sources.push(ScreenSource {
                 id: format!("monitor-{i}"),
                 name: label,
                 source_type: "monitor".into(),
                 width,
                 height,
+                thumbnail,
             });
         }
     }
@@ -75,12 +110,14 @@ pub fn list_sources() -> Vec<ScreenSource> {
             } else {
                 format!("{app_name} — {title}")
             };
+            let thumbnail = capture_thumbnail(window.capture_image());
             sources.push(ScreenSource {
                 id: format!("window-{id}"),
                 name: label,
                 source_type: "window".into(),
                 width,
                 height,
+                thumbnail,
             });
         }
     }
