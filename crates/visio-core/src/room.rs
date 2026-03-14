@@ -539,6 +539,29 @@ impl RoomManager {
         Ok(())
     }
 
+    /// Request all participants to mute their microphones (admin action).
+    /// Sends a data message that interoperable clients interpret as "mute yourself".
+    pub async fn mute_everyone(&self) -> Result<(), VisioError> {
+        let room = self.room.lock().await;
+        let room = room
+            .as_ref()
+            .ok_or_else(|| VisioError::Room("not connected".into()))?;
+
+        let payload = serde_json::json!({ "type": "muteEveryone" });
+        let data = payload.to_string().into_bytes();
+        room.local_participant()
+            .publish_data(livekit::DataPacket {
+                payload: data,
+                reliable: true,
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| VisioError::Room(format!("mute everyone: {e}")))?;
+
+        tracing::info!("mute everyone request sent (admin action)");
+        Ok(())
+    }
+
     /// Set subscribe video quality for all remote video tracks.
     /// `quality` is "high", "medium", or "low".
     pub async fn set_subscribe_video_quality(&self, quality: &str) -> Result<(), VisioError> {
@@ -1556,18 +1579,27 @@ impl RoomManager {
                         continue;
                     }
 
-                    // Handle admin "lower all hands" command
+                    // Handle admin commands
                     if let Ok(text) = std::str::from_utf8(&payload)
                         && let Ok(json) = serde_json::from_str::<serde_json::Value>(text)
-                        && json["type"].as_str() == Some("lowerAllHands")
                     {
-                        tracing::info!("received lowerAllHands from {psid}");
-                        if let Some(hm) = hand_raise.lock().await.as_ref() {
-                            if hm.is_hand_raised().await {
-                                let _ = hm.lower_hand().await;
+                        match json["type"].as_str() {
+                            Some("lowerAllHands") => {
+                                tracing::info!("received lowerAllHands from {psid}");
+                                if let Some(hm) = hand_raise.lock().await.as_ref() {
+                                    if hm.is_hand_raised().await {
+                                        let _ = hm.lower_hand().await;
+                                    }
+                                }
+                                continue;
                             }
+                            Some("muteEveryone") => {
+                                tracing::info!("received muteEveryone from {psid}");
+                                emitter.emit(VisioEvent::MuteRequested);
+                                continue;
+                            }
+                            _ => {}
                         }
-                        continue;
                     }
 
                     // Handle reactions from Meet web client (no topic, reliable data)

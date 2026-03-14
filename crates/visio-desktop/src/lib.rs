@@ -351,6 +351,11 @@ impl VisioEventListener for DesktopEventListener {
                     let _ = app.emit("alone-in-room-cancelled", ());
                 }
             }
+            VisioEvent::MuteRequested => {
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("mute-requested", ());
+                }
+            }
         }
     }
 }

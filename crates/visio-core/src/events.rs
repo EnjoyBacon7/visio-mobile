@@ -66,6 +66,8 @@ pub enum VisioEvent {
     AloneInRoom { remaining_secs: u32 },
     /// Alone-in-room countdown was cancelled (another participant joined).
     AloneInRoomCancelled,
+    /// Admin requested muting all participants — native UI should mute the local mic.
+    MuteRequested,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

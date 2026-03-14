@@ -116,6 +116,7 @@ interface VisioEvent {
     DisconnectedByAdmin();
     AloneInRoom(u32 remaining_secs);
     AloneInRoomCancelled();
+    MuteRequested();
 };
 
 [Error]
@@ -246,6 +247,9 @@ interface VisioClient {
 
     [Throws=VisioError]
     void lower_all_hands();
+
+    [Throws=VisioError]
+    void mute_everyone();
 
     boolean is_hand_raised();
 

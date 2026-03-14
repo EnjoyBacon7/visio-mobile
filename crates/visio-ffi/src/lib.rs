@@ -496,6 +496,7 @@ pub enum VisioEvent {
     DisconnectedByAdmin,
     AloneInRoom { remaining_secs: u32 },
     AloneInRoomCancelled,
+    MuteRequested,
 }
 
 impl From<CoreVisioEvent> for VisioEvent {
@@ -575,6 +576,7 @@ impl From<CoreVisioEvent> for VisioEvent {
                 Self::AloneInRoom { remaining_secs }
             }
             CoreVisioEvent::AloneInRoomCancelled => Self::AloneInRoomCancelled,
+            CoreVisioEvent::MuteRequested => Self::MuteRequested,
         }
     }
 }
@@ -1089,6 +1091,12 @@ impl VisioClient {
     pub fn lower_all_hands(&self) -> Result<(), VisioError> {
         self.rt
             .block_on(self.room_manager.lower_all_hands())
+            .map_err(VisioError::from)
+    }
+
+    pub fn mute_everyone(&self) -> Result<(), VisioError> {
+        self.rt
+            .block_on(self.room_manager.mute_everyone())
             .map_err(VisioError::from)
     }
 
