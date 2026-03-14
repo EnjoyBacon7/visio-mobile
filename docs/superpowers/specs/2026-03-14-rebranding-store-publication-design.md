@@ -28,6 +28,10 @@ Generate `ic_launcher_foreground.png` per density from `WHITE/android/icon-512x5
 - Apply 66% safe zone padding (logo centered in 66% of canvas, 17% margin each side)
 - Resize to each density: mdpi=108, hdpi=162, xhdpi=216, xxhdpi=324, xxxhdpi=432
 
+### Adaptive Icon Background
+
+Retain the existing `ic_launcher_background.xml` (solid white color `#FFFFFF`) — consistent with the WHITE branding. Verify the color value in `android/app/src/main/res/values/ic_launcher_background.xml` and update to `#FFFFFF` if different.
+
 ### Play Store Icon
 
 `WHITE/Google Play Market/icon-512x512.png` → `android/app/src/main/assets/icons/icon-playstore-512.png`
@@ -36,7 +40,7 @@ Generate `ic_launcher_foreground.png` per density from `WHITE/android/icon-512x5
 
 ### AppIcon.appiconset
 
-Copy all 45 PNG files from `WHITE/ios/` → `ios/VisioMobile/Assets.xcassets/AppIcon.appiconset/`
+Copy all 37 PNG files from `WHITE/ios/` → `ios/VisioMobile/Assets.xcassets/AppIcon.appiconset/`
 
 Replace `Contents.json` with the one from `WHITE/ios/Contents.json` (already has correct idiom/size/scale/filename mappings for iPhone, iPad, and ios-marketing).
 
@@ -61,7 +65,7 @@ Replace `AppLogo.imageset/logo.png` with a resized version of the new logo if it
 ### Generated Formats
 
 **icon.icns (macOS):**
-1. Create temporary `.iconset/` directory with sizes 16, 32, 64, 128, 256, 512 (+ @2x variants) from `WHITE/android/icon-512x512.png` via `sips -z`
+1. Create temporary `.iconset/` directory with sizes 16, 32, 64, 128, 256, 512 (+ @2x variants) from `WHITE/App Store/icon-1024x1024.png` (highest quality source) via `sips -z`
 2. Run `iconutil --convert icns` to produce `icon.icns`
 
 **icon.ico (Windows):**
@@ -98,19 +102,17 @@ android/fastlane/metadata/android/
 │   ├── title.txt
 │   ├── short_description.txt
 │   ├── full_description.txt
-│   ├── changelogs/
-│   │   └── default.txt
-│   └── images/
-│       └── icon.png
+│   └── changelogs/
+│       └── default.txt
 └── en-US/
     ├── title.txt
     ├── short_description.txt
     ├── full_description.txt
-    ├── changelogs/
-    │   └── default.txt
-    └── images/
-        └── icon.png
+    └── changelogs/
+        └── default.txt
 ```
+
+> **Note:** The Play Store hi-res icon (512x512) is set via the Google Play Console, not through `supply` metadata. The `images/` directory under `supply` is for screenshots and feature graphics only. The 512x512 icon from `WHITE/Google Play Market/` should be uploaded manually in the Play Console "Store listing" section.
 
 ### Content
 
@@ -125,13 +127,13 @@ android/fastlane/metadata/android/
 **full_description.txt (FR):**
 Visio Mobile est le client natif de visioconférence pour La Suite Meet (meet.numerique.gouv.fr). Rejoignez des salles de réunion directement depuis votre appareil, sans navigateur.
 
-Fonctionnalites :
-- Appels audio et video en temps reel
-- Chat integre pendant les reunions
+Fonctionnalités :
+- Appels audio et vidéo en temps réel
+- Chat intégré pendant les réunions
 - Liste des participants
 - Partage de lien de salle
 - Authentification OIDC / ProConnect
-- Creation de salles (publiques, de confiance, restreintes)
+- Création de salles (publiques, de confiance, restreintes)
 
 Visio Mobile est un logiciel libre (open source) construit sur le SDK LiveKit.
 
@@ -163,12 +165,14 @@ lane :release do
   )
   supply(
     track: "internal",
-    aab: lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+    aab: "app/build/outputs/bundle/release/app-release.aab",
     json_key: ENV["SUPPLY_JSON_KEY_PATH"],
     package_name: "io.visio.mobile"
   )
 end
 ```
+
+> **Rollout strategy:** The lane targets `internal` track for initial validation. Progression to production: change `track:` to `"alpha"`, `"beta"`, or `"production"` as appropriate. Google Play also supports staged rollouts via `rollout: "0.1"` (10%).
 
 Requires: `SUPPLY_JSON_KEY_PATH` environment variable pointing to Google Play service account JSON.
 
@@ -202,17 +206,17 @@ ios/fastlane/metadata/
 
 **name.txt:** "Visio Mobile"
 
-**subtitle.txt (FR, ≤30 chars):** "Visioconference souveraine"
+**subtitle.txt (FR, ≤30 chars):** "Visioconférence souveraine"
 **subtitle.txt (EN, ≤30 chars):** "Sovereign video meetings"
 
 **keywords.txt (FR, ≤100 chars):**
-"visioconference,reunion,video,appel,La Suite,Meet,souverain,chat,LiveKit"
+"visioconférence,réunion,vidéo,appel,La Suite,Meet,souverain,chat,LiveKit"
 
 **keywords.txt (EN, ≤100 chars):**
 "video,conferencing,meeting,call,La Suite,Meet,sovereign,chat,LiveKit,open source"
 
 **promotional_text.txt (FR, ≤170 chars):**
-"Rejoignez vos reunions La Suite Meet directement depuis votre iPhone ou iPad. Audio, video et chat en temps reel, sans navigateur."
+"Rejoignez vos réunions La Suite Meet directement depuis votre iPhone ou iPad. Audio, vidéo et chat en temps réel, sans navigateur."
 
 **promotional_text.txt (EN, ≤170 chars):**
 "Join your La Suite Meet meetings directly from your iPhone or iPad. Real-time audio, video and chat, no browser needed."
@@ -226,17 +230,52 @@ ios/fastlane/metadata/
 
 ### Release Lane
 
-Add to `ios/fastlane/Fastfile`:
+Add to `ios/fastlane/Fastfile` (mirrors existing `distribute` lane pattern for API key and signing):
 
 ```ruby
 lane :release do
-  match(type: "appstore", readonly: true)
+  setup_ci
+
+  api_key = app_store_connect_api_key(
+    key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+    issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+    key_content: ENV["APP_STORE_CONNECT_API_KEY_CONTENT"],
+    is_key_content_base64: true
+  )
+
+  match(
+    type: "appstore",
+    app_identifier: "io.visio.mobile",
+    git_url: ENV["MATCH_GIT_URL"],
+    api_key: api_key,
+    readonly: true
+  )
+
+  increment_build_number(
+    build_number: ENV["GITHUB_RUN_NUMBER"] || "1",
+    xcodeproj: "VisioMobile.xcodeproj"
+  )
+
   gym(
     scheme: "VisioMobile",
+    project: "VisioMobile.xcodeproj",
     export_method: "app-store",
-    output_directory: "./build"
+    output_directory: "build",
+    output_name: "VisioMobile.ipa",
+    clean: true,
+    xcargs: "DEVELOPMENT_TEAM='#{ENV["APPLE_TEAM_ID"]}' CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER='match AppStore io.visio.mobile' CODE_SIGN_IDENTITY='iPhone Distribution'",
+    export_options: {
+      teamID: ENV["APPLE_TEAM_ID"],
+      signingStyle: "manual",
+      provisioningProfiles: {
+        "io.visio.mobile" => "match AppStore io.visio.mobile"
+      }
+    }
   )
+
   deliver(
+    api_key: api_key,
+    ipa: "build/VisioMobile.ipa",
     submit_for_review: false,
     force: true,
     metadata_path: "./fastlane/metadata",
@@ -245,7 +284,9 @@ lane :release do
 end
 ```
 
-Requires: `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_PATH` environment variables. Match repo configured for appstore certificates.
+> **Note on screenshots:** `skip_screenshots: true` is set for initial submissions. Apple requires at least one screenshot per device class for the first App Store submission — these must be uploaded manually via App Store Connect or added to `metadata/{locale}/screenshots/` and `skip_screenshots` set to `false`.
+
+Requires: same env vars as existing `distribute` lane (`APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_CONTENT`, `APPLE_TEAM_ID`, `MATCH_GIT_URL`).
 
 ## 7. Dependencies & Prerequisites
 
@@ -260,13 +301,19 @@ Requires: `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `AP
 - **App Store Connect:** API key (App Manager role minimum)
 - **Match:** Git repo for iOS certificates (already referenced in Fastfile)
 
+### Store Prerequisites (manual steps before first submission)
+- **Google Play:** Complete IARC content rating questionnaire, set app category to "Communication", upload feature graphic (1024x500) and screenshots (min 2 phone screenshots), provide privacy policy URL
+- **App Store:** Complete age rating form, set app category to "Social Networking" or "Business", upload screenshots per device class (6.7", 6.5", 5.5" iPhone minimum; iPad if universal), provide privacy policy URL (hard requirement)
+- **Privacy policy URL:** Must be provided by user before any store submission (`privacy_url.txt` is TBD in metadata)
+- **Feature graphic (Google Play):** 1024x500 banner image — not included in current asset pack, needs to be designed or derived from the logo assets
+
 ## 8. Summary of Changes
 
 | Area | Files Changed | Files Created |
 |------|--------------|---------------|
 | Android icons | 10 PNGs replaced + 5 foreground regenerated | — |
 | Android store | 1 PNG replaced | — |
-| iOS icons | 45 PNGs + Contents.json replaced | — |
+| iOS icons | 37 PNGs + Contents.json replaced | — |
 | Desktop icons | 6 files replaced | icon.icns, icon.ico regenerated |
 | Desktop frontend | 2 files replaced | — |
 | README | README.md edited | visio-mobile-banner.png, app_icon.png replaced |
