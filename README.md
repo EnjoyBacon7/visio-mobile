@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/app_icon.png" alt="Visio Mobile" width="128" />
+  <img src="docs/screenshots/visio-mobile-banner.png" alt="Visio Mobile" width="500" />
 </p>
 
 # Visio Mobile
