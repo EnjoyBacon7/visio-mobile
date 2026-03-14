@@ -60,68 +60,101 @@ fn capture_thumbnail(img: xcap::XCapResult<image::RgbaImage>) -> String {
 pub fn list_sources() -> Vec<ScreenSource> {
     let mut sources = Vec::new();
 
-    if let Ok(monitors) = xcap::Monitor::all() {
-        for (i, monitor) in monitors.iter().enumerate() {
-            let width = monitor.width().unwrap_or(0);
-            let height = monitor.height().unwrap_or(0);
-            let is_primary = monitor.is_primary().unwrap_or(false);
-            let label = if is_primary {
-                format!("Screen {} (primary)", i + 1)
-            } else {
-                format!("Screen {}", i + 1)
-            };
-            let thumbnail = capture_thumbnail(monitor.capture_image());
-            sources.push(ScreenSource {
-                id: format!("monitor-{i}"),
-                name: label,
-                source_type: "monitor".into(),
-                width,
-                height,
-                thumbnail,
-            });
+    match xcap::Monitor::all() {
+        Ok(monitors) => {
+            tracing::info!("xcap found {} monitors", monitors.len());
+            for (i, monitor) in monitors.iter().enumerate() {
+                let width = monitor.width().unwrap_or(0);
+                let height = monitor.height().unwrap_or(0);
+                let is_primary = monitor.is_primary().unwrap_or(false);
+                let name = monitor.name().unwrap_or_default();
+                tracing::info!(
+                    "  monitor {i}: name={name:?}, {width}x{height}, primary={is_primary}"
+                );
+                let label = if is_primary {
+                    format!("Screen {} (primary)", i + 1)
+                } else {
+                    format!("Screen {}", i + 1)
+                };
+                let thumbnail = capture_thumbnail(monitor.capture_image());
+                sources.push(ScreenSource {
+                    id: format!("monitor-{i}"),
+                    name: label,
+                    source_type: "monitor".into(),
+                    width,
+                    height,
+                    thumbnail,
+                });
+            }
         }
+        Err(e) => tracing::error!("xcap::Monitor::all() failed: {e}"),
     }
 
-    if let Ok(windows) = xcap::Window::all() {
-        for window in &windows {
-            if window.is_minimized().unwrap_or(false) {
-                continue;
-            }
-            let width = window.width().unwrap_or(0);
-            let height = window.height().unwrap_or(0);
-            // Skip tiny windows (menu bar items, status icons, etc.)
-            if width < 100 || height < 100 {
-                continue;
-            }
-            let id = match window.id() {
-                Ok(id) => id,
-                Err(_) => continue,
-            };
-            let app_name = window.app_name().unwrap_or_default();
-            let title = window.title().unwrap_or_default();
-            // Build a user-friendly label: "App — Title" or just "App"
-            let label = if title.is_empty() || title == app_name {
-                if app_name.is_empty() {
+    match xcap::Window::all() {
+        Ok(windows) => {
+            tracing::info!("xcap found {} windows total", windows.len());
+            for window in &windows {
+                let app_name = window.app_name().unwrap_or_default();
+                let title = window.title().unwrap_or_default();
+                let width = window.width().unwrap_or(0);
+                let height = window.height().unwrap_or(0);
+                let minimized = window.is_minimized().unwrap_or(false);
+                let id_result = window.id();
+
+                // Log every window for debugging
+                tracing::debug!(
+                    "  window: app={app_name:?}, title={title:?}, {width}x{height}, minimized={minimized}, id={id_result:?}"
+                );
+
+                if minimized {
+                    tracing::debug!("    -> skipped (minimized)");
                     continue;
                 }
-                app_name
-            } else if app_name.is_empty() {
-                title
-            } else {
-                format!("{app_name} — {title}")
-            };
-            let thumbnail = capture_thumbnail(window.capture_image());
-            sources.push(ScreenSource {
-                id: format!("window-{id}"),
-                name: label,
-                source_type: "window".into(),
-                width,
-                height,
-                thumbnail,
-            });
+                // Skip tiny windows (menu bar items, status icons, etc.)
+                if width < 100 || height < 100 {
+                    tracing::debug!("    -> skipped (too small: {width}x{height})");
+                    continue;
+                }
+                let id = match id_result {
+                    Ok(id) => id,
+                    Err(ref e) => {
+                        tracing::debug!("    -> skipped (id error: {e})");
+                        continue;
+                    }
+                };
+                // Build a user-friendly label: "App — Title" or just "App"
+                let label = if title.is_empty() || title == app_name {
+                    if app_name.is_empty() {
+                        tracing::debug!("    -> skipped (no name/title)");
+                        continue;
+                    }
+                    app_name
+                } else if app_name.is_empty() {
+                    title
+                } else {
+                    format!("{app_name} — {title}")
+                };
+                tracing::info!("  window accepted: id={id}, label={label:?}");
+                let thumbnail = capture_thumbnail(window.capture_image());
+                sources.push(ScreenSource {
+                    id: format!("window-{id}"),
+                    name: label,
+                    source_type: "window".into(),
+                    width,
+                    height,
+                    thumbnail,
+                });
+            }
         }
+        Err(e) => tracing::error!("xcap::Window::all() failed: {e}"),
     }
 
+    tracing::info!(
+        "list_sources: returning {} sources ({} monitors + {} windows)",
+        sources.len(),
+        sources.iter().filter(|s| s.source_type == "monitor").count(),
+        sources.iter().filter(|s| s.source_type == "window").count(),
+    );
     sources
 }
 

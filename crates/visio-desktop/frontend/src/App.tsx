@@ -1382,12 +1382,20 @@ function CallView({
   // Auto-unfocus when focused screen share ends
   useEffect(() => {
     if (focusedItem?.source === "screen_share") {
-      const p = participants.find(p => p.sid === focusedItem.participantSid);
-      if (!p?.has_screen_share) {
-        setFocusedItem(null);
+      // Check both remote participants and local participant
+      const isLocal = localParticipant && focusedItem.participantSid === localParticipant.sid;
+      if (isLocal) {
+        if (!isScreenSharing) {
+          setFocusedItem(null);
+        }
+      } else {
+        const p = participants.find(p => p.sid === focusedItem.participantSid);
+        if (!p?.has_screen_share) {
+          setFocusedItem(null);
+        }
       }
     }
-  }, [participants, focusedItem]);
+  }, [participants, focusedItem, localParticipant, isScreenSharing]);
 
   const handleSendReaction = async (emojiId: string) => {
     try {

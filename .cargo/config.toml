@@ -3,6 +3,10 @@
 [target.'cfg(target_os = "linux")']
 rustflags = ["-C", "link-args=-Wl,-rpath,$ORIGIN/lib/onnxruntime"]
 
+# Pre-built libwebrtc uses /MT (static CRT); Rust must match to avoid LNK2038.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 [target.'cfg(target_os = "macos")']
 rustflags = ["-C", "link-arg=-ObjC"]
 
