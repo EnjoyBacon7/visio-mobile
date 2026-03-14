@@ -22,6 +22,25 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
             NSLog("CameraCapture: auth status = %d (0=notDetermined,1=restricted,2=denied,3=authorized)", authStatus.rawValue)
 
+            if authStatus == .notDetermined {
+                // Request permission synchronously on this queue (blocks until user responds).
+                let semaphore = DispatchSemaphore(value: 0)
+                var granted = false
+                AVCaptureDevice.requestAccess(for: .video) { result in
+                    granted = result
+                    semaphore.signal()
+                }
+                semaphore.wait()
+                if !granted {
+                    NSLog("CameraCapture: user denied camera permission")
+                    return
+                }
+                NSLog("CameraCapture: user granted camera permission")
+            } else if authStatus == .denied || authStatus == .restricted {
+                NSLog("CameraCapture: camera permission denied/restricted, cannot start")
+                return
+            }
+
             let discoverySession = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera],
                 mediaType: .video,

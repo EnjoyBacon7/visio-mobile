@@ -117,6 +117,10 @@ class VisioManager: ObservableObject {
             guard let self else { return }
             do {
                 let settings = self.client.getSettings()
+
+                // Request media permissions before connecting so tracks can publish
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+
                 try self.client.connect(meetUrl: url, username: username)
 
                 // Apply mic-on-join setting
@@ -169,6 +173,9 @@ class VisioManager: ObservableObject {
             guard let self else { return }
             do {
                 let settings = self.client.getSettings()
+
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+
                 try self.client.connectWithToken(livekitUrl: livekitUrl, token: token)
 
                 if settings.micEnabledOnJoin {
@@ -310,7 +317,45 @@ class VisioManager: ObservableObject {
         mediaFileCapture = nil
     }
 
+    /// Request camera and/or microphone permissions before using them.
+    /// Blocks the calling thread until the user responds (must not be called on main).
+    static func ensureMediaPermissions(mic: Bool, camera: Bool) {
+        let semaphore = DispatchSemaphore(value: 0)
+
+        if mic {
+            let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+            if micStatus == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    NSLog("VisioManager: mic permission %@", granted ? "granted" : "denied")
+                    semaphore.signal()
+                }
+                semaphore.wait()
+            }
+        }
+
+        if camera {
+            let camStatus = AVCaptureDevice.authorizationStatus(for: .video)
+            if camStatus == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .video) { granted in
+                    NSLog("VisioManager: camera permission %@", granted ? "granted" : "denied")
+                    semaphore.signal()
+                }
+                semaphore.wait()
+            }
+        }
+    }
+
     func toggleCamera() {
+        // Ensure camera permission before enabling
+        if !isCameraEnabled {
+            let status = AVCaptureDevice.authorizationStatus(for: .video)
+            if status == .denied || status == .restricted {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Camera permission denied. Enable in Settings → Visio Mobile → Camera."
+                }
+                return
+            }
+        }
         setCameraEnabled(!isCameraEnabled)
     }
 
