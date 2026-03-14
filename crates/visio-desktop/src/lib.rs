@@ -497,14 +497,14 @@ async fn toggle_mic(state: tauri::State<'_, VisioState>, enabled: bool) -> Resul
 async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Result<(), String> {
     let controls = state.controls.lock().await;
     if enabled {
-        // Publish camera track if not yet published
-        let source = if controls.video_source().await.is_none() {
-            let source = controls.publish_camera().await.map_err(|e| e.to_string())?;
-            tracing::info!("camera track published via toggle_camera");
-            Some(source)
-        } else {
-            // Track already published — get existing source for camera restart
-            controls.video_source().await
+        // Publish camera track if not yet published, or reuse existing source
+        let source = match controls.video_source().await {
+            Some(existing) => Some(existing),
+            None => {
+                let source = controls.publish_camera().await.map_err(|e| e.to_string())?;
+                tracing::info!("camera track published via toggle_camera");
+                Some(source)
+            }
         };
 
         // Start native camera capture if not already running

@@ -4,7 +4,7 @@ members = [
     "crates/visio-video",
     "crates/visio-ffi",
     "crates/visio-desktop",
-    "crates/visio-bot",
+    "e2e/visio-bot",
 ]
 resolver = "2"
 

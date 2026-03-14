@@ -12,23 +12,23 @@
 #   - Android device/emulator connected (adb devices)
 #   - APK installed on device (debug build with visio-test:// scheme)
 #   - ffmpeg (brew install ffmpeg)
-#   - Test video downloaded (./scripts/download-test-media.sh)
+#   - Test video downloaded (./e2e/scripts/download-test-media.sh)
 #   - Desktop crate pre-built (cargo build -p visio-desktop --no-default-features)
 #
 # Usage:
-#   ./scripts/run-cross-platform-e2e.sh [--duration SECS] [--no-android] [--no-desktop] [--no-ios]
+#   ./e2e/scripts/run-cross-platform-e2e.sh [--duration SECS] [--no-android] [--no-desktop] [--no-ios]
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 ROOM="e2e-$(date +%s)"
 DURATION="${DURATION:-120}"
 LIVEKIT_URL="ws://localhost:7880"
-MEDIA_FILE="$ROOT_DIR/test-assets/test-video.mp4"
-BOT_LOG="$ROOT_DIR/test-assets/bot-output.log"
-DESKTOP_LOG="$ROOT_DIR/test-assets/desktop-output.log"
+MEDIA_FILE="$ROOT_DIR/e2e/test-assets/test-video.mp4"
+BOT_LOG="$ROOT_DIR/e2e/test-assets/bot-output.log"
+DESKTOP_LOG="$ROOT_DIR/e2e/test-assets/desktop-output.log"
 API_KEY="devkey"
 API_SECRET="secret"
 SKIP_ANDROID=false

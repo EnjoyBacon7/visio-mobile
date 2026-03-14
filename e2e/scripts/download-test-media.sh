@@ -2,14 +2,14 @@
 # Download a test video for E2E bot usage.
 # Requires: yt-dlp, ffmpeg
 #
-# Usage: ./scripts/download-test-media.sh [youtube-url]
+# Usage: ./e2e/scripts/download-test-media.sh [youtube-url]
 #   Default: https://www.youtube.com/watch?v=EKWx-87CoVc
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-ASSETS_DIR="$ROOT_DIR/test-assets"
+ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+ASSETS_DIR="$ROOT_DIR/e2e/test-assets"
 
 URL="${1:-https://www.youtube.com/watch?v=EKWx-87CoVc}"
 OUTPUT="$ASSETS_DIR/test-video.mp4"

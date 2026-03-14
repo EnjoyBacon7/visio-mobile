@@ -11,7 +11,7 @@
 //!
 //! # Real video file (requires ffmpeg):
 //! visio-bot --url ws://localhost:7880 --room test-room \
-//!   --media-file test-assets/test-video.mp4
+//!   --media-file e2e/test-assets/test-video.mp4
 //!
 //! # With a pre-generated token:
 //! visio-bot --url ws://localhost:7880 --token <jwt>
@@ -267,6 +267,19 @@ impl BotEventLogger {
             .or_insert_with(VideoStats::new)
             .clone()
     }
+
+    /// Reset gap timers for a participant so intentional mute/unmute periods don't inflate max_gap.
+    fn reset_gap_timers_for(&self, participant_sid: &str) {
+        let identity = self.participant_identities.lock().unwrap().get(participant_sid).cloned();
+        if let Some(id) = &identity {
+            if let Some(stats) = self.per_participant_audio.lock().unwrap().get(id) {
+                stats.reset_gap_timer();
+            }
+            if let Some(stats) = self.per_participant_video.lock().unwrap().get(id) {
+                stats.reset_gap_timer();
+            }
+        }
+    }
 }
 
 impl VisioEventListener for BotEventLogger {
@@ -308,29 +321,11 @@ impl VisioEventListener for BotEventLogger {
             }
             VisioEvent::TrackMuted { participant_sid, source } => {
                 tracing::info!("[EVENT] TrackMuted: {source:?} from {participant_sid}");
-                // Reset per-participant gap timers so intentional mute periods don't count as gaps/freezes
-                let identity = self.participant_identities.lock().unwrap().get(participant_sid).cloned();
-                if let Some(id) = &identity {
-                    if let Some(stats) = self.per_participant_audio.lock().unwrap().get(id) {
-                        stats.reset_gap_timer();
-                    }
-                    if let Some(stats) = self.per_participant_video.lock().unwrap().get(id) {
-                        stats.reset_gap_timer();
-                    }
-                }
+                self.reset_gap_timers_for(participant_sid);
             }
             VisioEvent::TrackUnmuted { participant_sid, source } => {
                 tracing::info!("[EVENT] TrackUnmuted: {source:?} from {participant_sid}");
-                // Reset per-participant gap timers so intentional mute periods don't count as gaps/freezes
-                let identity = self.participant_identities.lock().unwrap().get(participant_sid).cloned();
-                if let Some(id) = &identity {
-                    if let Some(stats) = self.per_participant_audio.lock().unwrap().get(id) {
-                        stats.reset_gap_timer();
-                    }
-                    if let Some(stats) = self.per_participant_video.lock().unwrap().get(id) {
-                        stats.reset_gap_timer();
-                    }
-                }
+                self.reset_gap_timers_for(participant_sid);
             }
             VisioEvent::ChatMessageReceived(msg) => {
                 tracing::info!("[EVENT] ChatMessage: '{}' from {}", msg.text, msg.sender_name);
@@ -773,12 +768,14 @@ async fn main() {
             async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(5)).await;
-                    let audio_map = event_logger.per_participant_audio.lock().unwrap();
-                    for (identity, stats) in audio_map.iter() {
+                    let audio_entries: Vec<_> = event_logger.per_participant_audio.lock().unwrap()
+                        .iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    for (identity, stats) in &audio_entries {
                         tracing::info!("[AUDIO QUALITY] {identity}: {}", stats.report());
                     }
-                    let video_map = event_logger.per_participant_video.lock().unwrap();
-                    for (identity, stats) in video_map.iter() {
+                    let video_entries: Vec<_> = event_logger.per_participant_video.lock().unwrap()
+                        .iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    for (identity, stats) in &video_entries {
                         tracing::info!("[VIDEO QUALITY] {identity}: {}", stats.report());
                     }
                 }
@@ -985,44 +982,32 @@ async fn main() {
         "[SUMMARY] participants_joined={joins}, tracks_subscribed={subs}, tracks_unsubscribed={unsubs}"
     );
 
-    // Final per-participant audio quality reports
+    // Final per-participant quality reports
     if monitor_active {
-        let audio_map = event_logger.per_participant_audio.lock().unwrap();
-        if audio_map.is_empty() {
-            tracing::warn!("[AUDIO QUALITY] NO audio tracks monitored — possible pipeline failure");
+        macro_rules! report_quality {
+            ($label:expr, $map_field:ident, $gap_threshold:expr, $issue_desc:expr) => {
+                let map = event_logger.$map_field.lock().unwrap();
+                if map.is_empty() {
+                    tracing::warn!(concat!("[", $label, " QUALITY] NO tracks monitored"));
+                }
+                for (identity, stats) in map.iter() {
+                    let report = stats.report();
+                    tracing::info!("[{} QUALITY FINAL] {identity}: {report}", $label);
+                    let total = stats.frames_received.load(Ordering::Relaxed);
+                    let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
+                    if total == 0 {
+                        tracing::warn!("[{} QUALITY] {identity}: NO frames received", $label);
+                    } else if max_gap > $gap_threshold {
+                        tracing::warn!("[{} QUALITY] {identity}: Large gap {max_gap}ms — {}", $label, $issue_desc);
+                    } else {
+                        tracing::info!("[{} QUALITY] {identity}: OK", $label);
+                    }
+                }
+                drop(map);
+            };
         }
-        for (identity, stats) in audio_map.iter() {
-            let report = stats.report();
-            tracing::info!("[AUDIO QUALITY FINAL] {identity}: {report}");
-            let total = stats.frames_received.load(Ordering::Relaxed);
-            let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
-            if total == 0 {
-                tracing::warn!("[AUDIO QUALITY] {identity}: NO audio frames received");
-            } else if max_gap > 200 {
-                tracing::warn!("[AUDIO QUALITY] {identity}: Large gap {max_gap}ms — possible stutter");
-            } else {
-                tracing::info!("[AUDIO QUALITY] {identity}: OK");
-            }
-        }
-
-        // Final per-participant video quality reports
-        let video_map = event_logger.per_participant_video.lock().unwrap();
-        if video_map.is_empty() {
-            tracing::warn!("[VIDEO QUALITY] NO video tracks monitored");
-        }
-        for (identity, stats) in video_map.iter() {
-            let report = stats.report();
-            tracing::info!("[VIDEO QUALITY FINAL] {identity}: {report}");
-            let total = stats.frames_received.load(Ordering::Relaxed);
-            let max_gap = stats.max_gap_ms.load(Ordering::Relaxed);
-            if total == 0 {
-                tracing::warn!("[VIDEO QUALITY] {identity}: NO video frames received");
-            } else if max_gap > 2000 {
-                tracing::warn!("[VIDEO QUALITY] {identity}: Large gap {max_gap}ms — possible freeze");
-            } else {
-                tracing::info!("[VIDEO QUALITY] {identity}: OK");
-            }
-        }
+        report_quality!("AUDIO", per_participant_audio, 200, "possible stutter");
+        report_quality!("VIDEO", per_participant_video, 2000, "possible freeze");
     }
 
     // Disconnect

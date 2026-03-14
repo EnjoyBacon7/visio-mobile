@@ -6,7 +6,6 @@ import visioFFI
 final class SyntheticAudioCapture {
     private let queue = DispatchQueue(label: "io.visio.synthetic-audio", qos: .userInitiated)
     private var running = false
-    private var workItem: DispatchWorkItem?
 
     private let sampleRate: Int = 48000
     private let channels: Int = 1
@@ -21,46 +20,38 @@ final class SyntheticAudioCapture {
 
             let samplesPerFrame = sampleRate * frameDurationMs / 1000  // 960
             var sampleOffset: UInt64 = 0
+            var buffer = [Int16](repeating: 0, count: samplesPerFrame)
 
             NSLog("SyntheticAudioCapture: started (%.0fHz sine, %dHz, %dms frames)", frequency, sampleRate, frameDurationMs)
 
-            let item = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                var buffer = [Int16](repeating: 0, count: samplesPerFrame)
+            while self.running {
+                for i in 0..<samplesPerFrame {
+                    let t = Double(sampleOffset + UInt64(i)) / Double(self.sampleRate)
+                    let val = sin(t * self.frequency * 2.0 * .pi) * self.amplitude
+                    buffer[i] = Int16(clamping: Int(val))
+                }
+                sampleOffset += UInt64(samplesPerFrame)
 
-                while self.running {
-                    for i in 0..<samplesPerFrame {
-                        let t = Double(sampleOffset + UInt64(i)) / Double(self.sampleRate)
-                        let val = sin(t * self.frequency * 2.0 * .pi) * self.amplitude
-                        buffer[i] = Int16(clamping: Int(val))
-                    }
-                    sampleOffset += UInt64(samplesPerFrame)
-
-                    buffer.withUnsafeBufferPointer { ptr in
-                        guard let base = ptr.baseAddress else { return }
-                        visio_push_ios_audio_frame(
-                            base,
-                            UInt32(samplesPerFrame),
-                            UInt32(self.sampleRate),
-                            UInt32(self.channels)
-                        )
-                    }
-
-                    Thread.sleep(forTimeInterval: Double(self.frameDurationMs) / 1000.0)
+                buffer.withUnsafeBufferPointer { ptr in
+                    guard let base = ptr.baseAddress else { return }
+                    visio_push_ios_audio_frame(
+                        base,
+                        UInt32(samplesPerFrame),
+                        UInt32(self.sampleRate),
+                        UInt32(self.channels)
+                    )
                 }
 
-                NSLog("SyntheticAudioCapture: stopped")
+                Thread.sleep(forTimeInterval: Double(self.frameDurationMs) / 1000.0)
             }
-            self.workItem = item
-            queue.async(execute: item)
+
+            NSLog("SyntheticAudioCapture: stopped")
         }
     }
 
     func stop() {
         queue.async { [self] in
             running = false
-            workItem?.cancel()
-            workItem = nil
         }
     }
 }

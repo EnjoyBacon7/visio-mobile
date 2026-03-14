@@ -66,5 +66,5 @@ Gemfile.lock
 **/fastlane/test_output
 
 # Test media assets (downloaded, not committed)
-test-assets/
+e2e/test-assets/
 crates/visio-desktop/frontend/test-results/

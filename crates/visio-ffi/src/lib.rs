@@ -889,31 +889,22 @@ impl VisioClient {
                 .await
                 .map_err(VisioError::from)?;
 
-            #[cfg(target_os = "android")]
+            // Store/clear the audio source for platform-native capture pipelines
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
-                let mut guard = AUDIO_SOURCE.lock().unwrap();
+                #[cfg(target_os = "android")]
+                let guard = &AUDIO_SOURCE;
+                #[cfg(target_os = "ios")]
+                let guard = &AUDIO_SOURCE_IOS;
+                let mut lock = guard.lock().unwrap();
                 if enabled {
                     if let Some(source) = self.controls.audio_source().await {
-                        visio_log("VISIO FFI: audio source stored for JNI pipeline");
-                        *guard = Some(source);
+                        visio_log("VISIO FFI: audio source stored for native pipeline");
+                        *lock = Some(source);
                     }
                 } else {
                     visio_log("VISIO FFI: audio source cleared");
-                    *guard = None;
-                }
-            }
-
-            #[cfg(target_os = "ios")]
-            {
-                let mut guard = AUDIO_SOURCE_IOS.lock().unwrap();
-                if enabled {
-                    if let Some(source) = self.controls.audio_source().await {
-                        visio_log("VISIO FFI: audio source stored for iOS pipeline");
-                        *guard = Some(source);
-                    }
-                } else {
-                    visio_log("VISIO FFI: audio source cleared (iOS)");
-                    *guard = None;
+                    *lock = None;
                 }
             }
 
