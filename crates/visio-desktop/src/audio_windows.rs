@@ -13,8 +13,10 @@ use super::audio_engine::{self, LK_CHANNELS, LK_SAMPLE_RATE, VoiceAudioEngine};
 
 use windows::Win32::Media::Audio::*;
 use windows::Win32::System::Com::*;
-use windows::Win32::System::Threading::*;
-// Note: avoid `use windows::core::*` — it shadows std::result::Result
+use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+
+/// Alias to ensure we use the Result type from our pinned windows 0.58 crate.
+type WinResult<T> = WinResult<T>;
 
 pub struct WindowsAudioEngine {
     render_thread: Option<std::thread::JoinHandle<()>>,
@@ -44,12 +46,12 @@ impl WindowsAudioEngine {
 }
 
 /// Initialize COM on the current thread (each thread needs its own init).
-fn init_com() -> windows::core::Result<()> {
+fn init_com() -> WinResult<()> {
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
 }
 
 /// Get the default audio endpoint for the given data flow.
-fn get_default_device(data_flow: EDataFlow) -> windows::core::Result<IMMDevice> {
+fn get_default_device(data_flow: EDataFlow) -> WinResult<IMMDevice> {
     unsafe {
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
@@ -58,7 +60,7 @@ fn get_default_device(data_flow: EDataFlow) -> windows::core::Result<IMMDevice> 
 }
 
 /// Create and configure an IAudioClient with Communications category.
-fn create_audio_client(device: &IMMDevice) -> windows::core::Result<IAudioClient2> {
+fn create_audio_client(device: &IMMDevice) -> WinResult<IAudioClient2> {
     unsafe {
         let client: IAudioClient2 = device.Activate(CLSCTX_ALL, None)?;
 
@@ -86,7 +88,7 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                 return;
             }
 
-            let result = (|| -> windows::core::Result<()> {
+            let result = (|| -> WinResult<()> {
                 let device = get_default_device(eRender)?;
                 let client = create_audio_client(&device)?;
 
@@ -176,7 +178,7 @@ impl VoiceAudioEngine for WindowsAudioEngine {
                 return;
             }
 
-            let result = (|| -> windows::core::Result<()> {
+            let result = (|| -> WinResult<()> {
                 let device = get_default_device(eCapture)?;
                 let client = create_audio_client(&device)?;
 
