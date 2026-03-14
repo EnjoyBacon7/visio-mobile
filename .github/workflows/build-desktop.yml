@@ -61,7 +61,9 @@ jobs:
             libglib2.0-dev \
             libva-dev \
             libpulse-dev \
-            libasound2-dev
+            libasound2-dev \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev
 
       # --- Node.js + frontend build ---
       - name: Set up Node.js
