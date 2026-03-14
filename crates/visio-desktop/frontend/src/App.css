@@ -980,6 +980,12 @@ main {
 .chat-text {
   font-size: 0.85rem;
   line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-link {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .chat-time {

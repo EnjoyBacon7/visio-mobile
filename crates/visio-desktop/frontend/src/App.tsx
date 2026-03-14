@@ -260,6 +260,24 @@ function formatTime(timestampMs: number): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Render text with URLs auto-linked. */
+function AutoLinkText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<]+)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="chat-link">
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Components
 // ---------------------------------------------------------------------------
@@ -1567,7 +1585,7 @@ function CallView({
                           {m.sender_name || t("unknown")}
                         </div>
                       )}
-                      <div className="chat-text">{m.text}</div>
+                      <div className="chat-text"><AutoLinkText text={m.text} /></div>
                       <div className="chat-time">{formatTime(m.timestamp_ms)}</div>
                     </div>
                   );
@@ -1581,6 +1599,7 @@ function CallView({
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                maxLength={2000}
                 placeholder={t("chat.placeholder")}
               />
               <button
