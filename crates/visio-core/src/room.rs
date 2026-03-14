@@ -247,6 +247,8 @@ impl RoomManager {
             has_screen_share: false,
             screen_share_track_sid: None,
             connection_quality: ConnectionQuality::Excellent,
+            color: None,
+            is_admin: false,
         })
     }
 
@@ -329,7 +331,7 @@ impl RoomManager {
 
                 Ok(())
             }
-            Err(VisioError::Auth(ref msg)) if msg.contains("waiting for host approval") => {
+            Err(VisioError::WaitingForHost) => {
                 tracing::info!("room requires host approval, entering lobby");
                 let name = username.unwrap_or("Anonymous");
                 self.enter_lobby(meet_url, name).await
@@ -616,10 +618,22 @@ impl RoomManager {
         let high_quality_mode = self.high_quality_mode.clone();
 
         tokio::spawn(async move {
+            let lobby_deadline = tokio::time::Instant::now()
+                + std::time::Duration::from_secs(10 * 60); // 10 minutes
+
             loop {
                 tokio::select! {
                     _ = lobby_cancel.notified() => {
                         tracing::info!("lobby polling cancelled");
+                        break;
+                    }
+                    _ = tokio::time::sleep_until(lobby_deadline) => {
+                        tracing::warn!("lobby wait timed out after 10 minutes");
+                        emitter.emit(VisioEvent::LobbyTimeout);
+                        *connection_state.lock().await = ConnectionState::Disconnected;
+                        emitter.emit(VisioEvent::ConnectionStateChanged(
+                            ConnectionState::Disconnected,
+                        ));
                         break;
                     }
                     _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
@@ -897,6 +911,10 @@ impl RoomManager {
             .values()
             .any(|pub_| pub_.kind() == LkTrackKind::Audio && pub_.is_muted());
 
+        let attrs = p.attributes();
+        let color = attrs.get("color").cloned().filter(|s| !s.is_empty());
+        let is_admin = attrs.get("room_admin").map_or(false, |v| v == "true");
+
         ParticipantInfo {
             sid: p.sid().to_string(),
             identity: p.identity().to_string(),
@@ -907,6 +925,8 @@ impl RoomManager {
             has_screen_share: false,
             screen_share_track_sid: None,
             connection_quality: ConnectionQuality::Good,
+            color,
+            is_admin,
         }
     }
 
@@ -1216,6 +1236,20 @@ impl RoomManager {
                     changed_attributes,
                 } => {
                     let psid = participant.sid().to_string();
+
+                    // Update color/is_admin if those attributes changed
+                    {
+                        let mut pm = participants.lock().await;
+                        if let Some(p) = pm.participant_mut(&psid) {
+                            if let Some(color) = changed_attributes.get("color") {
+                                p.color = if color.is_empty() { None } else { Some(color.clone()) };
+                            }
+                            if let Some(admin) = changed_attributes.get("room_admin") {
+                                p.is_admin = admin == "true";
+                            }
+                        }
+                    }
+
                     if let Some(hm) = hand_raise.lock().await.as_ref() {
                         hm.handle_participant_attributes(psid, &changed_attributes)
                             .await;

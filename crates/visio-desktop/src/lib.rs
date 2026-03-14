@@ -269,6 +269,11 @@ impl VisioEventListener for DesktopEventListener {
                     let _ = app.emit("lobby-denied", ());
                 }
             }
+            VisioEvent::LobbyTimeout => {
+                if let Some(app) = APP_HANDLE.get() {
+                    let _ = app.emit("lobby-timeout", ());
+                }
+            }
             VisioEvent::ReactionReceived {
                 participant_sid,
                 participant_name,

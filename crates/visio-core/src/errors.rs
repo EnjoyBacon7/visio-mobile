@@ -16,4 +16,6 @@ pub enum VisioError {
     InvalidUrl(String),
     #[error("Session error: {0}")]
     Session(String),
+    #[error("waiting for host approval")]
+    WaitingForHost,
 }

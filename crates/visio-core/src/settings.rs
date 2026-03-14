@@ -31,6 +31,15 @@ pub struct Settings {
     pub room_history: Vec<String>,
     #[serde(default = "default_true")]
     pub noise_reduction_enabled: bool,
+    /// Preferred audio input device name.
+    #[serde(default)]
+    pub audio_input_device: Option<String>,
+    /// Preferred audio output device name.
+    #[serde(default)]
+    pub audio_output_device: Option<String>,
+    /// Preferred camera device name.
+    #[serde(default)]
+    pub camera_device: Option<String>,
 }
 
 fn default_meet_instances() -> Vec<String> {
@@ -68,6 +77,9 @@ impl Default for Settings {
             adaptive_mode_enabled: true,
             room_history: Vec::new(),
             noise_reduction_enabled: true,
+            audio_input_device: None,
+            audio_output_device: None,
+            camera_device: None,
         }
     }
 }
@@ -234,6 +246,54 @@ impl SettingsStore {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .noise_reduction_enabled = enabled;
+        self.save();
+    }
+
+    pub fn get_audio_input_device(&self) -> Option<String> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .audio_input_device
+            .clone()
+    }
+
+    pub fn set_audio_input_device(&self, device: Option<String>) {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .audio_input_device = device;
+        self.save();
+    }
+
+    pub fn get_audio_output_device(&self) -> Option<String> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .audio_output_device
+            .clone()
+    }
+
+    pub fn set_audio_output_device(&self, device: Option<String>) {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .audio_output_device = device;
+        self.save();
+    }
+
+    pub fn get_camera_device(&self) -> Option<String> {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .camera_device
+            .clone()
+    }
+
+    pub fn set_camera_device(&self, device: Option<String>) {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .camera_device = device;
         self.save();
     }
 
@@ -551,6 +611,30 @@ mod tests {
         }
         let store = SettingsStore::new(path);
         assert!(!store.is_noise_reduction_enabled());
+    }
+
+    #[test]
+    fn test_device_selection_persists() {
+        let dir = temp_dir();
+        let path = dir.path().to_str().unwrap();
+        {
+            let store = SettingsStore::new(path);
+            store.set_audio_input_device(Some("Blue Yeti".to_string()));
+            store.set_audio_output_device(Some("Speakers".to_string()));
+            store.set_camera_device(Some("FaceTime HD".to_string()));
+        }
+        let store = SettingsStore::new(path);
+        assert_eq!(store.get_audio_input_device(), Some("Blue Yeti".to_string()));
+        assert_eq!(store.get_audio_output_device(), Some("Speakers".to_string()));
+        assert_eq!(store.get_camera_device(), Some("FaceTime HD".to_string()));
+    }
+
+    #[test]
+    fn test_device_selection_defaults_to_none() {
+        let s = Settings::default();
+        assert!(s.audio_input_device.is_none());
+        assert!(s.audio_output_device.is_none());
+        assert!(s.camera_device.is_none());
     }
 
     #[test]

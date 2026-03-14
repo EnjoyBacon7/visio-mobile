@@ -39,6 +39,8 @@ pub enum VisioEvent {
     },
     /// Entry was denied by the host (participant notification).
     LobbyDenied,
+    /// Lobby wait timed out (10 minutes without host approval).
+    LobbyTimeout,
     /// A participant sent an animated reaction (emoji).
     ReactionReceived {
         participant_sid: String,
@@ -81,6 +83,10 @@ pub struct ParticipantInfo {
     pub has_screen_share: bool,
     pub screen_share_track_sid: Option<String>,
     pub connection_quality: ConnectionQuality,
+    /// HSL color string from Meet server (participant attribute "color").
+    pub color: Option<String>,
+    /// Whether the participant is a room admin (attribute "room_admin").
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

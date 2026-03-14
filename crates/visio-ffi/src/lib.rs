@@ -254,6 +254,8 @@ pub struct ParticipantInfo {
     pub has_screen_share: bool,
     pub screen_share_track_sid: Option<String>,
     pub connection_quality: ConnectionQuality,
+    pub color: Option<String>,
+    pub is_admin: bool,
 }
 
 impl From<CoreParticipantInfo> for ParticipantInfo {
@@ -268,6 +270,8 @@ impl From<CoreParticipantInfo> for ParticipantInfo {
             has_screen_share: p.has_screen_share,
             screen_share_track_sid: p.screen_share_track_sid,
             connection_quality: p.connection_quality.into(),
+            color: p.color,
+            is_admin: p.is_admin,
         }
     }
 }
@@ -475,6 +479,7 @@ pub enum VisioEvent {
         id: String,
     },
     LobbyDenied,
+    LobbyTimeout,
     ReactionReceived {
         participant_sid: String,
         participant_name: String,
@@ -545,6 +550,7 @@ impl From<CoreVisioEvent> for VisioEvent {
             }
             CoreVisioEvent::LobbyParticipantLeft { id } => Self::LobbyParticipantLeft { id },
             CoreVisioEvent::LobbyDenied => Self::LobbyDenied,
+            CoreVisioEvent::LobbyTimeout => Self::LobbyTimeout,
             CoreVisioEvent::ReactionReceived {
                 participant_sid,
                 participant_name,
@@ -600,6 +606,9 @@ impl From<visio_core::VisioError> for VisioError {
             visio_core::VisioError::Http(msg) => Self::Http { msg },
             visio_core::VisioError::InvalidUrl(msg) => Self::InvalidUrl { msg },
             visio_core::VisioError::Session(msg) => Self::Session { msg },
+            visio_core::VisioError::WaitingForHost => Self::Auth {
+                msg: "waiting for host approval".to_string(),
+            },
         }
     }
 }

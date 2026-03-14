@@ -93,6 +93,8 @@ mod tests {
             has_screen_share: false,
             screen_share_track_sid: None,
             connection_quality: ConnectionQuality::Good,
+            color: None,
+            is_admin: false,
         }
     }
 

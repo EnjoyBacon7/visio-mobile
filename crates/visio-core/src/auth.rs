@@ -86,9 +86,7 @@ impl AuthService {
             VisioError::Auth(format!("invalid Meet API response: {e} — body: {body}"))
         })?;
 
-        let lk = data.livekit.ok_or_else(|| {
-            VisioError::Auth("Room is not ready yet — waiting for host approval".to_string())
-        })?;
+        let lk = data.livekit.ok_or(VisioError::WaitingForHost)?;
 
         // Convert URL to WebSocket
         let livekit_url = lk
