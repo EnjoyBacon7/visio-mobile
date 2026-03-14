@@ -18,4 +18,10 @@ pub enum VisioError {
     Session(String),
     #[error("waiting for host approval")]
     WaitingForHost,
+    #[error("device permission denied: {0}")]
+    DevicePermissionDenied(String),
+    #[error("device in use: {0}")]
+    DeviceInUse(String),
+    #[error("device not found: {0}")]
+    DeviceNotFound(String),
 }

@@ -707,7 +707,7 @@ async fn main() {
 
     // Publish video
     if args.video {
-        match controls.publish_camera().await {
+        match controls.publish_camera("720p").await {
             Ok(source) => {
                 if let Some(ref path) = args.media_file {
                     tracing::info!("Publishing video from file: {path} ({}x{} @{}fps)", VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS);

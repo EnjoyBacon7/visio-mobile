@@ -520,7 +520,8 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
         let source = match controls.video_source().await {
             Some(existing) => Some(existing),
             None => {
-                let source = controls.publish_camera().await.map_err(|e| e.to_string())?;
+                let res = state.settings.get_video_resolution();
+                let source = controls.publish_camera(&res).await.map_err(|e| e.to_string())?;
                 tracing::info!("camera track published via toggle_camera");
                 Some(source)
             }
@@ -559,6 +560,53 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
         .set_camera_enabled(enabled)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Check microphone and camera permissions on macOS.
+/// Returns `{ "microphone": "granted"|"denied"|"undetermined", "camera": "granted"|"denied"|"undetermined" }`.
+#[tauri::command]
+fn check_media_permissions() -> serde_json::Value {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::runtime::AnyClass;
+        use objc2::msg_send;
+
+        fn auth_status(media_type: &std::ffi::CStr) -> &'static str {
+            unsafe {
+                let cls = match AnyClass::get(c"AVCaptureDevice") {
+                    Some(c) => c,
+                    None => return "undetermined",
+                };
+                let nsstring_cls = match AnyClass::get(c"NSString") {
+                    Some(c) => c,
+                    None => return "undetermined",
+                };
+                let mt: *const objc2::runtime::AnyObject =
+                    msg_send![nsstring_cls, stringWithUTF8String: media_type.as_ptr()];
+                let status: i64 = msg_send![cls, authorizationStatusForMediaType: mt];
+                // 0 = notDetermined, 1 = restricted, 2 = denied, 3 = authorized
+                match status {
+                    3 => "granted",
+                    2 | 1 => "denied",
+                    _ => "undetermined",
+                }
+            }
+        }
+
+        serde_json::json!({
+            "microphone": auth_status(c"soun"),
+            "camera": auth_status(c"vide"),
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On non-macOS platforms, assume granted (OS handles permissions natively)
+        serde_json::json!({
+            "microphone": "granted",
+            "camera": "granted",
+        })
+    }
 }
 
 #[tauri::command]
@@ -1541,6 +1589,7 @@ pub fn run() {
             select_audio_output,
             select_video_input,
             set_adaptive_mode_enabled,
+            check_media_permissions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

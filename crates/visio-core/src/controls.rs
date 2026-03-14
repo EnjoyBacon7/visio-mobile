@@ -15,9 +15,14 @@ const AUDIO_SAMPLE_RATE: u32 = 48_000;
 const AUDIO_CHANNELS: u32 = 1;
 const AUDIO_QUEUE_SIZE_MS: u32 = 100;
 
-/// Default video resolution.
-const VIDEO_WIDTH: u32 = 1280;
-const VIDEO_HEIGHT: u32 = 720;
+/// Resolve a resolution preset string to (width, height).
+pub fn resolve_video_resolution(preset: &str) -> (u32, u32) {
+    match preset {
+        "360p" => (640, 360),
+        "180p" => (320, 180),
+        _ => (1280, 720), // "720p" or unknown → default
+    }
+}
 
 /// Controls for local media (microphone, camera).
 ///
@@ -112,17 +117,19 @@ impl MeetingControls {
     /// Publish a camera track to the room.
     ///
     /// Creates a NativeVideoSource and publishes a video track.
+    /// `resolution_preset` is "720p", "360p", or "180p".
     /// Returns the video source so native code can feed captured frames into it.
-    pub async fn publish_camera(&self) -> Result<NativeVideoSource, VisioError> {
+    pub async fn publish_camera(&self, resolution_preset: &str) -> Result<NativeVideoSource, VisioError> {
         let room = self.room.lock().await;
         let room = room
             .as_ref()
             .ok_or_else(|| VisioError::Room("not connected".into()))?;
 
+        let (width, height) = resolve_video_resolution(resolution_preset);
         let source = NativeVideoSource::new(
             VideoResolution {
-                width: VIDEO_WIDTH,
-                height: VIDEO_HEIGHT,
+                width,
+                height,
             },
             false, // not a screencast
         );
@@ -222,7 +229,7 @@ impl MeetingControls {
         }
         // No camera track yet — publish if enabling, otherwise just update state.
         if enabled {
-            self.publish_camera().await?;
+            self.publish_camera("720p").await?;
         } else {
             *self.camera_enabled.lock().await = false;
         }
@@ -367,6 +374,15 @@ mod tests {
         let result = controls.set_camera_enabled(false).await;
         // Without a connected room, this returns Err
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_video_resolution_presets() {
+        assert_eq!(super::resolve_video_resolution("720p"), (1280, 720));
+        assert_eq!(super::resolve_video_resolution("360p"), (640, 360));
+        assert_eq!(super::resolve_video_resolution("180p"), (320, 180));
+        // Unknown falls back to 720p
+        assert_eq!(super::resolve_video_resolution("unknown"), (1280, 720));
     }
 
     #[test]

@@ -609,6 +609,9 @@ impl From<visio_core::VisioError> for VisioError {
             visio_core::VisioError::WaitingForHost => Self::Auth {
                 msg: "waiting for host approval".to_string(),
             },
+            visio_core::VisioError::DevicePermissionDenied(msg) => Self::Generic { msg },
+            visio_core::VisioError::DeviceInUse(msg) => Self::Generic { msg },
+            visio_core::VisioError::DeviceNotFound(msg) => Self::Generic { msg },
         }
     }
 }

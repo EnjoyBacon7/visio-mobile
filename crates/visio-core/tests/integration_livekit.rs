@@ -876,7 +876,7 @@ async fn test_video_track_publish_subscribe() {
     wait_mutual_discovery(&rm1, &rm2, "alice", "bob").await;
 
     let controls1 = rm1.controls();
-    let _source = controls1.publish_camera().await.expect("publish_camera failed");
+    let _source = controls1.publish_camera("720p").await.expect("publish_camera failed");
 
     // Bob should receive TrackSubscribed for Camera
     let saw_video = wait_for(
@@ -919,7 +919,7 @@ async fn test_video_track_mute_unmute() {
     wait_mutual_discovery(&rm1, &rm2, "alice", "bob").await;
 
     let controls1 = rm1.controls();
-    controls1.publish_camera().await.expect("publish_camera failed");
+    controls1.publish_camera("720p").await.expect("publish_camera failed");
 
     // Wait for subscription
     let saw_sub = wait_for(
@@ -1058,7 +1058,7 @@ async fn test_simultaneous_audio_video_tracks() {
 
     let controls1 = rm1.controls();
     controls1.publish_microphone().await.expect("publish_microphone failed");
-    controls1.publish_camera().await.expect("publish_camera failed");
+    controls1.publish_camera("720p").await.expect("publish_camera failed");
 
     // Bob should receive 2 TrackSubscribed events
     let saw_both = wait_for(
@@ -1645,7 +1645,7 @@ async fn test_three_participants_video_broadcast() {
     // Publisher publishes audio + video with real frames
     let controls = rm_publisher.controls();
     let audio_source = controls.publish_microphone().await.expect("publish mic");
-    let video_source = controls.publish_camera().await.expect("publish cam");
+    let video_source = controls.publish_camera("720p").await.expect("publish cam");
 
     spawn_audio_feeder(audio_source);
     spawn_video_feeder(video_source);
@@ -1705,7 +1705,7 @@ async fn test_three_participants_video_mute_broadcast() {
     wait_three_way_discovery(&rm_pub, &rm_v1, &rm_v2, "pub", "v1", "v2").await;
 
     let controls = rm_pub.controls();
-    let video_source = controls.publish_camera().await.expect("publish cam");
+    let video_source = controls.publish_camera("720p").await.expect("publish cam");
     spawn_video_feeder(video_source);
 
     // Wait for both to subscribe
@@ -1761,7 +1761,7 @@ async fn test_three_participants_publisher_leaves() {
 
     let controls = rm_pub.controls();
     let audio_source = controls.publish_microphone().await.expect("publish mic");
-    let video_source = controls.publish_camera().await.expect("publish cam");
+    let video_source = controls.publish_camera("720p").await.expect("publish cam");
     spawn_audio_feeder(audio_source);
     spawn_video_feeder(video_source);
 
@@ -1827,7 +1827,7 @@ async fn test_three_participants_full_interaction() {
     // Alice publishes audio + video with real frames
     let controls1 = rm1.controls();
     let audio_src = controls1.publish_microphone().await.expect("publish mic");
-    let video_src = controls1.publish_camera().await.expect("publish cam");
+    let video_src = controls1.publish_camera("720p").await.expect("publish cam");
     spawn_audio_feeder(audio_src);
     spawn_video_feeder(video_src);
 
@@ -1911,14 +1911,14 @@ async fn test_three_participants_two_publishers() {
     // Alice publishes audio + video
     let c1 = rm1.controls();
     let a1 = c1.publish_microphone().await.expect("alice mic");
-    let v1 = c1.publish_camera().await.expect("alice cam");
+    let v1 = c1.publish_camera("720p").await.expect("alice cam");
     spawn_audio_feeder(a1);
     spawn_video_feeder(v1);
 
     // Bob publishes audio + video
     let c2 = rm2.controls();
     let a2 = c2.publish_microphone().await.expect("bob mic");
-    let v2 = c2.publish_camera().await.expect("bob cam");
+    let v2 = c2.publish_camera("720p").await.expect("bob cam");
     spawn_audio_feeder(a2);
     spawn_video_feeder(v2);
 
@@ -1967,7 +1967,7 @@ async fn test_three_participants_screen_share_and_camera() {
     let controls = rm1.controls();
 
     // Alice publishes camera + screen share
-    let cam_src = controls.publish_camera().await.expect("publish cam");
+    let cam_src = controls.publish_camera("720p").await.expect("publish cam");
     spawn_video_feeder(cam_src);
     let _screen_src = controls.publish_screen_share().await.expect("publish screen share");
 

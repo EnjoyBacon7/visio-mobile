@@ -40,6 +40,13 @@ pub struct Settings {
     /// Preferred camera device name.
     #[serde(default)]
     pub camera_device: Option<String>,
+    /// Video resolution preset: "720p" (default), "360p", "180p".
+    #[serde(default = "default_video_resolution")]
+    pub video_resolution: String,
+}
+
+fn default_video_resolution() -> String {
+    "720p".to_string()
 }
 
 fn default_meet_instances() -> Vec<String> {
@@ -80,6 +87,7 @@ impl Default for Settings {
             audio_input_device: None,
             audio_output_device: None,
             camera_device: None,
+            video_resolution: "720p".to_string(),
         }
     }
 }
@@ -294,6 +302,23 @@ impl SettingsStore {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .camera_device = device;
+        self.save();
+    }
+
+    pub fn get_video_resolution(&self) -> String {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .video_resolution
+            .clone()
+    }
+
+    /// Set video resolution preset. Valid values: "720p", "360p", "180p".
+    pub fn set_video_resolution(&self, resolution: String) {
+        self.settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .video_resolution = resolution;
         self.save();
     }
 
