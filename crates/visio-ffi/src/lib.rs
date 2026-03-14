@@ -1086,6 +1086,12 @@ impl VisioClient {
             .map_err(VisioError::from)
     }
 
+    pub fn lower_all_hands(&self) -> Result<(), VisioError> {
+        self.rt
+            .block_on(self.room_manager.lower_all_hands())
+            .map_err(VisioError::from)
+    }
+
     pub fn is_hand_raised(&self) -> bool {
         self.rt.block_on(self.room_manager.is_hand_raised())
     }

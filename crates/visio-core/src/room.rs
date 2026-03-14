@@ -479,6 +479,15 @@ impl RoomManager {
             .await
     }
 
+    /// Lower all raised hands (admin action).
+    pub async fn lower_all_hands(&self) -> Result<(), VisioError> {
+        let hm = self.hand_raise.lock().await;
+        hm.as_ref()
+            .ok_or(VisioError::Room("not connected".into()))?
+            .lower_all_hands()
+            .await
+    }
+
     /// Allowed emoji IDs for reactions (matches Meet web client).
     const ALLOWED_EMOJIS: &'static [&'static str] = &[
         "thumbsUp", "clap", "joy", "openMouth", "tada", "heart",
@@ -1513,6 +1522,20 @@ impl RoomManager {
                                     .unwrap_or("Unknown")
                                     .to_string();
                                 emitter.emit(VisioEvent::LobbyParticipantJoined { id, username });
+                            }
+                        }
+                        continue;
+                    }
+
+                    // Handle admin "lower all hands" command
+                    if let Ok(text) = std::str::from_utf8(&payload)
+                        && let Ok(json) = serde_json::from_str::<serde_json::Value>(text)
+                        && json["type"].as_str() == Some("lowerAllHands")
+                    {
+                        tracing::info!("received lowerAllHands from {psid}");
+                        if let Some(hm) = hand_raise.lock().await.as_ref() {
+                            if hm.is_hand_raised().await {
+                                let _ = hm.lower_hand().await;
                             }
                         }
                         continue;

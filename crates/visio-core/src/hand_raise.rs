@@ -233,6 +233,55 @@ impl HandRaiseManager {
         });
     }
 
+    /// Lower all raised hands (admin action).
+    /// Sends empty `handRaisedAt` attribute update for all participants with raised hands.
+    pub async fn lower_all_hands(&self) -> Result<(), VisioError> {
+        let hands = self.raised_hands.lock().await;
+        let raised_sids: Vec<String> = hands.values().cloned().collect();
+        drop(hands);
+
+        if raised_sids.is_empty() {
+            return Ok(());
+        }
+
+        // Lower our own hand if raised
+        let local_sid = self.room.local_participant().sid().to_string();
+        if raised_sids.contains(&local_sid) {
+            self.lower_hand().await?;
+        }
+
+        // Send a data message telling other clients to lower hands
+        // Meet protocol: { "type": "lowerAllHands" }
+        let payload = serde_json::json!({ "type": "lowerAllHands" });
+        let data = payload.to_string().into_bytes();
+        self.room
+            .local_participant()
+            .publish_data(livekit::DataPacket {
+                payload: data,
+                reliable: true,
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| VisioError::Room(format!("lower all hands: {e}")))?;
+
+        // Clear local state
+        let mut hands = self.raised_hands.lock().await;
+        hands.clear();
+        drop(hands);
+
+        // Emit events for all lowered hands
+        for sid in raised_sids {
+            self.emitter.emit(VisioEvent::HandRaisedChanged {
+                participant_sid: sid,
+                raised: false,
+                position: 0,
+            });
+        }
+
+        tracing::info!("all hands lowered (admin action)");
+        Ok(())
+    }
+
     /// Clear all hand-raise state (on disconnect).
     pub async fn clear(&self) {
         self.raised_hands.lock().await.clear();

@@ -516,7 +516,7 @@ function HomeView({
         <RiSettings3Line size={24} />
       </button>
       <div className="join-form">
-        <img src="/logo.png" alt="Visio Mobile" className="home-logo" />
+        <img src="/logo.png?v=2" alt="Visio Mobile" className="home-logo" />
         <h2>{t("app.title")}</h2>
         <p>{t("home.subtitle")}</p>
         {isAuthenticated ? (
@@ -2627,6 +2627,38 @@ export default function App() {
       setMicEnabled(!next);
     }
   };
+
+  // Push-to-talk: hold Space to temporarily unmute
+  const pushToTalkRef = useRef(false);
+  useEffect(() => {
+    if (view !== "call") return;
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      // Don't activate if typing in an input
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      if (!micEnabled && !pushToTalkRef.current) {
+        pushToTalkRef.current = true;
+        setMicEnabled(true);
+        try { await invoke("toggle_mic", { enabled: true }); } catch {}
+      }
+    };
+    const handleKeyUp = async (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      if (pushToTalkRef.current) {
+        pushToTalkRef.current = false;
+        setMicEnabled(false);
+        try { await invoke("toggle_mic", { enabled: false }); } catch {}
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [view, micEnabled]);
 
   const handleToggleCam = async () => {
     const next = !camEnabled;

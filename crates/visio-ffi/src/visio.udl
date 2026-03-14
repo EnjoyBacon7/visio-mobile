@@ -244,6 +244,9 @@ interface VisioClient {
     [Throws=VisioError]
     void lower_hand();
 
+    [Throws=VisioError]
+    void lower_all_hands();
+
     boolean is_hand_raised();
 
     [Throws=VisioError]
