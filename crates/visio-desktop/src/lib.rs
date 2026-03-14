@@ -909,6 +909,12 @@ async fn select_audio_input(
     engine.stop_playout();
     let new_engine = audio_engine::create_audio_engine(Some(&device_name), output_device.as_deref());
     *engine = new_engine;
+    engine.set_device_change_callback(Arc::new(|| {
+        tracing::info!("audio devices changed — re-enumerating");
+        if let Some(app) = APP_HANDLE.get() {
+            let _ = app.emit("audio-devices-changed", ());
+        }
+    }));
     engine.start_playout(state.playout_buffer.clone())?;
     if let Some(source) = audio_source {
         let nr = state.settings.is_noise_reduction_enabled();
@@ -933,6 +939,12 @@ async fn select_audio_output(
     engine.stop_playout();
     let new_engine = audio_engine::create_audio_engine(input_device.as_deref(), Some(&device_name));
     *engine = new_engine;
+    engine.set_device_change_callback(Arc::new(|| {
+        tracing::info!("audio devices changed — re-enumerating");
+        if let Some(app) = APP_HANDLE.get() {
+            let _ = app.emit("audio-devices-changed", ());
+        }
+    }));
     engine.start_playout(state.playout_buffer.clone())?;
     if let Some(source) = audio_source {
         let nr = state.settings.is_noise_reduction_enabled();
@@ -1319,6 +1331,15 @@ pub fn run() {
     audio_engine_instance
         .start_playout(playout_buffer.clone())
         .expect("failed to start audio playout");
+
+    // Register device-change listener so the frontend can re-enumerate devices
+    // when headphones are plugged/unplugged.
+    audio_engine_instance.set_device_change_callback(Arc::new(move || {
+        tracing::info!("audio devices changed — re-enumerating");
+        if let Some(app) = APP_HANDLE.get() {
+            let _ = app.emit("audio-devices-changed", ());
+        }
+    }));
 
     let room_arc = Arc::new(Mutex::new(room_manager));
 

@@ -19,12 +19,17 @@ pub use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer, CapturedFrame};
 pub const LK_SAMPLE_RATE: u32 = 48_000;
 pub const LK_CHANNELS: u32 = 1;
 
+/// Callback invoked when audio devices change (plug/unplug).
+pub type DeviceChangeCallback = Arc<dyn Fn() + Send + Sync>;
+
 /// Unified audio engine handling both playout and capture with AEC.
 pub trait VoiceAudioEngine: Send + Sync {
     fn start_playout(&mut self, buffer: Arc<AudioPlayoutBuffer>) -> Result<(), String>;
     fn start_capture(&mut self, source: NativeAudioSource, noise_reduction: bool) -> Result<(), String>;
     fn stop_capture(&mut self);
     fn stop_playout(&mut self);
+    /// Register a callback for device add/remove events.
+    fn set_device_change_callback(&mut self, callback: DeviceChangeCallback);
 }
 
 /// Create the platform-appropriate audio engine.

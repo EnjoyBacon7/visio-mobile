@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use livekit::webrtc::audio_source::native::NativeAudioSource;
 use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer, CapturedFrame};
 
-use super::audio_engine::{self, LK_CHANNELS, LK_SAMPLE_RATE, VoiceAudioEngine};
+use super::audio_engine::{self, DeviceChangeCallback, LK_CHANNELS, LK_SAMPLE_RATE, VoiceAudioEngine};
 
 // ---------------------------------------------------------------------------
 // AudioToolbox FFI
@@ -92,6 +92,18 @@ struct AudioBuffer {
     data: *mut c_void,
 }
 
+#[repr(C)]
+struct AudioObjectPropertyAddress {
+    selector: u32,
+    scope: u32,
+    element: u32,
+}
+
+const K_AUDIO_HARDWARE_PROPERTY_DEVICES: u32 = 0x64657623; // 'dev#'
+const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0x676C6F62; // 'glob'
+const K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0x6D61696E; // 'main'
+const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
+
 #[link(name = "AudioToolbox", kind = "framework")]
 unsafe extern "C" {
     fn AudioComponentFindNext(
@@ -127,6 +139,20 @@ unsafe extern "C" {
         bus: u32,
         frames: u32,
         buf_list: *mut AudioBufferList,
+    ) -> OSStatus;
+
+    fn AudioObjectAddPropertyListener(
+        object_id: u32,
+        address: *const AudioObjectPropertyAddress,
+        listener: unsafe extern "C" fn(u32, u32, *const AudioObjectPropertyAddress, *mut c_void) -> OSStatus,
+        client_data: *mut c_void,
+    ) -> OSStatus;
+
+    fn AudioObjectRemovePropertyListener(
+        object_id: u32,
+        address: *const AudioObjectPropertyAddress,
+        listener: unsafe extern "C" fn(u32, u32, *const AudioObjectPropertyAddress, *mut c_void) -> OSStatus,
+        client_data: *mut c_void,
     ) -> OSStatus;
 }
 
@@ -228,6 +254,20 @@ struct InputCallbackWrapper {
     state: Arc<CallbackState>,
 }
 
+/// Raw C callback for device changes — invokes the Rust closure via raw pointer.
+unsafe extern "C" fn device_change_listener(
+    _object_id: u32,
+    _number_addresses: u32,
+    _addresses: *const AudioObjectPropertyAddress,
+    client_data: *mut c_void,
+) -> OSStatus {
+    if !client_data.is_null() {
+        let callback = unsafe { &*(client_data as *const DeviceChangeCallback) };
+        callback();
+    }
+    0 // noErr
+}
+
 // ---------------------------------------------------------------------------
 // MacAudioEngine
 // ---------------------------------------------------------------------------
@@ -240,6 +280,7 @@ pub struct MacAudioEngine {
     drain_running: Option<Arc<AtomicBool>>,
     _input_device: Option<String>,
     _output_device: Option<String>,
+    device_change_cb: Option<Box<DeviceChangeCallback>>,
 }
 
 // AudioUnit is a raw pointer managed by AudioToolbox — safe to send across threads
@@ -255,6 +296,7 @@ impl MacAudioEngine {
             drain_running: None,
             _input_device: input_device.map(String::from),
             _output_device: output_device.map(String::from),
+            device_change_cb: None,
         }
     }
 
@@ -338,6 +380,26 @@ impl MacAudioEngine {
 
             Ok(unit)
         }
+    }
+
+    fn remove_device_listener(&mut self) {
+        if let Some(ref cb) = self.device_change_cb {
+            let address = AudioObjectPropertyAddress {
+                selector: K_AUDIO_HARDWARE_PROPERTY_DEVICES,
+                scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+                element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+            };
+            let ptr = &**cb as *const DeviceChangeCallback as *mut c_void;
+            unsafe {
+                AudioObjectRemovePropertyListener(
+                    K_AUDIO_OBJECT_SYSTEM_OBJECT,
+                    &address,
+                    device_change_listener,
+                    ptr,
+                );
+            }
+        }
+        self.device_change_cb = None;
     }
 }
 
@@ -450,10 +512,38 @@ impl VoiceAudioEngine for MacAudioEngine {
         self.callback_state = None;
         tracing::info!("macOS VoiceProcessingIO stopped");
     }
+
+    fn set_device_change_callback(&mut self, callback: DeviceChangeCallback) {
+        self.remove_device_listener();
+
+        let boxed = Box::new(callback);
+        let address = AudioObjectPropertyAddress {
+            selector: K_AUDIO_HARDWARE_PROPERTY_DEVICES,
+            scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+        };
+        let ptr = &*boxed as *const DeviceChangeCallback as *mut c_void;
+        let status = unsafe {
+            AudioObjectAddPropertyListener(
+                K_AUDIO_OBJECT_SYSTEM_OBJECT,
+                &address,
+                device_change_listener,
+                ptr,
+            )
+        };
+        if status != 0 {
+            tracing::warn!("failed to register device change listener: {status}");
+        } else {
+            tracing::info!("registered macOS audio device change listener");
+        }
+        self.device_change_cb = Some(boxed);
+    }
 }
 
 impl Drop for MacAudioEngine {
     fn drop(&mut self) {
+        self.stop_capture();
         self.stop_playout();
+        self.remove_device_listener();
     }
 }
