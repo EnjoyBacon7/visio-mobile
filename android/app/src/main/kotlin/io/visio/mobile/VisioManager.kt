@@ -136,7 +136,10 @@ object VisioManager : VisioEventListener {
     var pendingDeepLink: String? by mutableStateOf(null)
 
     // Test deep link: connect directly with LiveKit URL + token (debug builds only)
-    var pendingTestConnect: Pair<String, String>? = null  // (livekitUrl, token)
+    var pendingTestConnect: Triple<String, String, String?>? = null  // (livekitUrl, token, mediaFile?)
+
+    // Media file capture for E2E testing (replaces synthetic audio/camera)
+    private var mediaFileCapture: MediaFileCapture? = null
 
     // Observable state for language, theme, display name
     var currentLang by mutableStateOf("fr")
@@ -341,6 +344,29 @@ object VisioManager : VisioEventListener {
     fun startSyntheticAudioCapture() {
         if (audioCapture != null) return
         audioCapture = AudioCapture().also { it.startSynthetic() }
+    }
+
+    /**
+     * Start media file capture (audio + video from MP4) for E2E testing.
+     * Replaces both synthetic audio and camera capture with decoded file content.
+     */
+    fun startMediaFileCapture(filePath: String) {
+        if (mediaFileCapture != null) return
+        mediaFileCapture = MediaFileCapture(filePath).also {
+            it.startAudio()
+            it.startVideo()
+        }
+    }
+
+    /**
+     * Stop media file capture.
+     */
+    fun stopMediaFileCapture() {
+        mediaFileCapture?.let {
+            it.stopAudio()
+            it.stopVideo()
+        }
+        mediaFileCapture = null
     }
 
     /**
@@ -912,6 +938,31 @@ object VisioManager : VisioEventListener {
             }
             is VisioEvent.BandwidthModeChanged -> {
                 Log.d("VISIO", "Bandwidth mode changed: ${event.mode}")
+            }
+            is VisioEvent.AloneInRoom -> {
+                Log.d("VISIO", "Alone in room")
+            }
+            is VisioEvent.AloneInRoomCancelled -> {
+                Log.d("VISIO", "No longer alone in room")
+            }
+            is VisioEvent.DisconnectedByAdmin -> {
+                Log.i("VISIO", "Disconnected by admin")
+            }
+            is VisioEvent.DisconnectedDuplicateIdentity -> {
+                Log.i("VISIO", "Disconnected: duplicate identity")
+            }
+            is VisioEvent.LobbyTimeout -> {
+                Log.d("VISIO", "Lobby timeout")
+            }
+            is VisioEvent.MuteRequested -> {
+                Log.d("VISIO", "Mute requested")
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        client.setMicrophoneEnabled(false)
+                    } catch (e: Exception) {
+                        Log.e("VISIO", "Failed to handle mute request", e)
+                    }
+                }
             }
             is VisioEvent.AdaptiveModeChanged -> {
                 val previousMode = _adaptiveMode.value

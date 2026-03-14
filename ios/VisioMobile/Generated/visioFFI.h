@@ -431,9 +431,19 @@ void uniffi_visio_ffi_fn_method_visioclient_load_blur_model(void*_Nonnull ptr, R
 void uniffi_visio_ffi_fn_method_visioclient_logout(void*_Nonnull ptr, RustBuffer meet_url, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LOWER_ALL_HANDS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LOWER_ALL_HANDS
+void uniffi_visio_ffi_fn_method_visioclient_lower_all_hands(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LOWER_HAND
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_LOWER_HAND
 void uniffi_visio_ffi_fn_method_visioclient_lower_hand(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_MUTE_EVERYONE
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_MUTE_EVERYONE
+void uniffi_visio_ffi_fn_method_visioclient_mute_everyone(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_FN_METHOD_VISIOCLIENT_PARTICIPANTS
@@ -1063,9 +1073,21 @@ uint16_t uniffi_visio_ffi_checksum_method_visioclient_logout(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LOWER_ALL_HANDS
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LOWER_ALL_HANDS
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_lower_all_hands(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LOWER_HAND
 #define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_LOWER_HAND
 uint16_t uniffi_visio_ffi_checksum_method_visioclient_lower_hand(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_MUTE_EVERYONE
+#define UNIFFI_FFIDEF_UNIFFI_VISIO_FFI_CHECKSUM_METHOD_VISIOCLIENT_MUTE_EVERYONE
+uint16_t uniffi_visio_ffi_checksum_method_visioclient_mute_everyone(void
     
 );
 #endif

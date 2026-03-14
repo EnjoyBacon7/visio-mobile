@@ -24,9 +24,10 @@ struct VisioMobileApp: App {
                     let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
                     let livekitUrl = components?.queryItems?.first(where: { $0.name == "livekit_url" })?.value
                     let token = components?.queryItems?.first(where: { $0.name == "token" })?.value
+                    let mediaFile = components?.queryItems?.first(where: { $0.name == "media_file" })?.value
                     if let livekitUrl, let token {
-                        NSLog("VisioMobileApp: test deep link → \(livekitUrl)")
-                        manager.pendingTestConnect = (livekitUrl, token)
+                        NSLog("VisioMobileApp: test deep link → \(livekitUrl), media=\(mediaFile ?? "none")")
+                        manager.pendingTestConnect = (livekitUrl, token, mediaFile)
                     }
                     return
                 }

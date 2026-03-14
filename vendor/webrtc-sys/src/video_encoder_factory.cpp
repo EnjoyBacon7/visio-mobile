@@ -94,6 +94,10 @@ VideoEncoderFactory::InternalFactory::GetSupportedFormats() const {
     formats.insert(formats.end(), supported_formats.begin(),
                    supported_formats.end());
   }
+  RTC_LOG(LS_INFO) << "VISIO VideoEncoderFactory: " << formats.size() << " formats supported:";
+  for (const auto& fmt : formats) {
+    RTC_LOG(LS_INFO) << "  VISIO encoder: " << fmt.name;
+  }
   return formats;
 }
 

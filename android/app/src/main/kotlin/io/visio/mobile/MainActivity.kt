@@ -51,13 +51,14 @@ class MainActivity : ComponentActivity() {
 
         val livekitUrl = uri.getQueryParameter("livekit_url")
         val token = uri.getQueryParameter("token")
+        val mediaFile = uri.getQueryParameter("media_file")
         if (livekitUrl.isNullOrBlank() || token.isNullOrBlank()) {
             Log.w(TAG, "visio-test://connect missing livekit_url or token parameters")
             return false
         }
 
-        Log.i(TAG, "Test deep link: connecting to $livekitUrl")
-        VisioManager.pendingTestConnect = Pair(livekitUrl, token)
+        Log.i(TAG, "Test deep link: connecting to $livekitUrl, media_file=$mediaFile")
+        VisioManager.pendingTestConnect = Triple(livekitUrl, token, mediaFile)
         return true
     }
 

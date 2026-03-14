@@ -332,8 +332,8 @@ fun CallScreen(
             val testConnect = VisioManager.pendingTestConnect
             if (testConnect != null) {
                 VisioManager.pendingTestConnect = null
-                val (livekitUrl, token) = testConnect
-                Log.i(TAG, "Test deep link: connecting directly to $livekitUrl")
+                val (livekitUrl, token, mediaFile) = testConnect
+                Log.i(TAG, "Test deep link: connecting directly to $livekitUrl, media=$mediaFile")
                 try {
                     VisioManager.client.connectWithToken(livekitUrl, token)
                 } catch (e: Exception) {
@@ -358,6 +358,8 @@ fun CallScreen(
                 micEnabled = settings?.micEnabledOnJoin ?: true
                 cameraEnabled = settings?.cameraEnabledOnJoin ?: false
 
+                val hasMediaFile = !mediaFile.isNullOrBlank() && java.io.File(mediaFile).exists()
+
                 // Auto-chat messages for E2E test (turn-based)
                 coroutineScope.launch(Dispatchers.IO) {
                     delay(3000)
@@ -372,28 +374,47 @@ fun CallScreen(
                     try { VisioManager.client.sendChatMessage("Android: everyone speaking together!") } catch (_: Exception) {}
                 }
 
+                // Helper: start media capture from file or synthetic fallback
+                fun startMediaCapture() {
+                    if (hasMediaFile) {
+                        VisioManager.startMediaFileCapture(mediaFile!!)
+                    } else {
+                        VisioManager.startSyntheticAudioCapture()
+                        VisioManager.startCameraCapture()
+                    }
+                }
+
+                fun stopMediaCapture() {
+                    if (hasMediaFile) {
+                        VisioManager.stopMediaFileCapture()
+                    } else {
+                        VisioManager.stopAudioCapture()
+                        VisioManager.stopCameraCapture()
+                    }
+                }
+
                 // Turn-based speaking: Android speaks at 50-75s, muted otherwise (except warmup 0-5s and final 100-120s)
                 coroutineScope.launch(Dispatchers.IO) {
                     // 5s: mute mic+cam (bot's turn)
                     delay(5000)
                     Log.i(TAG, "[TURN] Android muted (bot's turn)")
-                    try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
-                    try { VisioManager.stopCameraCapture(); VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
+                    try { stopMediaCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
+                    try { VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
                     // 50s: unmute — Android's turn to speak
                     delay(45000)
                     Log.i(TAG, "[TURN] Android speaking")
-                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startSyntheticAudioCapture() } catch (_: Exception) {}
-                    try { VisioManager.client.setCameraEnabled(true); VisioManager.startCameraCapture() } catch (_: Exception) {}
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.client.setCameraEnabled(true) } catch (_: Exception) {}
+                    try { startMediaCapture() } catch (_: Exception) {}
                     // 75s: mute — iOS's turn
                     delay(25000)
                     Log.i(TAG, "[TURN] Android muted (iOS's turn)")
-                    try { VisioManager.stopAudioCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
-                    try { VisioManager.stopCameraCapture(); VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
+                    try { stopMediaCapture(); VisioManager.client.setMicrophoneEnabled(false) } catch (_: Exception) {}
+                    try { VisioManager.client.setCameraEnabled(false) } catch (_: Exception) {}
                     // 100s: unmute — everyone speaks
                     delay(25000)
                     Log.i(TAG, "[TURN] Android unmuted (all speak)")
-                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.startSyntheticAudioCapture() } catch (_: Exception) {}
-                    try { VisioManager.client.setCameraEnabled(true); VisioManager.startCameraCapture() } catch (_: Exception) {}
+                    try { VisioManager.client.setMicrophoneEnabled(true); VisioManager.client.setCameraEnabled(true) } catch (_: Exception) {}
+                    try { startMediaCapture() } catch (_: Exception) {}
                 }
 
                 return@withContext

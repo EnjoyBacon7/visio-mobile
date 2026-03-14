@@ -581,7 +581,11 @@ public protocol VisioClientProtocol: AnyObject, Sendable {
     
     func logout(meetUrl: String) throws 
     
+    func lowerAllHands() throws 
+    
     func lowerHand() throws 
+    
+    func muteEveryone() throws 
     
     func participants()  -> [ParticipantInfo]
     
@@ -921,8 +925,20 @@ open func logout(meetUrl: String)throws   {try rustCallWithError(FfiConverterTyp
 }
 }
     
+open func lowerAllHands()throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_lower_all_hands(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
 open func lowerHand()throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
     uniffi_visio_ffi_fn_method_visioclient_lower_hand(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+open func muteEveryone()throws   {try rustCallWithError(FfiConverterTypeVisioError_lift) {
+    uniffi_visio_ffi_fn_method_visioclient_mute_everyone(self.uniffiClonePointer(),$0
     )
 }
 }
@@ -1402,10 +1418,12 @@ public struct ParticipantInfo {
     public var hasScreenShare: Bool
     public var screenShareTrackSid: String?
     public var connectionQuality: ConnectionQuality
+    public var color: String?
+    public var isAdmin: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sid: String, identity: String, name: String?, isMuted: Bool, hasVideo: Bool, videoTrackSid: String?, hasScreenShare: Bool, screenShareTrackSid: String?, connectionQuality: ConnectionQuality) {
+    public init(sid: String, identity: String, name: String?, isMuted: Bool, hasVideo: Bool, videoTrackSid: String?, hasScreenShare: Bool, screenShareTrackSid: String?, connectionQuality: ConnectionQuality, color: String?, isAdmin: Bool) {
         self.sid = sid
         self.identity = identity
         self.name = name
@@ -1415,6 +1433,8 @@ public struct ParticipantInfo {
         self.hasScreenShare = hasScreenShare
         self.screenShareTrackSid = screenShareTrackSid
         self.connectionQuality = connectionQuality
+        self.color = color
+        self.isAdmin = isAdmin
     }
 }
 
@@ -1452,6 +1472,12 @@ extension ParticipantInfo: Equatable, Hashable {
         if lhs.connectionQuality != rhs.connectionQuality {
             return false
         }
+        if lhs.color != rhs.color {
+            return false
+        }
+        if lhs.isAdmin != rhs.isAdmin {
+            return false
+        }
         return true
     }
 
@@ -1465,6 +1491,8 @@ extension ParticipantInfo: Equatable, Hashable {
         hasher.combine(hasScreenShare)
         hasher.combine(screenShareTrackSid)
         hasher.combine(connectionQuality)
+        hasher.combine(color)
+        hasher.combine(isAdmin)
     }
 }
 
@@ -1485,7 +1513,9 @@ public struct FfiConverterTypeParticipantInfo: FfiConverterRustBuffer {
                 videoTrackSid: FfiConverterOptionString.read(from: &buf), 
                 hasScreenShare: FfiConverterBool.read(from: &buf), 
                 screenShareTrackSid: FfiConverterOptionString.read(from: &buf), 
-                connectionQuality: FfiConverterTypeConnectionQuality.read(from: &buf)
+                connectionQuality: FfiConverterTypeConnectionQuality.read(from: &buf), 
+                color: FfiConverterOptionString.read(from: &buf), 
+                isAdmin: FfiConverterBool.read(from: &buf)
         )
     }
 
@@ -1499,6 +1529,8 @@ public struct FfiConverterTypeParticipantInfo: FfiConverterRustBuffer {
         FfiConverterBool.write(value.hasScreenShare, into: &buf)
         FfiConverterOptionString.write(value.screenShareTrackSid, into: &buf)
         FfiConverterTypeConnectionQuality.write(value.connectionQuality, into: &buf)
+        FfiConverterOptionString.write(value.color, into: &buf)
+        FfiConverterBool.write(value.isAdmin, into: &buf)
     }
 }
 
@@ -2881,6 +2913,7 @@ public enum VisioEvent {
     case lobbyParticipantLeft(id: String
     )
     case lobbyDenied
+    case lobbyTimeout
     case reactionReceived(participantSid: String, participantName: String, emoji: String
     )
     case adaptiveModeChanged(mode: AdaptiveMode
@@ -2888,6 +2921,12 @@ public enum VisioEvent {
     case bandwidthModeChanged(mode: BandwidthMode
     )
     case connectionLost
+    case disconnectedDuplicateIdentity
+    case disconnectedByAdmin
+    case aloneInRoom(remainingSecs: UInt32
+    )
+    case aloneInRoomCancelled
+    case muteRequested
 }
 
 
@@ -2949,16 +2988,29 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
         
         case 15: return .lobbyDenied
         
-        case 16: return .reactionReceived(participantSid: try FfiConverterString.read(from: &buf), participantName: try FfiConverterString.read(from: &buf), emoji: try FfiConverterString.read(from: &buf)
+        case 16: return .lobbyTimeout
+        
+        case 17: return .reactionReceived(participantSid: try FfiConverterString.read(from: &buf), participantName: try FfiConverterString.read(from: &buf), emoji: try FfiConverterString.read(from: &buf)
         )
         
-        case 17: return .adaptiveModeChanged(mode: try FfiConverterTypeAdaptiveMode.read(from: &buf)
+        case 18: return .adaptiveModeChanged(mode: try FfiConverterTypeAdaptiveMode.read(from: &buf)
         )
         
-        case 18: return .bandwidthModeChanged(mode: try FfiConverterTypeBandwidthMode.read(from: &buf)
+        case 19: return .bandwidthModeChanged(mode: try FfiConverterTypeBandwidthMode.read(from: &buf)
         )
         
-        case 19: return .connectionLost
+        case 20: return .connectionLost
+        
+        case 21: return .disconnectedDuplicateIdentity
+        
+        case 22: return .disconnectedByAdmin
+        
+        case 23: return .aloneInRoom(remainingSecs: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        case 24: return .aloneInRoomCancelled
+        
+        case 25: return .muteRequested
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3048,25 +3100,50 @@ public struct FfiConverterTypeVisioEvent: FfiConverterRustBuffer {
             writeInt(&buf, Int32(15))
         
         
-        case let .reactionReceived(participantSid,participantName,emoji):
+        case .lobbyTimeout:
             writeInt(&buf, Int32(16))
+        
+        
+        case let .reactionReceived(participantSid,participantName,emoji):
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(participantSid, into: &buf)
             FfiConverterString.write(participantName, into: &buf)
             FfiConverterString.write(emoji, into: &buf)
             
         
         case let .adaptiveModeChanged(mode):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeAdaptiveMode.write(mode, into: &buf)
             
         
         case let .bandwidthModeChanged(mode):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeBandwidthMode.write(mode, into: &buf)
             
         
         case .connectionLost:
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(20))
+        
+        
+        case .disconnectedDuplicateIdentity:
+            writeInt(&buf, Int32(21))
+        
+        
+        case .disconnectedByAdmin:
+            writeInt(&buf, Int32(22))
+        
+        
+        case let .aloneInRoom(remainingSecs):
+            writeInt(&buf, Int32(23))
+            FfiConverterUInt32.write(remainingSecs, into: &buf)
+            
+        
+        case .aloneInRoomCancelled:
+            writeInt(&buf, Int32(24))
+        
+        
+        case .muteRequested:
+            writeInt(&buf, Int32(25))
         
         }
     }
@@ -3522,7 +3599,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_visio_ffi_checksum_method_visioclient_logout() != 27303) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_visio_ffi_checksum_method_visioclient_lower_all_hands() != 47361) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_visio_ffi_checksum_method_visioclient_lower_hand() != 53728) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_visio_ffi_checksum_method_visioclient_mute_everyone() != 46169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_visio_ffi_checksum_method_visioclient_participants() != 38029) {

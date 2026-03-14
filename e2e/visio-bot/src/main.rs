@@ -25,6 +25,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use livekit::webrtc::prelude::*;
+use livekit::webrtc::stats::RtcStats;
 use livekit::webrtc::video_source::native::NativeVideoSource;
 use visio_core::{ConnectionState, RoomManager, TrackKind, VisioEvent, VisioEventListener};
 
@@ -112,6 +113,18 @@ struct Args {
     /// Print the generated token and exit (don't connect).
     #[arg(long, default_value_t = false)]
     token_only: bool,
+
+    /// Send "mute everyone" admin action after the bot's speaking turn.
+    #[arg(long, default_value_t = false)]
+    mute_everyone: bool,
+
+    /// Send "lower all hands" admin action after the bot's speaking turn.
+    #[arg(long, default_value_t = false)]
+    lower_all_hands: bool,
+
+    /// Delay (seconds) before sending admin actions (after join).
+    #[arg(long, default_value_t = 20)]
+    admin_action_delay: u64,
 }
 
 /// Tracks received audio frame statistics for quality monitoring.
@@ -224,6 +237,87 @@ impl VideoStats {
 type ParticipantAudioStats = std::sync::Mutex<std::collections::HashMap<String, Arc<AudioStats>>>;
 type ParticipantVideoStats = std::sync::Mutex<std::collections::HashMap<String, Arc<VideoStats>>>;
 
+/// Snapshot of WebRTC-level quality metrics from `track.get_stats()`.
+#[derive(Debug, Default, Clone)]
+struct WebRtcQualitySnapshot {
+    codec_mime: String,
+    bytes_received: u64,
+    packets_received: u64,
+    packets_lost: i64,
+    jitter: f64,
+    // Video-specific
+    frames_decoded: u32,
+    frames_dropped: u32,
+    frames_per_second: f64,
+    freeze_count: u32,
+    total_freeze_duration_s: f64,
+    frame_width: u32,
+    frame_height: u32,
+    // Audio-specific
+    concealed_samples: u64,
+    total_samples_received: u64,
+    audio_level: f64,
+}
+
+/// Accumulated per-participant WebRTC stats.
+struct WebRtcParticipantStats {
+    audio: std::sync::Mutex<Option<WebRtcQualitySnapshot>>,
+    video: std::sync::Mutex<Option<WebRtcQualitySnapshot>>,
+}
+
+impl WebRtcParticipantStats {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            audio: std::sync::Mutex::new(None),
+            video: std::sync::Mutex::new(None),
+        })
+    }
+}
+
+type WebRtcStatsMap = std::sync::Mutex<std::collections::HashMap<String, Arc<WebRtcParticipantStats>>>;
+
+/// Extract quality info from a Vec<RtcStats> returned by track.get_stats().
+fn extract_inbound_stats(stats: &[RtcStats], kind: &str) -> Option<WebRtcQualitySnapshot> {
+    // First, collect codec info (mime_type keyed by codec_id)
+    let mut codec_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for s in stats {
+        if let RtcStats::Codec(c) = s {
+            codec_map.insert(c.rtc.id.clone(), c.codec.mime_type.clone());
+        }
+    }
+
+    // Find the InboundRtp stat matching our kind
+    for s in stats {
+        if let RtcStats::InboundRtp(inbound) = s {
+            if inbound.stream.kind != kind {
+                continue;
+            }
+            let codec_mime = codec_map.get(&inbound.stream.codec_id)
+                .cloned()
+                .unwrap_or_else(|| format!("unknown({})", inbound.stream.codec_id));
+
+            return Some(WebRtcQualitySnapshot {
+                codec_mime,
+                bytes_received: inbound.inbound.bytes_received,
+                packets_received: inbound.received.packets_received,
+                packets_lost: inbound.received.packets_lost,
+                jitter: inbound.received.jitter,
+                frames_decoded: inbound.inbound.frames_decoded,
+                frames_dropped: inbound.inbound.frames_dropped,
+                frames_per_second: inbound.inbound.frames_per_second,
+                freeze_count: inbound.inbound.freeze_count,
+                total_freeze_duration_s: inbound.inbound.total_freeze_duration,
+                frame_width: inbound.inbound.frame_width,
+                frame_height: inbound.inbound.frame_height,
+                concealed_samples: inbound.inbound.concealed_samples,
+                total_samples_received: inbound.inbound.total_samples_received,
+                audio_level: inbound.inbound.audio_level,
+            });
+        }
+    }
+    None
+}
+
 /// Event logger that prints all received events and tracks subscription stats.
 struct BotEventLogger {
     tracks_subscribed: AtomicU64,
@@ -238,6 +332,8 @@ struct BotEventLogger {
     per_participant_audio: ParticipantAudioStats,
     /// Per-participant video stats
     per_participant_video: ParticipantVideoStats,
+    /// Per-participant WebRTC quality stats (from track.get_stats())
+    webrtc_stats: WebRtcStatsMap,
 }
 
 impl BotEventLogger {
@@ -251,6 +347,7 @@ impl BotEventLogger {
             participant_identities: std::sync::Mutex::new(std::collections::HashMap::new()),
             per_participant_audio: std::sync::Mutex::new(std::collections::HashMap::new()),
             per_participant_video: std::sync::Mutex::new(std::collections::HashMap::new()),
+            webrtc_stats: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -265,6 +362,13 @@ impl BotEventLogger {
         let mut map = self.per_participant_video.lock().unwrap();
         map.entry(identity.to_string())
             .or_insert_with(VideoStats::new)
+            .clone()
+    }
+
+    fn get_or_create_webrtc_stats(&self, identity: &str) -> Arc<WebRtcParticipantStats> {
+        let mut map = self.webrtc_stats.lock().unwrap();
+        map.entry(identity.to_string())
+            .or_insert_with(WebRtcParticipantStats::new)
             .clone()
     }
 
@@ -347,6 +451,36 @@ impl VisioEventListener for BotEventLogger {
             }
             VisioEvent::BandwidthModeChanged { mode } => {
                 tracing::info!("[EVENT] BandwidthModeChanged: {mode:?}");
+            }
+            VisioEvent::DisconnectedDuplicateIdentity => {
+                tracing::warn!("[EVENT] DisconnectedDuplicateIdentity");
+            }
+            VisioEvent::DisconnectedByAdmin => {
+                tracing::warn!("[EVENT] DisconnectedByAdmin");
+            }
+            VisioEvent::ConnectionLost => {
+                tracing::warn!("[EVENT] ConnectionLost");
+            }
+            VisioEvent::AloneInRoom { remaining_secs } => {
+                tracing::info!("[EVENT] AloneInRoom: {remaining_secs}s remaining");
+            }
+            VisioEvent::AloneInRoomCancelled => {
+                tracing::info!("[EVENT] AloneInRoomCancelled");
+            }
+            VisioEvent::MuteRequested => {
+                tracing::info!("[EVENT] MuteRequested (admin mute-all received)");
+            }
+            VisioEvent::LobbyParticipantJoined { id, username } => {
+                tracing::info!("[EVENT] LobbyParticipantJoined: {username} ({id})");
+            }
+            VisioEvent::LobbyParticipantLeft { id } => {
+                tracing::info!("[EVENT] LobbyParticipantLeft: {id}");
+            }
+            VisioEvent::LobbyDenied => {
+                tracing::warn!("[EVENT] LobbyDenied");
+            }
+            VisioEvent::LobbyTimeout => {
+                tracing::warn!("[EVENT] LobbyTimeout");
             }
             _ => {
                 tracing::debug!("[EVENT] {event:?}");
@@ -854,6 +988,59 @@ async fn main() {
                 }
             }
         });
+
+        // Periodic WebRTC stats polling: query get_stats() on each subscribed track
+        tokio::spawn({
+            let event_logger = event_logger.clone();
+            let rm = rm.clone();
+            async move {
+                // Wait for tracks to be subscribed first
+                tokio::time::sleep(Duration::from_secs(8)).await;
+                loop {
+                    // Poll audio tracks
+                    let audio_entries = event_logger.audio_track_sids.lock().unwrap().clone();
+                    for (sid, identity) in &audio_entries {
+                        if let Some(track) = rm.get_audio_track(sid).await {
+                            if let Ok(stats) = track.get_stats().await {
+                                if let Some(snapshot) = extract_inbound_stats(&stats, "audio") {
+                                    tracing::info!(
+                                        "[WEBRTC AUDIO] {identity}: codec={}, bytes={}, pkts={}, lost={}, jitter={:.3}ms, concealed={}/{}",
+                                        snapshot.codec_mime, snapshot.bytes_received,
+                                        snapshot.packets_received, snapshot.packets_lost,
+                                        snapshot.jitter * 1000.0,
+                                        snapshot.concealed_samples, snapshot.total_samples_received
+                                    );
+                                    let ws = event_logger.get_or_create_webrtc_stats(identity);
+                                    *ws.audio.lock().unwrap() = Some(snapshot);
+                                }
+                            }
+                        }
+                    }
+                    // Poll video tracks
+                    let video_entries = event_logger.video_track_sids.lock().unwrap().clone();
+                    for (sid, identity) in &video_entries {
+                        if let Some(track) = rm.get_video_track(sid).await {
+                            if let Ok(stats) = track.get_stats().await {
+                                if let Some(snapshot) = extract_inbound_stats(&stats, "video") {
+                                    tracing::info!(
+                                        "[WEBRTC VIDEO] {identity}: codec={}, {}x{}, {:.1}fps, bytes={}, pkts={}, lost={}, jitter={:.3}ms, decoded={}, dropped={}, freezes={} ({:.1}s)",
+                                        snapshot.codec_mime, snapshot.frame_width, snapshot.frame_height,
+                                        snapshot.frames_per_second, snapshot.bytes_received,
+                                        snapshot.packets_received, snapshot.packets_lost,
+                                        snapshot.jitter * 1000.0,
+                                        snapshot.frames_decoded, snapshot.frames_dropped,
+                                        snapshot.freeze_count, snapshot.total_freeze_duration_s
+                                    );
+                                    let ws = event_logger.get_or_create_webrtc_stats(identity);
+                                    *ws.video.lock().unwrap() = Some(snapshot);
+                                }
+                            }
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+            }
+        });
     }
 
     // Wait a bit for tracks to propagate
@@ -881,6 +1068,30 @@ async fn main() {
             Ok(()) => tracing::info!("Hand raised"),
             Err(e) => tracing::warn!("Failed to raise hand: {e}"),
         }
+    }
+
+    // Schedule admin actions (mute everyone, lower all hands) after a delay
+    if args.mute_everyone || args.lower_all_hands {
+        let rm_admin = rm.clone();
+        let do_mute = args.mute_everyone;
+        let do_lower = args.lower_all_hands;
+        let delay = args.admin_action_delay;
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+            if do_mute {
+                match rm_admin.mute_everyone().await {
+                    Ok(()) => tracing::info!("[ADMIN] mute_everyone sent"),
+                    Err(e) => tracing::warn!("[ADMIN] mute_everyone failed: {e}"),
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            if do_lower {
+                match rm_admin.lower_all_hands().await {
+                    Ok(()) => tracing::info!("[ADMIN] lower_all_hands sent"),
+                    Err(e) => tracing::warn!("[ADMIN] lower_all_hands failed: {e}"),
+                }
+            }
+        });
     }
 
     // Stay in room with turn-based speaking pattern
@@ -1008,6 +1219,42 @@ async fn main() {
         }
         report_quality!("AUDIO", per_participant_audio, 200, "possible stutter");
         report_quality!("VIDEO", per_participant_video, 2000, "possible freeze");
+
+        // WebRTC-level quality report (codec, bitrate, jitter, freezes)
+        let webrtc_map = event_logger.webrtc_stats.lock().unwrap();
+        if webrtc_map.is_empty() {
+            tracing::warn!("[WEBRTC QUALITY] No WebRTC stats collected");
+        }
+        for (identity, pstats) in webrtc_map.iter() {
+            if let Some(audio) = pstats.audio.lock().unwrap().as_ref() {
+                let loss_pct = if audio.packets_received > 0 {
+                    audio.packets_lost as f64 / (audio.packets_received as f64 + audio.packets_lost as f64) * 100.0
+                } else { 0.0 };
+                let concealed_pct = if audio.total_samples_received > 0 {
+                    audio.concealed_samples as f64 / audio.total_samples_received as f64 * 100.0
+                } else { 0.0 };
+                tracing::info!(
+                    "[WEBRTC AUDIO FINAL] {identity}: codec={}, bytes={}, pkts={}, lost={} ({loss_pct:.1}%), jitter={:.1}ms, concealed={:.1}%",
+                    audio.codec_mime, audio.bytes_received, audio.packets_received,
+                    audio.packets_lost, audio.jitter * 1000.0, concealed_pct
+                );
+            }
+            if let Some(video) = pstats.video.lock().unwrap().as_ref() {
+                let loss_pct = if video.packets_received > 0 {
+                    video.packets_lost as f64 / (video.packets_received as f64 + video.packets_lost as f64) * 100.0
+                } else { 0.0 };
+                tracing::info!(
+                    "[WEBRTC VIDEO FINAL] {identity}: codec={}, {}x{}, {:.1}fps, bytes={}, pkts={}, lost={} ({loss_pct:.1}%), jitter={:.1}ms, decoded={}, dropped={}, freezes={} ({:.1}s)",
+                    video.codec_mime, video.frame_width, video.frame_height,
+                    video.frames_per_second, video.bytes_received,
+                    video.packets_received, video.packets_lost,
+                    video.jitter * 1000.0,
+                    video.frames_decoded, video.frames_dropped,
+                    video.freeze_count, video.total_freeze_duration_s
+                );
+            }
+        }
+        drop(webrtc_map);
     }
 
     // Disconnect

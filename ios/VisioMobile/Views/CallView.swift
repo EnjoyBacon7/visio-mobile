@@ -259,11 +259,13 @@ struct CallView: View {
             }
         }
         .task {
-            guard let (livekitUrl, token) = manager.pendingTestConnect else { return }
+            guard let (livekitUrl, token, mediaFile) = manager.pendingTestConnect else { return }
             manager.pendingTestConnect = nil
 
             // Connect (audio playout starts automatically after connection)
             manager.connectWithToken(livekitUrl: livekitUrl, token: token)
+
+            let hasMediaFile = mediaFile != nil && FileManager.default.fileExists(atPath: mediaFile!)
 
             // Auto-chat messages (turn-based)
             let chatMessages: [(Int, String)] = [
@@ -279,22 +281,37 @@ struct CallView: View {
                 }
             }
 
+            // Helpers for starting/stopping media capture
+            func startMedia() {
+                if hasMediaFile {
+                    manager.startMediaFileCapture(mediaFile!)
+                } else {
+                    manager.startSyntheticAudio()
+                }
+            }
+            func stopMedia() {
+                if hasMediaFile {
+                    manager.stopMediaFileCapture()
+                } else {
+                    manager.stopSyntheticAudio()
+                }
+            }
+
             // Turn-based speaking: iOS speaks at 75-100s, muted otherwise (except warmup 0-5s and final 100-120s)
-            // Uses synthetic audio (440Hz sine) since simulators have no real microphone.
             Task {
                 // 5s: mute mic+cam (bot's turn)
                 try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
                 print("[TURN] iOS muted (bot's turn)")
                 manager.setMicEnabled(false)
-                manager.stopSyntheticAudio()
+                stopMedia()
                 manager.setCameraEnabled(false)
-                // 75s: unmute — iOS's turn to speak (with synthetic audio)
+                // 75s: unmute — iOS's turn to speak
                 try? await Task.sleep(nanoseconds: 70 * 1_000_000_000)
-                print("[TURN] iOS speaking (synthetic audio)")
+                print("[TURN] iOS speaking\(hasMediaFile ? " (media file)" : " (synthetic audio)")")
                 manager.setMicEnabled(true)
-                manager.startSyntheticAudio()
                 manager.setCameraEnabled(true)
-                // 100s: everyone speaks (keep synthetic audio on)
+                startMedia()
+                // 100s: everyone speaks (keep media on)
                 try? await Task.sleep(nanoseconds: 25 * 1_000_000_000)
                 print("[TURN] iOS unmuted (all speak)")
                 // Already on — stays on for final phase

@@ -194,7 +194,11 @@ info "Starting bot in room '$ROOM'..."
     --expect-participants "$EXPECTED_PARTICIPANTS" \
     --duration "$DURATION" \
     --chat-message "Hello from Bot!" \
+    --reaction "thumbsUp" \
     --raise-hand \
+    --mute-everyone \
+    --lower-all-hands \
+    --admin-action-delay 22 \
     2>&1 | tee "$BOT_LOG" &
 BOT_PID=$!
 sleep 5
@@ -234,16 +238,22 @@ fi
 if [ "$SKIP_ANDROID" = false ]; then
     info "Launching Android app (auto-connect via deep link)..."
 
-    # URL-encode the token (replace + and = for URI safety)
-    ENCODED_TOKEN=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ANDROID_TOKEN', safe=''))")
+    # Push test video to device for media file capture
+    ANDROID_MEDIA_PATH="/data/local/tmp/test-video.mp4"
+    info "Pushing test video to Android device..."
+    adb push "$MEDIA_FILE" "$ANDROID_MEDIA_PATH" 2>/dev/null || warn "adb push failed"
 
-    # Launch app via deep link
+    # URL-encode the token and media path
+    ENCODED_TOKEN=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ANDROID_TOKEN', safe=''))")
+    ENCODED_MEDIA=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$ANDROID_MEDIA_PATH', safe=''))")
+
+    # Launch app via deep link with media_file parameter
     adb shell am start -a android.intent.action.VIEW \
-        -d "visio-test://connect?livekit_url=${LIVEKIT_URL_ANDROID}\&token=${ENCODED_TOKEN}" \
+        -d "visio-test://connect?livekit_url=${LIVEKIT_URL_ANDROID}\&token=${ENCODED_TOKEN}\&media_file=${ENCODED_MEDIA}" \
         io.visio.mobile 2>&1 || warn "adb launch failed"
 
     sleep 3
-    ok "Android app launched via deep link"
+    ok "Android app launched via deep link (with media file)"
 fi
 
 # =========================================================================
@@ -255,9 +265,21 @@ if [ "$SKIP_IOS" = false ]; then
     ENCODED_IOS_TOKEN=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$IOS_TOKEN', safe=''))")
 
     if xcrun simctl list devices booted 2>/dev/null | grep -q "Booted"; then
-        xcrun simctl openurl booted "visio-test://connect?livekit_url=${LIVEKIT_URL_ANDROID}&token=${ENCODED_IOS_TOKEN}"
+        # Copy test video to simulator's tmp directory
+        IOS_MEDIA_PATH="/tmp/test-video.mp4"
+        BOOTED_UDID=$(xcrun simctl list devices booted -j 2>/dev/null | python3 -c "import sys,json; devs=json.load(sys.stdin)['devices']; print([d['udid'] for r in devs.values() for d in r if d['state']=='Booted'][0])" 2>/dev/null || echo "")
+        if [ -n "$BOOTED_UDID" ]; then
+            SIM_DATA_DIR=$(xcrun simctl get_app_container booted io.visio.mobile data 2>/dev/null || echo "")
+            if [ -n "$SIM_DATA_DIR" ]; then
+                cp "$MEDIA_FILE" "$SIM_DATA_DIR/tmp/test-video.mp4" 2>/dev/null || true
+                IOS_MEDIA_PATH="$SIM_DATA_DIR/tmp/test-video.mp4"
+            fi
+        fi
+        ENCODED_IOS_MEDIA=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$IOS_MEDIA_PATH', safe=''))")
+
+        xcrun simctl openurl booted "visio-test://connect?livekit_url=${LIVEKIT_URL_ANDROID}&token=${ENCODED_IOS_TOKEN}&media_file=${ENCODED_IOS_MEDIA}"
         sleep 3
-        ok "iOS simulator app launched via deep link"
+        ok "iOS simulator app launched via deep link (with media file)"
     else
         warn "No iOS simulator booted — skipping iOS"
         SKIP_IOS=true
@@ -278,10 +300,10 @@ echo "Duration:   ${DURATION}s"
 echo "Local IP:   $LOCAL_IP"
 echo ""
 echo "Participants:"
-echo "  - Bot:      publishing audio + video + screen share + chat + hand raise (speaks 0-25s)"
+echo "  - Bot:      audio + video + screenshare + chat + reaction + hand raise + admin actions (speaks 0-25s)"
 [ "$SKIP_DESKTOP" = false ] && echo "  - Desktop:  auto-connected via CLI args (speaks 25-50s)"
-[ "$SKIP_ANDROID" = false ] && echo "  - Android:  auto-connected via deep link (speaks 50-75s)"
-[ "$SKIP_IOS" = false ] && echo "  - iOS:      auto-connected via deep link simulator (speaks 75-100s)"
+[ "$SKIP_ANDROID" = false ] && echo "  - Android:  auto-connected via deep link, media file capture (speaks 50-75s)"
+[ "$SKIP_IOS" = false ] && echo "  - iOS:      auto-connected via deep link simulator, media file capture (speaks 75-100s)"
 echo ""
 echo "============================================================"
 echo ""
@@ -525,6 +547,160 @@ if [ -f "$BOT_LOG" ]; then
         else
             warn "iOS: orientation rotation impact unclear"
         fi
+    fi
+
+    # =========================================================================
+    # Admin actions quality gates
+    # =========================================================================
+    echo ""
+    info "Admin actions verification:"
+
+    # Bot should have sent mute_everyone
+    MUTE_ALL_SENT="$(grep -c '\[ADMIN\] mute_everyone sent' "$BOT_LOG" 2>/dev/null)" || MUTE_ALL_SENT=0
+    if [ "$MUTE_ALL_SENT" -gt 0 ]; then
+        ok "Admin: mute_everyone sent successfully"
+    else
+        warn "Admin: mute_everyone not sent or failed"
+    fi
+
+    # Bot should have sent lower_all_hands
+    LOWER_HANDS_SENT="$(grep -c '\[ADMIN\] lower_all_hands sent' "$BOT_LOG" 2>/dev/null)" || LOWER_HANDS_SENT=0
+    if [ "$LOWER_HANDS_SENT" -gt 0 ]; then
+        ok "Admin: lower_all_hands sent successfully"
+    else
+        warn "Admin: lower_all_hands not sent or failed"
+    fi
+
+    # Bot raised hand — verify event was logged
+    HAND_RAISED="$(grep -c 'Hand raised' "$BOT_LOG" 2>/dev/null)" || HAND_RAISED=0
+    if [ "$HAND_RAISED" -gt 0 ]; then
+        ok "Hand raise: sent successfully"
+    else
+        warn "Hand raise: not sent"
+    fi
+
+    # Reaction sent
+    REACTION_SENT="$(grep -c 'Sent reaction' "$BOT_LOG" 2>/dev/null)" || REACTION_SENT=0
+    if [ "$REACTION_SENT" -gt 0 ]; then
+        ok "Reaction: sent successfully"
+    else
+        warn "Reaction: not sent"
+    fi
+
+    # Check for reactions received from remote participants
+    REACTIONS_RECEIVED="$(grep -c '\[EVENT\] Reaction:' "$BOT_LOG" 2>/dev/null)" || REACTIONS_RECEIVED=0
+    if [ "$REACTIONS_RECEIVED" -gt 0 ]; then
+        ok "Reactions received from remote: $REACTIONS_RECEIVED"
+    else
+        warn "No reactions received from remote participants"
+    fi
+
+    # Check for MuteRequested events (should NOT be received by bot since bot is the sender)
+    MUTE_REQUESTED="$(grep -c '\[EVENT\] MuteRequested' "$BOT_LOG" 2>/dev/null)" || MUTE_REQUESTED=0
+    if [ "$MUTE_REQUESTED" -gt 0 ]; then
+        warn "Bot received MuteRequested — unexpected (bot is the admin)"
+    fi
+
+    # =========================================================================
+    # New event types verification (informational)
+    # =========================================================================
+    echo ""
+    info "New event types (informational — presence depends on test scenario):"
+
+    ALONE_EVENTS="$(grep -c '\[EVENT\] AloneInRoom' "$BOT_LOG" 2>/dev/null)" || ALONE_EVENTS=0
+    ALONE_CANCEL="$(grep -c '\[EVENT\] AloneInRoomCancelled' "$BOT_LOG" 2>/dev/null)" || ALONE_CANCEL=0
+    [ "$ALONE_EVENTS" -gt 0 ] && info "AloneInRoom events: $ALONE_EVENTS"
+    [ "$ALONE_CANCEL" -gt 0 ] && info "AloneInRoomCancelled events: $ALONE_CANCEL"
+
+    DISCONNECT_EVENTS="$(grep -c '\[EVENT\] Disconnected\|ConnectionLost' "$BOT_LOG" 2>/dev/null)" || DISCONNECT_EVENTS=0
+    if [ "$DISCONNECT_EVENTS" -gt 0 ]; then
+        warn "Unexpected disconnect events: $DISCONNECT_EVENTS"
+        grep '\[EVENT\] Disconnected\|ConnectionLost' "$BOT_LOG" 2>/dev/null || true
+    fi
+
+    # =========================================================================
+    # WebRTC quality report (codec, bitrate, jitter, freezes, packet loss)
+    # =========================================================================
+    echo ""
+    echo "============================================================"
+    info "WebRTC Quality Report"
+    echo "============================================================"
+
+    # Per-participant WebRTC audio stats
+    echo ""
+    info "WebRTC audio quality:"
+    while IFS= read -r line; do
+        PARTICIPANT="$(echo "$line" | sed 's/.*WEBRTC AUDIO FINAL\] \([^:]*\):.*/\1/')"
+        CODEC="$(echo "$line" | grep -o 'codec=[^,]*' | cut -d= -f2)" || CODEC="unknown"
+        LOST_PCT="$(echo "$line" | grep -o 'lost=[0-9]* ([0-9.]*%)' | grep -o '[0-9.]*%')" || LOST_PCT="0%"
+        JITTER="$(echo "$line" | grep -o 'jitter=[0-9.]*ms' | grep -o '[0-9.]*')" || JITTER="0"
+        CONCEALED="$(echo "$line" | grep -o 'concealed=[0-9.]*%' | grep -o '[0-9.]*')" || CONCEALED="0"
+        ok "Audio $PARTICIPANT: codec=$CODEC, loss=$LOST_PCT, jitter=${JITTER}ms, concealed=${CONCEALED}%"
+
+        # Quality gates: jitter > 50ms or loss > 5% is concerning
+        JITTER_INT="${JITTER%%.*}"
+        if [ "${JITTER_INT:-0}" -gt 50 ] 2>/dev/null; then
+            warn "Audio $PARTICIPANT: high jitter ${JITTER}ms (threshold: 50ms)"
+        fi
+    done < <(grep '\[WEBRTC AUDIO FINAL\]' "$BOT_LOG" 2>/dev/null || true)
+
+    # Per-participant WebRTC video stats
+    echo ""
+    info "WebRTC video quality:"
+    while IFS= read -r line; do
+        PARTICIPANT="$(echo "$line" | sed 's/.*WEBRTC VIDEO FINAL\] \([^:]*\):.*/\1/')"
+        CODEC="$(echo "$line" | grep -o 'codec=[^,]*' | cut -d= -f2)" || CODEC="unknown"
+        RESOLUTION="$(echo "$line" | grep -o '[0-9]*x[0-9]*')" || RESOLUTION="?x?"
+        FPS="$(echo "$line" | grep -o '[0-9.]*fps' | head -1)" || FPS="?fps"
+        LOST_PCT="$(echo "$line" | grep -o 'lost=[0-9]* ([0-9.]*%)' | grep -o '[0-9.]*%')" || LOST_PCT="0%"
+        JITTER="$(echo "$line" | grep -o 'jitter=[0-9.]*ms' | grep -o '[0-9.]*')" || JITTER="0"
+        DECODED="$(echo "$line" | grep -o 'decoded=[0-9]*' | cut -d= -f2)" || DECODED="0"
+        DROPPED="$(echo "$line" | grep -o 'dropped=[0-9]*' | cut -d= -f2)" || DROPPED="0"
+        FREEZES="$(echo "$line" | grep -o 'freezes=[0-9]*' | cut -d= -f2)" || FREEZES="0"
+        ok "Video $PARTICIPANT: codec=$CODEC, ${RESOLUTION}, ${FPS}, loss=$LOST_PCT, jitter=${JITTER}ms, decoded=$DECODED, dropped=$DROPPED, freezes=$FREEZES"
+
+        # Codec check: VP9 on desktop, VP8 on mobile (prebuilt WebRTC for
+        # Android/iOS has rtc_libvpx_build_vp9=false)
+        if echo "$PARTICIPANT" | grep -qi "desktop"; then
+            if echo "$CODEC" | grep -qi "vp9"; then
+                ok "Video $PARTICIPANT: VP9 codec confirmed (desktop)"
+            else
+                warn "Video $PARTICIPANT: expected VP9 on desktop, got $CODEC"
+            fi
+        elif echo "$PARTICIPANT" | grep -qi "android\|ios"; then
+            if echo "$CODEC" | grep -qi "vp8"; then
+                ok "Video $PARTICIPANT: VP8 codec confirmed (mobile)"
+            elif echo "$CODEC" | grep -qi "av1"; then
+                ok "Video $PARTICIPANT: AV1 codec (mobile)"
+            else
+                warn "Video $PARTICIPANT: unexpected codec on mobile: $CODEC"
+            fi
+        else
+            if echo "$CODEC" | grep -qi "vp9"; then
+                ok "Video $PARTICIPANT: VP9 codec confirmed"
+            elif echo "$CODEC" | grep -qi "vp8\|av1"; then
+                ok "Video $PARTICIPANT: codec=$CODEC"
+            fi
+        fi
+
+        # Freeze quality gate
+        if [ "${FREEZES:-0}" -gt 3 ] 2>/dev/null; then
+            warn "Video $PARTICIPANT: excessive freezes ($FREEZES)"
+        fi
+
+        # Dropped frames quality gate
+        if [ "${DROPPED:-0}" -gt 10 ] 2>/dev/null; then
+            warn "Video $PARTICIPANT: high frame drop ($DROPPED)"
+        fi
+    done < <(grep '\[WEBRTC VIDEO FINAL\]' "$BOT_LOG" 2>/dev/null || true)
+
+    # Check we got WebRTC reports
+    WEBRTC_AUDIO_COUNT="$(grep -c '\[WEBRTC AUDIO FINAL\]' "$BOT_LOG" 2>/dev/null)" || WEBRTC_AUDIO_COUNT=0
+    WEBRTC_VIDEO_COUNT="$(grep -c '\[WEBRTC VIDEO FINAL\]' "$BOT_LOG" 2>/dev/null)" || WEBRTC_VIDEO_COUNT=0
+    if [ "$WEBRTC_AUDIO_COUNT" -eq 0 ] && [ "$WEBRTC_VIDEO_COUNT" -eq 0 ]; then
+        warn "No WebRTC quality reports collected — monitor may not have had time to poll"
+    else
+        ok "WebRTC reports: $WEBRTC_AUDIO_COUNT audio, $WEBRTC_VIDEO_COUNT video"
     fi
 fi
 

@@ -41,10 +41,19 @@ pub struct MeetingControls {
 }
 
 /// Build TrackPublishOptions for the camera track.
+///
+/// VP9 is only available on desktop (macOS/Linux). The prebuilt WebRTC library
+/// for Android and iOS was compiled with `rtc_libvpx_build_vp9=false`, so
+/// VP9 software encoder is not linked. On mobile, fall back to VP8.
 fn camera_publish_options() -> TrackPublishOptions {
+    let video_codec = if cfg!(any(target_os = "android", target_os = "ios")) {
+        VideoCodec::VP8
+    } else {
+        VideoCodec::VP9
+    };
     TrackPublishOptions {
         source: LkTrackSource::Camera,
-        video_codec: VideoCodec::VP9,
+        video_codec,
         ..Default::default()
     }
 }
@@ -139,10 +148,14 @@ impl MeetingControls {
         let track =
             LocalVideoTrack::create_video_track("camera", RtcVideoSource::Native(source.clone()));
 
+        // Log available video codecs for diagnostics (VP9 preference debugging)
+        let opts = camera_publish_options();
+        tracing::info!("publish_camera: requesting codec {:?}", opts.video_codec);
+
         room.local_participant()
             .publish_track(
                 LocalTrack::Video(track),
-                camera_publish_options(),
+                opts,
             )
             .await
             .map_err(|e| VisioError::Room(format!("publish video: {e}")))?;
@@ -455,14 +468,24 @@ mod tests {
     }
 
     #[test]
-    fn camera_publish_options_use_vp9() {
+    fn camera_publish_options_codec() {
         use livekit::options::VideoCodec;
         let opts = super::camera_publish_options();
-        assert!(
-            matches!(opts.video_codec, VideoCodec::VP9),
-            "expected VP9, got {:?}",
-            opts.video_codec
-        );
+        // Desktop (macOS/Linux) uses VP9; mobile (Android/iOS) uses VP8
+        // because prebuilt WebRTC for mobile has rtc_libvpx_build_vp9=false
+        if cfg!(any(target_os = "android", target_os = "ios")) {
+            assert!(
+                matches!(opts.video_codec, VideoCodec::VP8),
+                "expected VP8 on mobile, got {:?}",
+                opts.video_codec
+            );
+        } else {
+            assert!(
+                matches!(opts.video_codec, VideoCodec::VP9),
+                "expected VP9 on desktop, got {:?}",
+                opts.video_codec
+            );
+        }
     }
 
     #[tokio::test]
