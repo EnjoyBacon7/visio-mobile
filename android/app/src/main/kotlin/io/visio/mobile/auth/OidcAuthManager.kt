@@ -12,7 +12,7 @@ class OidcAuthManager(context: Context) {
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-    private val prefs =
+    private val prefs = try {
         EncryptedSharedPreferences.create(
             context,
             "visio_auth",
@@ -20,6 +20,16 @@ class OidcAuthManager(context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
+    } catch (_: Exception) {
+        context.deleteSharedPreferences("visio_auth")
+        EncryptedSharedPreferences.create(
+            context,
+            "visio_auth",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
 
     fun launchOidcFlow(
         launcher: ActivityResultLauncher<Intent>,

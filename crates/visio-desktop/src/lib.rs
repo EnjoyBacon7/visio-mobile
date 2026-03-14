@@ -1548,6 +1548,28 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(state)
         .setup(move |app| {
+            // Set the macOS dock icon via objc2-app-kit
+            #[cfg(target_os = "macos")]
+            {
+                use objc2::MainThreadMarker;
+                use objc2::AllocAnyThread;
+                use objc2_app_kit::{NSApplication, NSImage};
+                use objc2_foundation::NSData;
+
+                let png_bytes = include_bytes!("../icons/icon.png");
+                let data = NSData::with_bytes(png_bytes);
+                let ns_image = unsafe { NSImage::initWithData(NSImage::alloc(), &data) };
+                if let Some(ns_image) = ns_image {
+                    // We're in the Tauri setup which runs on the main thread
+                    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+                    let ns_app = NSApplication::sharedApplication(mtm);
+                    unsafe { ns_app.setApplicationIconImage(Some(&ns_image)) };
+                    tracing::info!("macOS dock icon set via NSApplication (objc2)");
+                } else {
+                    tracing::warn!("Failed to create NSImage from icon PNG");
+                }
+            }
+
             // Store handle globally for the C video callback
             let _ = APP_HANDLE.set(app.handle().clone());
 

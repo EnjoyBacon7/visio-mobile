@@ -29,9 +29,9 @@ class VisioManager: ObservableObject {
     @Published var currentTheme: String = "light"
     @Published var displayName: String = ""
     @Published var pendingDeepLink: String? = nil
-    /// For E2E testing: (livekitUrl, token) pair from visio-test:// deep link.
+    /// For E2E testing: (livekitUrl, token, mediaFile?) from visio-test:// deep link.
     /// Only used in DEBUG builds.
-    @Published var pendingTestConnect: (String, String)? = nil
+    @Published var pendingTestConnect: (String, String, String?)? = nil
     @Published var isFrontCamera: Bool = true
     @Published var waitingParticipants: [WaitingParticipant] = []
     @Published var lobbyNotification: WaitingParticipant? = nil
@@ -57,6 +57,7 @@ class VisioManager: ObservableObject {
     private var audioPlayout: AudioPlayout?
     private var cameraCapture: CameraCapture?
     private var syntheticAudio: SyntheticAudioCapture?
+    private var mediaFileCapture: MediaFileCapture?
     private var contextDetector: ContextDetector?
     private var reactionIdCounter: Int64 = 0
     private var cameraWasEnabledBeforeCar = false
@@ -291,6 +292,22 @@ class VisioManager: ObservableObject {
     func stopSyntheticAudio() {
         syntheticAudio?.stop()
         syntheticAudio = nil
+    }
+
+    /// Start media file capture (audio + video from MP4) for E2E testing.
+    func startMediaFileCapture(_ filePath: String) {
+        guard mediaFileCapture == nil else { return }
+        let capture = MediaFileCapture(filePath: filePath)
+        capture.startAudio()
+        capture.startVideo()
+        mediaFileCapture = capture
+    }
+
+    /// Stop media file capture.
+    func stopMediaFileCapture() {
+        mediaFileCapture?.stopAudio()
+        mediaFileCapture?.stopVideo()
+        mediaFileCapture = nil
     }
 
     func toggleCamera() {
@@ -826,6 +843,26 @@ extension VisioManager: VisioEventListener {
                             self.errorMessage = "Reconnection failed: \(error.localizedDescription)"
                         }
                     }
+                }
+
+            case .lobbyTimeout:
+                self.lobbyDenied = true
+
+            case .disconnectedDuplicateIdentity:
+                self.errorMessage = "Déconnecté : un autre appareil a rejoint avec le même identifiant"
+
+            case .disconnectedByAdmin:
+                self.errorMessage = "Vous avez été déconnecté par un administrateur"
+
+            case .aloneInRoom(let remainingSecs):
+                self.errorMessage = "Vous êtes seul — déconnexion dans \(remainingSecs)s"
+
+            case .aloneInRoomCancelled:
+                self.errorMessage = nil
+
+            case .muteRequested:
+                if self.isMicEnabled {
+                    self.toggleMic()
                 }
             }
         }
