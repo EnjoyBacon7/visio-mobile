@@ -34,6 +34,7 @@
 		A1000100000000000000001B /* SyntheticAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000200000000000000001F /* SyntheticAudioCapture.swift */; };
 		A10001000000000000000030 /* MediaFileCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002000000000000000030 /* MediaFileCapture.swift */; };
 		A10001000000000000000031 /* NV12Util.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002000000000000000031 /* NV12Util.swift */; };
+		A10001000000000000000032 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002000000000000000032 /* AudioCapture.swift */; };
 		B10001000000000000000001 /* VisioMobileUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002000000000000000001 /* VisioMobileUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -69,6 +70,7 @@
 		A1000200000000000000001F /* SyntheticAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntheticAudioCapture.swift; sourceTree = "<group>"; };
 		A10002000000000000000030 /* MediaFileCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileCapture.swift; sourceTree = "<group>"; };
 		A10002000000000000000031 /* NV12Util.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NV12Util.swift; sourceTree = "<group>"; };
+		A10002000000000000000032 /* AudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapture.swift; sourceTree = "<group>"; };
 		A10003000000000000000001 /* VisioMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VisioMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10002000000000000000001 /* VisioMobileUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisioMobileUITests.swift; sourceTree = "<group>"; };
 		B10003000000000000000001 /* VisioMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VisioMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -113,6 +115,7 @@
 				A10002000000000000000005 /* VideoFrameRouter.swift */,
 				A10002000000000000000012 /* CameraCapture.swift */,
 				A1000200000000000000001F /* SyntheticAudioCapture.swift */,
+				A10002000000000000000032 /* AudioCapture.swift */,
 				A10002000000000000000030 /* MediaFileCapture.swift */,
 				A10002000000000000000031 /* NV12Util.swift */,
 				A10002000000000000000015 /* Theme.swift */,
@@ -364,6 +367,7 @@
 				A1000100000000000000001B /* SyntheticAudioCapture.swift in Sources */,
 				A10001000000000000000030 /* MediaFileCapture.swift in Sources */,
 				A10001000000000000000031 /* NV12Util.swift in Sources */,
+				A10001000000000000000032 /* AudioCapture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

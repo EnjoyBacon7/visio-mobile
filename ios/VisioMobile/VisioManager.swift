@@ -55,6 +55,7 @@ class VisioManager: ObservableObject {
 
     let client: VisioClient
     private var audioPlayout: AudioPlayout?
+    private var audioCapture: AudioCapture?
     private var cameraCapture: CameraCapture?
     private var syntheticAudio: SyntheticAudioCapture?
     private var mediaFileCapture: MediaFileCapture?
@@ -121,6 +122,11 @@ class VisioManager: ObservableObject {
                 // Request media permissions before connecting so tracks can publish
                 Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
 
+                // Configure audio session early so mic/playout work from the start
+                if settings.micEnabledOnJoin {
+                    Self.configureAudioSession()
+                }
+
                 try self.client.connect(meetUrl: url, username: username)
 
                 // Apply mic-on-join setting
@@ -152,6 +158,13 @@ class VisioManager: ObservableObject {
                         let capture = CameraCapture()
                         capture.start()
                         self.cameraCapture = capture
+                    }
+
+                    // Start mic capture if mic was enabled on join
+                    if mic {
+                        let capture = AudioCapture()
+                        capture.start()
+                        self.audioCapture = capture
                     }
 
                     // Start audio playout now that connection is established
@@ -200,6 +213,11 @@ class VisioManager: ObservableObject {
                         capture.start()
                         self.cameraCapture = capture
                     }
+                    if mic {
+                        let capture = AudioCapture()
+                        capture.start()
+                        self.audioCapture = capture
+                    }
                     // Start audio playout now that connection is established
                     self.startAudioPlayout()
                 }
@@ -230,6 +248,8 @@ class VisioManager: ObservableObject {
 
     func disconnect() {
         stopAudioPlayout()
+        audioCapture?.stop()
+        audioCapture = nil
         cameraCapture?.stop()
         cameraCapture = nil
         contextDetector?.stop()
@@ -278,6 +298,16 @@ class VisioManager: ObservableObject {
                 try self.client.setMicrophoneEnabled(enabled: enabled)
                 DispatchQueue.main.async {
                     self.isMicEnabled = enabled
+                    if enabled {
+                        if self.audioCapture == nil {
+                            let capture = AudioCapture()
+                            capture.start()
+                            self.audioCapture = capture
+                        }
+                    } else {
+                        self.audioCapture?.stop()
+                        self.audioCapture = nil
+                    }
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -342,6 +372,19 @@ class VisioManager: ObservableObject {
                 }
                 semaphore.wait()
             }
+        }
+    }
+
+    /// Configure AVAudioSession for voice chat (play + record).
+    static func configureAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+            try session.setPreferredSampleRate(48_000)
+            try session.setActive(true)
+            NSLog("VisioManager: audio session configured (.playAndRecord)")
+        } catch {
+            NSLog("VisioManager: audio session config failed: %@", error.localizedDescription)
         }
     }
 
