@@ -181,6 +181,7 @@
   "call.selectSource": "Share your screen",
   "call.monitors": "Screens",
   "call.windows": "Windows",
+  "call.screenPermissionHint": "No windows visible. Allow screen recording in System Settings > Privacy > Screen Recording.",
   "bandwidth.reducedVideo": "Low bandwidth — reduced video",
   "bandwidth.audioOnly": "Very low bandwidth — audio only",
   "home.recentRooms": "Recent rooms",

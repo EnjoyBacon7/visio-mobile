@@ -181,6 +181,7 @@
   "call.selectSource": "Bildschirm teilen",
   "call.monitors": "Bildschirme",
   "call.windows": "Fenster",
+  "call.screenPermissionHint": "Keine Fenster sichtbar. Erlauben Sie die Bildschirmaufnahme unter Systemeinstellungen > Datenschutz > Bildschirmaufnahme.",
   "bandwidth.reducedVideo": "Geringe Bandbreite — reduziertes Video",
   "bandwidth.audioOnly": "Sehr geringe Bandbreite — nur Audio",
   "home.recentRooms": "Letzte Räume",

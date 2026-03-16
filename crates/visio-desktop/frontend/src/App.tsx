@@ -1227,29 +1227,29 @@ function SourcePickerModal({
               </div>
             </>
           )}
-          {windows.length > 0 && (
-            <>
-              <h4 className="source-section-title">{t("call.windows")}</h4>
-              <div className="source-grid-items">
-                {windows.map((s, i) => (
-                  <button
-                    key={s.id}
-                    className="source-card"
-                    data-testid={`screen-share-source-${monitors.length + i}`}
-                    onClick={() => onSelect(s.id)}
-                  >
-                    {s.thumbnail ? (
-                      <img src={s.thumbnail} alt={s.name} className="source-thumb" />
-                    ) : (
-                      <div className="source-thumb source-thumb-placeholder">
-                        <RiApps2Line size={32} />
-                      </div>
-                    )}
-                    <span className="source-card-label">{s.name}</span>
-                  </button>
-                ))}
-              </div>
-            </>
+          <h4 className="source-section-title">{t("call.windows")}</h4>
+          {windows.length > 0 ? (
+            <div className="source-grid-items">
+              {windows.map((s, i) => (
+                <button
+                  key={s.id}
+                  className="source-card"
+                  data-testid={`screen-share-source-${monitors.length + i}`}
+                  onClick={() => onSelect(s.id)}
+                >
+                  {s.thumbnail ? (
+                    <img src={s.thumbnail} alt={s.name} className="source-thumb" />
+                  ) : (
+                    <div className="source-thumb source-thumb-placeholder">
+                      <RiApps2Line size={32} />
+                    </div>
+                  )}
+                  <span className="source-card-label">{s.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="source-permission-hint">{t("call.screenPermissionHint")}</p>
           )}
         </div>
       </div>
@@ -2325,6 +2325,7 @@ export default function App() {
   const [authenticatedMeetInstance, setAuthenticatedMeetInstance] = useState("");
   const [meetInstances, setMeetInstances] = useState<string[]>([]);
   const [bandwidthMode, setBandwidthMode] = useState<string>("full");
+  const settingsRef = useRef<Settings | null>(null);
 
   const t = useCallback(
     (key: string) => translations[lang]?.[key] ?? translations.en[key] ?? key,
@@ -2335,6 +2336,7 @@ export default function App() {
   useEffect(() => {
     invoke<Settings>("get_settings")
       .then((s) => {
+        settingsRef.current = s;
         if (s.display_name) setDisplayName(s.display_name);
         if (s.language) setLang(s.language);
         if (s.theme) setTheme(s.theme);
@@ -2708,11 +2710,28 @@ export default function App() {
   }, [t]);
 
   // ---- Handlers -----------------------------------------------------------
-  const handleJoin = (meetUrl: string, _username?: string | null, roomId?: string, accessLevel?: string) => {
+  const handleJoin = async (meetUrl: string, _username?: string | null, roomId?: string, accessLevel?: string) => {
     setCurrentMeetUrl(meetUrl);
     if (roomId) setCurrentRoomId(roomId);
     if (accessLevel) setCurrentAccessLevel(accessLevel);
     setView("call");
+
+    // Auto-enable mic/camera based on user settings
+    const s = settingsRef.current;
+    if (s?.mic_enabled_on_join) {
+      setMicEnabled(true);
+      invoke("toggle_mic", { enabled: true }).catch((e) => {
+        console.error("auto mic enable failed:", e);
+        setMicEnabled(false);
+      });
+    }
+    if (s?.camera_enabled_on_join) {
+      setCamEnabled(true);
+      invoke("toggle_camera", { enabled: true }).catch((e) => {
+        console.error("auto camera enable failed:", e);
+        setCamEnabled(false);
+      });
+    }
   };
 
   const handleToggleMic = async () => {

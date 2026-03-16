@@ -181,6 +181,7 @@
   "call.selectSource": "Compartir pantalla",
   "call.monitors": "Pantallas",
   "call.windows": "Ventanas",
+  "call.screenPermissionHint": "No hay ventanas visibles. Permita la grabación de pantalla en Ajustes del Sistema > Privacidad > Grabación de pantalla.",
   "bandwidth.reducedVideo": "Ancho de banda bajo — video reducido",
   "bandwidth.audioOnly": "Ancho de banda muy bajo — solo audio",
   "home.recentRooms": "Salas recientes",

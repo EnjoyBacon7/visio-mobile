@@ -181,6 +181,7 @@
   "call.selectSource": "Scherm delen",
   "call.monitors": "Schermen",
   "call.windows": "Vensters",
+  "call.screenPermissionHint": "Geen vensters zichtbaar. Sta schermopname toe in Systeeminstellingen > Privacy > Schermopname.",
   "bandwidth.reducedVideo": "Lage bandbreedte — verminderde video",
   "bandwidth.audioOnly": "Zeer lage bandbreedte — alleen audio",
   "home.recentRooms": "Recente kamers",

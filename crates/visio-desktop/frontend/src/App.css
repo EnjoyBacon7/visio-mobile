@@ -2138,6 +2138,14 @@ main {
   max-width: 100%;
 }
 
+.source-permission-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #888);
+  padding: 8px 12px;
+  margin: 0;
+  font-style: italic;
+}
+
 /* -- Reaction Overlay ------------------------------------------------------ */
 
 .reaction-overlay {

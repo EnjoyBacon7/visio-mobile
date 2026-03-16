@@ -181,6 +181,7 @@
   "call.selectSource": "Partager votre écran",
   "call.monitors": "Écrans",
   "call.windows": "Fenêtres",
+  "call.screenPermissionHint": "Aucune fenêtre visible. Autorisez l'enregistrement de l'écran dans Réglages Système > Confidentialité > Enregistrement de l'écran.",
   "bandwidth.reducedVideo": "Faible débit — vidéo réduite",
   "bandwidth.audioOnly": "Très faible débit — audio uniquement",
   "home.recentRooms": "Salles récentes",
