@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var customServer: String = ""
     @State private var showCreateRoom: Bool = false
     @State private var roomHistory: [String] = []
+    @State private var historyJoinPending: Bool = false
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -191,11 +192,18 @@ struct HomeView: View {
 
                             Button {
                                 roomURL = url
+                                historyJoinPending = true
                             } label: {
                                 HStack(spacing: 10) {
-                                    Image(systemName: "globe")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(VisioColors.primary500)
+                                    if historyJoinPending && roomURL == url {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                            .frame(width: 14, height: 14)
+                                    } else {
+                                        Image(systemName: "globe")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(VisioColors.primary500)
+                                    }
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(slug)
@@ -220,6 +228,7 @@ struct HomeView: View {
                                             : Color(red: 0.95, green: 0.95, blue: 0.97))
                                 )
                             }
+                            .disabled(historyJoinPending)
                         }
                     }
                     .padding(.horizontal, 32)
@@ -268,6 +277,16 @@ struct HomeView: View {
         .onChange(of: manager.authenticatedDisplayName) { newValue in
             if !newValue.isEmpty && displayName.isEmpty {
                 displayName = newValue
+            }
+        }
+        .onChange(of: roomStatus) { newStatus in
+            guard historyJoinPending else { return }
+            if newStatus == "valid" {
+                historyJoinPending = false
+                navigateToCall = true
+            } else if newStatus == "not_found" || newStatus == "idle" {
+                // Validation failed — fall back to just showing the URL in the field
+                historyJoinPending = false
             }
         }
         .onChange(of: manager.pendingDeepLink) { newValue in

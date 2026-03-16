@@ -689,8 +689,33 @@ function HomeView({
               let host = "";
               try { host = new URL(url).host; } catch {}
               return (
-                <button key={i} className="room-history-item" onClick={() => setMeetUrl(url)} data-testid={`home_room_history_item_${i}`}>
-                  <RiGlobalLine size={16} />
+                <button key={i} className="room-history-item" disabled={joining} onClick={async () => {
+                  setMeetUrl(url);
+                  setError("");
+                  setJoining(true);
+                  try {
+                    const uname = displayName.trim() || null;
+                    const result = await invoke<{ status: string }>(
+                      "validate_room", { url, username: uname }
+                    );
+                    if (result.status === "valid") {
+                      await invoke("set_display_name", { name: uname });
+                      await invoke("connect", { meetUrl: url, username: uname });
+                      onJoin(url, uname);
+                    } else {
+                      // Validation failed — fall back to filling the URL field so the user can see the status
+                      setJoining(false);
+                    }
+                  } catch (e) {
+                    setError(String(e));
+                    setJoining(false);
+                  }
+                }} data-testid={`home_room_history_item_${i}`}>
+                  {joining && meetUrl === url ? (
+                    <span className="room-history-spinner" />
+                  ) : (
+                    <RiGlobalLine size={16} />
+                  )}
                   <div className="room-history-info">
                     <span className="room-history-slug">{slug}</span>
                     {host && <span className="room-history-host">{host}</span>}

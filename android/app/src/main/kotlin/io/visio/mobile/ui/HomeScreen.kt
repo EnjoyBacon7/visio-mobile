@@ -93,6 +93,8 @@ fun HomeScreen(
     var showServerPicker by remember { mutableStateOf(false) }
     var showCreateRoom by remember { mutableStateOf(false) }
     var customServer by remember { mutableStateOf("") }
+    var historyJoining by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         try {
@@ -444,8 +446,27 @@ fun HomeScreen(
                         Modifier
                             .fillMaxWidth()
                             .testTag("home_room_history_item_$index")
-                            .clickable {
+                            .clickable(enabled = historyJoining == null) {
                                 roomUrl = url
+                                historyJoining = url
+                                coroutineScope.launch {
+                                    try {
+                                        val uname = username.trim().ifEmpty { null }
+                                        val result = withContext(Dispatchers.IO) {
+                                            VisioManager.client.validateRoom(url, uname)
+                                        }
+                                        if (result is RoomValidationResult.Valid) {
+                                            historyJoining = null
+                                            onJoin(url, username.trim())
+                                        } else {
+                                            // Validation failed — fall back to filling the URL field
+                                            historyJoining = null
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Failed to join from history", e)
+                                        historyJoining = null
+                                    }
+                                }
                             }
                             .background(
                                 MaterialTheme.colorScheme.surfaceVariant,
@@ -455,12 +476,20 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Public,
-                        contentDescription = null,
-                        tint = VisioColors.Primary500,
-                        modifier = Modifier.size(18.dp),
-                    )
+                    if (historyJoining == url) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = VisioColors.Primary500,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = VisioColors.Primary500,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = slug,

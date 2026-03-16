@@ -410,6 +410,26 @@ main {
   color: var(--text-secondary, #888);
 }
 
+.room-history-item:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.room-history-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-secondary, #888);
+  border-top-color: var(--accent, #5B6EF5);
+  border-radius: 50%;
+  animation: history-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes history-spin {
+  to { transform: rotate(360deg); }
+}
+
 .server-custom {
   display: flex;
   gap: 8px;
