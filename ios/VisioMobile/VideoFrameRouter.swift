@@ -17,9 +17,10 @@ final class VideoFrameRouter {
         let buffered = lastBuffers[trackSid]
         lock.unlock()
 
-        if let buffered {
+        if let buffered, let fresh = VideoFrameRouter.restampSampleBuffer(buffered) {
             DispatchQueue.main.async {
-                view.enqueueSampleBuffer(buffered)
+                view.flushDisplayLayer()
+                view.enqueueSampleBuffer(fresh)
             }
         }
     }
@@ -90,7 +91,15 @@ final class VideoFrameRouter {
         lock.unlock()
     }
 
-    func unregister(trackSid: String) {
+    func unregister(trackSid: String, view: VideoDisplayView) {
+        lock.lock()
+        if views[trackSid] === view {
+            views.removeValue(forKey: trackSid)
+        }
+        lock.unlock()
+    }
+
+    func invalidateTrack(trackSid: String) {
         lock.lock()
         views.removeValue(forKey: trackSid)
         lastBuffers.removeValue(forKey: trackSid)
@@ -176,6 +185,36 @@ final class VideoFrameRouter {
     }
 
     // MARK: - Sample buffer creation
+
+
+    static func restampSampleBuffer(_ original: CMSampleBuffer) -> CMSampleBuffer? {
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(original) else { return nil }
+
+        var formatDesc: CMVideoFormatDescription?
+        let fdStatus = CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: imageBuffer,
+            formatDescriptionOut: &formatDesc
+        )
+        guard fdStatus == noErr, let desc = formatDesc else { return nil }
+
+        var timingInfo = CMSampleTimingInfo(
+            duration: CMTime.invalid,
+            presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
+            decodeTimeStamp: CMTime.invalid
+        )
+
+        var restamped: CMSampleBuffer?
+        let sbStatus = CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: imageBuffer,
+            formatDescription: desc,
+            sampleTiming: &timingInfo,
+            sampleBufferOut: &restamped
+        )
+        guard sbStatus == noErr else { return nil }
+        return restamped
+    }
 
     private func createSampleBuffer(from pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
         var formatDesc: CMVideoFormatDescription?

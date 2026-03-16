@@ -857,7 +857,7 @@ extension VisioManager: VisioEventListener {
 
             case .trackUnsubscribed(let trackSid):
                 self.videoTrackSids.removeAll { $0 == trackSid }
-                VideoFrameRouter.shared.unregister(trackSid: trackSid)
+                VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     self?.client.stopVideoRenderer(trackSid: trackSid)
                 }
