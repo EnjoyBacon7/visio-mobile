@@ -1373,7 +1373,7 @@ async fn launch_oidc(
                 let meet_url: tauri::Url = format!("https://{}/", instance).parse().unwrap();
                 if let Ok(cookies) = webview.cookies_for_url(meet_url) {
                     for cookie in &cookies {
-                        if cookie.name() == "sessionid" {
+                        if cookie.name() == "sessionid" || cookie.name() == "meet_sessionid" {
                             let mut guard = tx.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some(sender) = guard.take() {
                                 let _ = sender.send(cookie.value().to_string());

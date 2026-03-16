@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 import visioFFI
 
 struct HomeView: View {
@@ -308,13 +309,74 @@ struct HomeView: View {
                 onDismiss: { showServerPicker = false }
             )
         }
-        // OIDC auth uses ASWebAuthenticationSession (presents its own Safari sheet)
+        .sheet(isPresented: Binding(
+            get: { manager.authManager.pendingInstance != nil },
+            set: { if !$0 { manager.authManager.onWebViewCookie(nil, meetInstance: "") } }
+        )) {
+            if let instance = manager.authManager.pendingInstance {
+                OidcFallbackWebView(meetInstance: instance) { cookie in
+                    manager.authManager.onWebViewCookie(cookie, meetInstance: instance)
+                    if let cookie {
+                        manager.onAuthCookieReceived(cookie, meetInstance: instance)
+                    }
+                }
+            }
+        }
     }
 
     private func launchOidc(meetInstance: String) {
-        manager.authManager.launchOidcFlow(meetInstance: meetInstance) { cookie in
-            if let cookie {
+        manager.authManager.launchOidcFlow(meetInstance: meetInstance) { [weak manager] cookie in
+            if let cookie, let manager {
                 manager.onAuthCookieReceived(cookie, meetInstance: meetInstance)
+            }
+        }
+    }
+}
+
+// MARK: - OIDC Fallback WebView
+
+/// WKWebView-based OIDC fallback for servers that don't support custom scheme returnTo.
+private struct OidcFallbackWebView: UIViewRepresentable {
+    let meetInstance: String
+    let onCookie: (String?) -> Void
+
+    private static let cookieNames = ["meet_sessionid", "sessionid"]
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+        let returnTo = "https://\(meetInstance)/"
+        let encodedReturnTo = returnTo.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? returnTo
+        if let url = URL(string: "https://\(meetInstance)/api/v1.0/authenticate/?returnTo=\(encodedReturnTo)") {
+            webView.load(URLRequest(url: url))
+        }
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        let parent: OidcFallbackWebView
+        init(_ parent: OidcFallbackWebView) { self.parent = parent }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let url = webView.url else { return }
+            let instance = parent.meetInstance
+            // Detect when we've landed on the instance homepage after auth
+            guard url.host == instance,
+                  !url.path.contains("/authenticate"),
+                  !url.path.contains("/oauth2/"),
+                  !url.path.contains("/callback") else { return }
+
+            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { cookies in
+                if let cookie = cookies.first(where: {
+                    OidcFallbackWebView.cookieNames.contains($0.name) && $0.domain.contains(instance)
+                }) {
+                    DispatchQueue.main.async { self.parent.onCookie(cookie.value) }
+                }
             }
         }
     }

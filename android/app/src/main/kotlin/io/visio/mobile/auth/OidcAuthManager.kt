@@ -91,11 +91,13 @@ class OidcAuthManager(context: Context) {
             return null
         }
 
+        // Meet uses "meet_sessionid", other instances may use "sessionid"
+        val cookieNames = listOf("meet_sessionid", "sessionid")
         val sessionId =
             allCookies.split(";")
                 .map { it.trim() }
-                .firstOrNull { it.startsWith("sessionid=") }
-                ?.substringAfter("sessionid=")
+                .firstOrNull { cookie -> cookieNames.any { cookie.startsWith("$it=") } }
+                ?.substringAfter("=")
 
         if (sessionId != null) {
             Log.d(TAG, "Session cookie extracted successfully from CookieManager")
