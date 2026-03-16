@@ -41,12 +41,20 @@ struct SettingsView: View {
                 Section(Strings.t("settings.profile", lang: lang)) {
                     TextField(Strings.t("settings.displayName", lang: lang), text: $displayName)
                         .autocorrectionDisabled()
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                 }
 
                 Section(Strings.t("settings.joinMeeting", lang: lang)) {
                     Toggle(Strings.t("settings.micOnJoin", lang: lang), isOn: $micOnJoin)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     Toggle(Strings.t("settings.camOnJoin", lang: lang), isOn: $cameraOnJoin)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     Toggle(Strings.t("settings.adaptiveMode", lang: lang), isOn: $adaptiveModeEnabled)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                 }
 
                 Section(Strings.t("settings.theme", lang: lang)) {
@@ -70,6 +78,8 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                    .listRowBackground(VisioColors.surface(dark: isDark))
                     .onChange(of: language) { newLang in
                         manager.setLanguage(newLang)
                     }
@@ -79,6 +89,7 @@ struct SettingsView: View {
                     ForEach(meetInstances, id: \.self) { instance in
                         HStack {
                             Text(instance)
+                                .foregroundStyle(VisioColors.onSurface(dark: isDark))
                             Spacer()
                             Button {
                                 meetInstances.removeAll { $0 == instance }
@@ -87,12 +98,14 @@ struct SettingsView: View {
                                     .foregroundStyle(.red)
                             }
                         }
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     }
                     HStack {
                         TextField(Strings.t("settings.instancePlaceholder", lang: lang), text: $newInstance)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
+                            .foregroundStyle(VisioColors.onSurface(dark: isDark))
                         Button {
                             let normalized = normalizeInstance(newInstance)
                             if !normalized.isEmpty && !meetInstances.contains(normalized) {
@@ -105,6 +118,7 @@ struct SettingsView: View {
                         }
                         .disabled(newInstance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    .listRowBackground(VisioColors.surface(dark: isDark))
                 }
             }
             .scrollContentBackground(.hidden)
