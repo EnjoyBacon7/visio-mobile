@@ -192,7 +192,13 @@ struct HomeView: View {
 
                             Button {
                                 roomURL = url
-                                historyJoinPending = true
+                                resolvedRoomURL = url
+                                // If already validated, navigate immediately
+                                if roomStatus == "valid" {
+                                    navigateToCall = true
+                                } else {
+                                    historyJoinPending = true
+                                }
                             } label: {
                                 HStack(spacing: 10) {
                                     if historyJoinPending && roomURL == url {
