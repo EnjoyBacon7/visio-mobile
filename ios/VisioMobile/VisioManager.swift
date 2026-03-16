@@ -119,26 +119,22 @@ class VisioManager: ObservableObject {
             do {
                 let settings = self.client.getSettings()
 
-                // Request media permissions before connecting so tracks can publish
-                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+                let cameraNeeded = settings.cameraEnabledOnJoin || self.client.isCameraEnabled()
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: cameraNeeded)
 
-                // Configure audio session early so mic/playout work from the start
                 if settings.micEnabledOnJoin {
                     Self.configureAudioSession()
                 }
 
                 try self.client.connect(meetUrl: url, username: username)
 
-                // Apply mic-on-join setting
                 if settings.micEnabledOnJoin {
                     try self.client.setMicrophoneEnabled(enabled: true)
                 }
-                // Apply camera-on-join setting
-                if settings.cameraEnabledOnJoin {
+                if cameraNeeded {
                     try self.client.setCameraEnabled(enabled: true)
                 }
 
-                // Sync state after connection + track publish
                 let parts = self.client.participants()
                 let mic = self.client.isMicrophoneEnabled()
                 let cam = self.client.isCameraEnabled()
@@ -146,7 +142,6 @@ class VisioManager: ObservableObject {
                 let state = self.client.connectionState()
                 let hand = self.client.isHandRaised()
 
-                // Start mic capture on this background thread (not main)
                 if mic {
                     let capture = AudioCapture()
                     capture.start()
@@ -161,7 +156,6 @@ class VisioManager: ObservableObject {
                     self.connectionState = state
                     self.isHandRaised = hand
                     self.errorMessage = nil
-                    // Start camera capture if camera was enabled on join
                     if cam {
                         let capture = CameraCapture()
                         capture.start()
@@ -188,14 +182,15 @@ class VisioManager: ObservableObject {
             do {
                 let settings = self.client.getSettings()
 
-                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+                let cameraNeeded = settings.cameraEnabledOnJoin || self.client.isCameraEnabled()
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: cameraNeeded)
 
                 try self.client.connectWithToken(livekitUrl: livekitUrl, token: token)
 
                 if settings.micEnabledOnJoin {
                     try self.client.setMicrophoneEnabled(enabled: true)
                 }
-                if settings.cameraEnabledOnJoin {
+                if cameraNeeded {
                     try self.client.setCameraEnabled(enabled: true)
                 }
 
@@ -204,7 +199,6 @@ class VisioManager: ObservableObject {
                 let cam = self.client.isCameraEnabled()
                 let state = self.client.connectionState()
 
-                // Start mic capture on background thread
                 if mic {
                     let capture = AudioCapture()
                     capture.start()
