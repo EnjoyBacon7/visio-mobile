@@ -130,17 +130,11 @@ struct SettingsView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .appToolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Strings.t("settings.save", lang: lang)) {
+                    Button(Strings.t("settings.done", lang: lang)) {
                         save()
                         dismiss()
                     }
                     .foregroundStyle(VisioColors.primary500)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(Strings.t("settings.cancel", lang: lang)) {
-                        dismiss()
-                    }
-                    .foregroundStyle(VisioColors.secondaryText(dark: isDark))
                 }
             }
         }
