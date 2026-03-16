@@ -191,6 +191,8 @@ fun CallScreen(
     var inCallSettingsTab by remember { mutableIntStateOf(0) }
     var showParticipantList by remember { mutableStateOf(false) }
     var focusedItem by remember { mutableStateOf<FocusItem?>(null) }
+    // Track whether focus was set by user (pin) vs auto (active speaker / screen share)
+    var userPinnedItem by remember { mutableStateOf<FocusItem?>(null) }
     var showReactionPicker by remember { mutableStateOf(false) }
     val reactions by VisioManager.reactions.collectAsState()
     val screenShareSubscribed by VisioManager.screenShareSubscribed.collectAsState()
@@ -210,6 +212,31 @@ fun CallScreen(
             val p = participants.find { it.sid == focusedItem?.participantSid }
             if (p?.hasScreenShare != true) {
                 focusedItem = null
+            }
+        }
+    }
+
+    // Active speaker auto-focus: when 3+ participants, no user pin, and no screen share focus,
+    // automatically focus the active speaker's camera tile
+    LaunchedEffect(activeSpeakers, participants.size, userPinnedItem) {
+        if (userPinnedItem != null) return@LaunchedEffect // user pinned someone, don't override
+        if (focusedItem?.source == "screen_share") return@LaunchedEffect // screen share takes priority
+        if (participants.size < 3) {
+            // Fewer than 3 participants: clear auto-focus (grid is fine)
+            if (focusedItem?.source == "camera" && userPinnedItem == null) {
+                focusedItem = null
+            }
+            return@LaunchedEffect
+        }
+        val speakerSid = activeSpeakers.firstOrNull()
+        if (speakerSid != null) {
+            // Don't auto-focus the local participant (first in list)
+            val isLocal = participants.firstOrNull()?.sid == speakerSid
+            if (!isLocal) {
+                val newFocus = FocusItem(speakerSid, "camera")
+                if (focusedItem != newFocus) {
+                    focusedItem = newFocus
+                }
             }
         }
     }
@@ -679,7 +706,7 @@ fun CallScreen(
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(VisioColors.PrimaryDark50)
-                                            .clickable { focusedItem = null },
+                                            .clickable { focusedItem = null; userPinnedItem = null },
                                 ) {
                                     val hasTrack =
                                         focusedDisplayItem.trackSid != null &&
@@ -698,7 +725,7 @@ fun CallScreen(
                                             participant = focusedDisplayItem.participant,
                                             isActiveSpeaker = activeSpeakers.contains(focusedDisplayItem.participant.sid),
                                             handRaisePosition = handRaisedMap[focusedDisplayItem.participant.sid] ?: 0,
-                                            onClick = { focusedItem = null },
+                                            onClick = { focusedItem = null; userPinnedItem = null },
                                         )
                                     }
                                     // Overlay: name + screen share icon
@@ -729,7 +756,7 @@ fun CallScreen(
 
                                     // Close/exit focus button (top-right)
                                     IconButton(
-                                        onClick = { focusedItem = null },
+                                        onClick = { focusedItem = null; userPinnedItem = null },
                                         modifier =
                                             Modifier
                                                 .align(Alignment.TopEnd)
@@ -774,7 +801,9 @@ fun CallScreen(
                                                     handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
                                                     isScreenShare = item.isScreenShare,
                                                     onClick = {
-                                                        focusedItem = FocusItem(item.participant.sid, item.source)
+                                                        val fi = FocusItem(item.participant.sid, item.source)
+                                                        focusedItem = fi
+                                                        userPinnedItem = fi // user-initiated pin
                                                     },
                                                 )
                                             }
@@ -825,14 +854,18 @@ fun CallScreen(
                                                         handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
                                                         isScreenShare = item.isScreenShare,
                                                         onClick = {
-                                                            focusedItem = FocusItem(item.participant.sid, item.source)
+                                                            val fi = FocusItem(item.participant.sid, item.source)
+                                                            focusedItem = fi
+                                                            userPinnedItem = fi // user-initiated pin
                                                         },
                                                     )
                                                     // Fullscreen icon overlay for screen share tiles
                                                     if (item.isScreenShare) {
                                                         IconButton(
                                                             onClick = {
-                                                                focusedItem = FocusItem(item.participant.sid, item.source)
+                                                                val fi = FocusItem(item.participant.sid, item.source)
+                                                                focusedItem = fi
+                                                                userPinnedItem = fi // user-initiated pin
                                                             },
                                                             modifier =
                                                                 Modifier

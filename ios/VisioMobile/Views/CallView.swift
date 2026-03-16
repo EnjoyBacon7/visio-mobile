@@ -72,6 +72,8 @@ struct CallView: View {
     @State private var showReactionPicker: Bool = false
     @State private var adaptiveModeOverride: AdaptiveMode? = nil
     @State private var showAdaptiveModePicker: Bool = false
+    /// Tracks whether the user manually pinned a participant (disables active speaker auto-focus).
+    @State private var userPinned: Bool = false
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -303,9 +305,42 @@ struct CallView: View {
                 let p = newParticipants.first(where: { $0.sid == fi.participantSid })
                 if p?.hasScreenShare != true {
                     withAnimation(.easeInOut(duration: 0.2)) {
+                        userPinned = false
                         focusedItem = nil
                     }
                 }
+            }
+            // Clear pin if the focused participant left the room
+            if let fi = focusedItem {
+                let stillPresent = newParticipants.contains(where: { $0.sid == fi.participantSid })
+                if !stillPresent {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        userPinned = false
+                        focusedItem = nil
+                    }
+                }
+            }
+        }
+        // Auto-focus on active speaker when 3+ participants and user hasn't manually pinned
+        .onChange(of: manager.activeSpeakers) { newSpeakers in
+            // Only auto-focus when there are enough participants to benefit from speaker view
+            guard manager.participants.count >= 3 else { return }
+            guard !userPinned else { return }
+            guard !newSpeakers.isEmpty else { return }
+            // Only auto-focus in office mode (pedestrian/car have their own speaker layouts)
+            guard manager.adaptiveMode == .office else { return }
+
+            // Find the first active speaker that is NOT the local participant
+            let localSid = manager.participants.first?.sid
+            let remoteSpeaker = newSpeakers.first(where: { $0 != localSid })
+            let speakerSid = remoteSpeaker ?? newSpeakers.first
+            guard let speakerSid else { return }
+
+            // Only switch if the speaker is different from the currently focused participant
+            if focusedItem?.participantSid == speakerSid && focusedItem?.source == .camera { return }
+
+            withAnimation(.easeInOut(duration: 0.2)) {
+                focusedItem = FocusItem(participantSid: speakerSid, source: .camera)
             }
         }
         .task {
@@ -442,6 +477,7 @@ struct CallView: View {
                                             Spacer()
                                             Button {
                                                 withAnimation(.easeInOut(duration: 0.2)) {
+                                                    userPinned = true
                                                     focusedItem = FocusItem(participantSid: item.participant.sid, source: item.source)
                                                 }
                                             } label: {
@@ -462,6 +498,7 @@ struct CallView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.2)) {
+                                    userPinned = true
                                     focusedItem = FocusItem(participantSid: item.participant.sid, source: item.source)
                                 }
                             }
@@ -512,6 +549,7 @@ struct CallView: View {
                         Spacer()
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
+                                userPinned = false
                                 focusedItem = nil
                             }
                         } label: {
@@ -561,6 +599,7 @@ struct CallView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .onTapGesture {
                                 withAnimation(.easeInOut(duration: 0.2)) {
+                                    userPinned = true
                                     focusedItem = FocusItem(participantSid: item.participant.sid, source: item.source)
                                 }
                             }
