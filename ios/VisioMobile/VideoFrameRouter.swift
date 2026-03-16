@@ -25,7 +25,6 @@ final class VideoFrameRouter {
         }
     }
 
-
     func deliverLocalPreviewBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
@@ -185,7 +184,6 @@ final class VideoFrameRouter {
     }
 
     // MARK: - Sample buffer creation
-
 
     static func restampSampleBuffer(_ original: CMSampleBuffer) -> CMSampleBuffer? {
         guard let imageBuffer = CMSampleBufferGetImageBuffer(original) else { return nil }
