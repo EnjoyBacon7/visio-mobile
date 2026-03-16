@@ -119,26 +119,22 @@ class VisioManager: ObservableObject {
             do {
                 let settings = self.client.getSettings()
 
-                // Request media permissions before connecting so tracks can publish
-                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+                let cameraNeeded = settings.cameraEnabledOnJoin || self.client.isCameraEnabled()
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: cameraNeeded)
 
-                // Configure audio session early so mic/playout work from the start
                 if settings.micEnabledOnJoin {
                     Self.configureAudioSession()
                 }
 
                 try self.client.connect(meetUrl: url, username: username)
 
-                // Apply mic-on-join setting
                 if settings.micEnabledOnJoin {
                     try self.client.setMicrophoneEnabled(enabled: true)
                 }
-                // Apply camera-on-join setting
-                if settings.cameraEnabledOnJoin {
+                if cameraNeeded {
                     try self.client.setCameraEnabled(enabled: true)
                 }
 
-                // Sync state after connection + track publish
                 let parts = self.client.participants()
                 let mic = self.client.isMicrophoneEnabled()
                 let cam = self.client.isCameraEnabled()
@@ -146,7 +142,6 @@ class VisioManager: ObservableObject {
                 let state = self.client.connectionState()
                 let hand = self.client.isHandRaised()
 
-                // Start mic capture on this background thread (not main)
                 if mic {
                     let capture = AudioCapture()
                     capture.start()
@@ -161,7 +156,6 @@ class VisioManager: ObservableObject {
                     self.connectionState = state
                     self.isHandRaised = hand
                     self.errorMessage = nil
-                    // Start camera capture if camera was enabled on join
                     if cam {
                         let capture = CameraCapture()
                         capture.start()
@@ -188,14 +182,15 @@ class VisioManager: ObservableObject {
             do {
                 let settings = self.client.getSettings()
 
-                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: settings.cameraEnabledOnJoin)
+                let cameraNeeded = settings.cameraEnabledOnJoin || self.client.isCameraEnabled()
+                Self.ensureMediaPermissions(mic: settings.micEnabledOnJoin, camera: cameraNeeded)
 
                 try self.client.connectWithToken(livekitUrl: livekitUrl, token: token)
 
                 if settings.micEnabledOnJoin {
                     try self.client.setMicrophoneEnabled(enabled: true)
                 }
-                if settings.cameraEnabledOnJoin {
+                if cameraNeeded {
                     try self.client.setCameraEnabled(enabled: true)
                 }
 
@@ -204,7 +199,6 @@ class VisioManager: ObservableObject {
                 let cam = self.client.isCameraEnabled()
                 let state = self.client.connectionState()
 
-                // Start mic capture on background thread
                 if mic {
                     let capture = AudioCapture()
                     capture.start()
@@ -258,13 +252,13 @@ class VisioManager: ObservableObject {
         cameraCapture = nil
         contextDetector?.stop()
         contextDetector = nil
-        // Stop all video renderers
         let sids = videoTrackSids
         for sid in sids {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.client.stopVideoRenderer(trackSid: sid)
             }
         }
+        VideoFrameRouter.shared.clearAll()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             self.client.disconnect()
@@ -418,8 +412,10 @@ class VisioManager: ObservableObject {
             guard let self else { return }
             do {
                 try self.client.setCameraEnabled(enabled: enabled)
+                let parts = self.client.participants()
                 DispatchQueue.main.async {
                     self.isCameraEnabled = enabled
+                    self.participants = parts
                     if enabled {
                         let capture = CameraCapture()
                         capture.start()
@@ -810,18 +806,46 @@ extension VisioManager: VisioEventListener {
                 self.participants.removeAll { $0.sid == sid }
                 self.handRaisedMap.removeValue(forKey: sid)
 
-            case .trackMuted(let sid, _):
+            case .trackMuted(let sid, let source):
                 if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
                     var p = self.participants[idx]
-                    p.isMuted = true
+                    switch source {
+                    case .microphone:
+                        p.isMuted = true
+                    case .camera:
+                        if let trackSid = p.videoTrackSid {
+                            VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
+                        }
+                        p.hasVideo = false
+                        p.videoTrackSid = nil
+                    case .screenShare:
+                        if let trackSid = p.screenShareTrackSid {
+                            VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
+                        }
+                        p.hasScreenShare = false
+                        p.screenShareTrackSid = nil
+                    case .unknown:
+                        break
+                    }
                     self.participants[idx] = p
                 }
 
-            case .trackUnmuted(let sid, _):
-                if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
-                    var p = self.participants[idx]
-                    p.isMuted = false
-                    self.participants[idx] = p
+            case .trackUnmuted(let sid, let source):
+                switch source {
+                case .microphone:
+                    if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
+                        var p = self.participants[idx]
+                        p.isMuted = false
+                        self.participants[idx] = p
+                    }
+                case .camera, .screenShare:
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        guard let self else { return }
+                        let updated = self.client.participants()
+                        DispatchQueue.main.async { self.participants = updated }
+                    }
+                case .unknown:
+                    break
                 }
 
             case .activeSpeakersChanged(let sids):
@@ -845,21 +869,41 @@ extension VisioManager: VisioEventListener {
                     if !self.videoTrackSids.contains(sid) {
                         self.videoTrackSids.append(sid)
                     }
+                    let participantSid = info.participantSid
+                    let isScreenShare = info.source == .screenShare
                     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                        self?.client.startVideoRenderer(trackSid: sid)
-                    }
-                    if info.source == .screenShare {
-                        // Clear first so re-sharing by the same participant triggers onChange
-                        self.lastScreenShareParticipantSid = nil
-                        self.lastScreenShareParticipantSid = info.participantSid
+                        guard let self else { return }
+                        self.client.startVideoRenderer(trackSid: sid)
+                        let updated = self.client.participants()
+                        DispatchQueue.main.async {
+                            self.participants = updated
+                            if isScreenShare {
+                                self.lastScreenShareParticipantSid = nil
+                                self.lastScreenShareParticipantSid = participantSid
+                            }
+                        }
                     }
                 }
 
             case .trackUnsubscribed(let trackSid):
                 self.videoTrackSids.removeAll { $0 == trackSid }
-                VideoFrameRouter.shared.unregister(trackSid: trackSid)
+                VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     self?.client.stopVideoRenderer(trackSid: trackSid)
+                }
+                if let idx = self.participants.firstIndex(where: {
+                    $0.videoTrackSid == trackSid || $0.screenShareTrackSid == trackSid
+                }) {
+                    var p = self.participants[idx]
+                    if p.videoTrackSid == trackSid {
+                        p.hasVideo = false
+                        p.videoTrackSid = nil
+                    }
+                    if p.screenShareTrackSid == trackSid {
+                        p.hasScreenShare = false
+                        p.screenShareTrackSid = nil
+                    }
+                    self.participants[idx] = p
                 }
 
             case .handRaisedChanged(let participantSid, let raised, let position):

@@ -1091,8 +1091,7 @@ struct ParticipantTile: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Video or avatar fallback
-            if let trackSid = effectiveTrackSid {
+            if participant.hasVideo, let trackSid = effectiveTrackSid {
                 VideoLayerView(trackSid: trackSid)
             } else {
                 avatarView

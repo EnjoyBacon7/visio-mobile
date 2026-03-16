@@ -12,10 +12,16 @@ struct VideoLayerView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: VideoDisplayView, context: Context) {}
+    func updateUIView(_ uiView: VideoDisplayView, context: Context) {
+        guard uiView.trackSid != trackSid else { return }
+        let oldSid = uiView.trackSid
+        uiView.trackSid = trackSid
+        VideoFrameRouter.shared.unregister(trackSid: oldSid, view: uiView)
+        VideoFrameRouter.shared.register(trackSid: trackSid, view: uiView)
+    }
 
     static func dismantleUIView(_ uiView: VideoDisplayView, coordinator: ()) {
-        VideoFrameRouter.shared.unregister(trackSid: uiView.trackSid)
+        VideoFrameRouter.shared.unregister(trackSid: uiView.trackSid, view: uiView)
     }
 }
 
@@ -29,6 +35,8 @@ class VideoDisplayView: UIView {
     }
 
     func setupDisplayLayer() {
+        displayLayer?.removeFromSuperlayer()
+
         let layer = AVSampleBufferDisplayLayer()
         layer.videoGravity = .resizeAspect
         layer.frame = bounds
@@ -36,8 +44,22 @@ class VideoDisplayView: UIView {
         displayLayer = layer
     }
 
-    /// Called from VideoFrameRouter on the main thread to enqueue a frame.
+    func flushDisplayLayer() {
+        guard let layer = displayLayer else { return }
+        layer.flush()
+        if #available(iOS 17.4, *) {
+        } else {
+            if layer.status == .failed {
+                setupDisplayLayer()
+            }
+        }
+    }
+
     func enqueueSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        displayLayer?.enqueue(sampleBuffer)
+        guard let layer = displayLayer else { return }
+        if layer.status == .failed {
+            layer.flush()
+        }
+        layer.enqueue(sampleBuffer)
     }
 }
