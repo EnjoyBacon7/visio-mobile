@@ -75,19 +75,24 @@ class OidcAuthManager(context: Context) {
      *
      * @return Pair of (sessionid, meetInstance) if successful, null otherwise.
      */
-    fun handleAuthCallback(): Pair<String, String>? {
+    /**
+     * @param consumeOnFailure If true (default, used by deep link callback), clears
+     *   pendingAuthInstance even if no cookie is found. If false (used by onResume fallback),
+     *   keeps pendingAuthInstance so the user can finish auth and return again.
+     */
+    fun handleAuthCallback(consumeOnFailure: Boolean = true): Pair<String, String>? {
         val meetInstance = pendingAuthInstance
         if (meetInstance == null) {
             Log.w(TAG, "Auth callback received but no pending auth instance")
             return null
         }
-        pendingAuthInstance = null
 
         val allCookies = CookieManager.getInstance().getCookie("https://$meetInstance")
         Log.d(TAG, "Cookies for $meetInstance: $allCookies")
 
         if (allCookies == null) {
             Log.w(TAG, "No cookies found for $meetInstance")
+            if (consumeOnFailure) pendingAuthInstance = null
             return null
         }
 
@@ -100,10 +105,12 @@ class OidcAuthManager(context: Context) {
                 ?.substringAfter("=")
 
         if (sessionId != null) {
+            pendingAuthInstance = null
             Log.d(TAG, "Session cookie extracted successfully from CookieManager")
             return Pair(sessionId, meetInstance)
         } else {
             Log.w(TAG, "sessionid not found in cookies")
+            if (consumeOnFailure) pendingAuthInstance = null
             return null
         }
     }

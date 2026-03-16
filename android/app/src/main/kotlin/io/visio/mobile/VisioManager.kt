@@ -507,7 +507,8 @@ object VisioManager : VisioEventListener {
             Log.i("VisioManager", "Started Bluetooth SCO (legacy)")
         }
 
-        // Also set preferred devices on audio tracks
+        // Restart audio tracks with Bluetooth device to ensure routing takes effect
+        // (setPreferredDevice does not work after recording/playback has already started)
         val btOutput =
             am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { device ->
                 device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
@@ -520,12 +521,16 @@ object VisioManager : VisioEventListener {
                     device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
             }
         btOutput?.let {
-            audioPlayout?.setPreferredDevice(it)
-            Log.i("VisioManager", "Set preferred output: ${it.productName}")
+            if (audioPlayout != null) {
+                setAudioOutputDevice(it)
+                Log.i("VisioManager", "Restarted playout on Bluetooth output: ${it.productName}")
+            }
         }
         btInput?.let {
-            audioCapture?.setPreferredDevice(it)
-            Log.i("VisioManager", "Set preferred input: ${it.productName}")
+            if (audioCapture != null) {
+                setAudioInputDevice(it)
+                Log.i("VisioManager", "Restarted capture on Bluetooth input: ${it.productName}")
+            }
         }
     }
 
@@ -540,10 +545,18 @@ object VisioManager : VisioEventListener {
                 am.stopBluetoothSco()
             }
         }
-        audioCapture?.setPreferredDevice(null)
-        audioPlayout?.setPreferredDevice(null)
+        // Restart audio tracks without a device preference so they use default routing
+        // (setPreferredDevice does not work after recording/playback has already started)
+        audioCapture?.let {
+            it.stop()
+            audioCapture = AudioCapture().also { newCapture -> newCapture.start(null) }
+        }
+        audioPlayout?.let {
+            it.stop()
+            audioPlayout = AudioPlayout().also { newPlayout -> newPlayout.start(null) }
+        }
         previousAudioDevice = null
-        Log.i("VisioManager", "Restored default audio routing")
+        Log.i("VisioManager", "Restored default audio routing (tracks restarted)")
     }
 
     /**

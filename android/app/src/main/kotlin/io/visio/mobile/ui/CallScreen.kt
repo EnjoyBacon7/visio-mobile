@@ -194,8 +194,20 @@ fun CallScreen(
     // Track whether focus was set by user (pin) vs auto (active speaker / screen share)
     var userPinnedItem by remember { mutableStateOf<FocusItem?>(null) }
     var showReactionPicker by remember { mutableStateOf(false) }
+    // Fullscreen controls visibility: toggles on tap, auto-hides after 3s
+    var controlsVisible by remember { mutableStateOf(false) }
     val reactions by VisioManager.reactions.collectAsState()
     val screenShareSubscribed by VisioManager.screenShareSubscribed.collectAsState()
+
+    // Auto-hide controls after 3 seconds in focus mode; reset when leaving focus
+    LaunchedEffect(controlsVisible, focusedItem) {
+        if (focusedItem == null) {
+            controlsVisible = false
+        } else if (controlsVisible) {
+            delay(3000)
+            controlsVisible = false
+        }
+    }
 
     // Auto-focus on screen share arrival
     LaunchedEffect(screenShareSubscribed) {
@@ -597,12 +609,13 @@ fun CallScreen(
             ConnectionStateBanner(connectionState, errorMessage)
 
             // Video grid area with reaction overlay
+            val isFullscreenFocus = focusedItem != null
             Box(
                 modifier =
                     Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(8.dp),
+                        .padding(if (isFullscreenFocus) 0.dp else 8.dp),
             ) {
                 when (adaptiveMode) {
                     AdaptiveMode.CAR -> {
@@ -706,7 +719,7 @@ fun CallScreen(
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(VisioColors.PrimaryDark50)
-                                            .clickable { focusedItem = null; userPinnedItem = null },
+                                            .clickable { controlsVisible = !controlsVisible },
                                 ) {
                                     val hasTrack =
                                         focusedDisplayItem.trackSid != null &&
@@ -725,7 +738,7 @@ fun CallScreen(
                                             participant = focusedDisplayItem.participant,
                                             isActiveSpeaker = activeSpeakers.contains(focusedDisplayItem.participant.sid),
                                             handRaisePosition = handRaisedMap[focusedDisplayItem.participant.sid] ?: 0,
-                                            onClick = { focusedItem = null; userPinnedItem = null },
+                                            onClick = { controlsVisible = !controlsVisible },
                                         )
                                     }
                                     // Overlay: name + screen share icon
@@ -776,36 +789,38 @@ fun CallScreen(
                                     }
                                 }
 
-                                // Thumbnail bar
-                                val thumbnailItems = displayItems.filter { it.key != focusedDisplayItem.key }
-                                if (thumbnailItems.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .height(100.dp),
-                                    ) {
-                                        for (item in thumbnailItems) {
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .weight(1f)
-                                                        .fillMaxHeight()
-                                                        .clip(RoundedCornerShape(8.dp)),
-                                            ) {
-                                                ParticipantTile(
-                                                    participant = item.participant,
-                                                    isActiveSpeaker = activeSpeakers.contains(item.participant.sid),
-                                                    handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
-                                                    isScreenShare = item.isScreenShare,
-                                                    onClick = {
-                                                        val fi = FocusItem(item.participant.sid, item.source)
-                                                        focusedItem = fi
-                                                        userPinnedItem = fi // user-initiated pin
-                                                    },
-                                                )
+                                // Thumbnail bar — hidden in fullscreen focus mode
+                                if (controlsVisible) {
+                                    val thumbnailItems = displayItems.filter { it.key != focusedDisplayItem.key }
+                                    if (thumbnailItems.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .height(100.dp),
+                                        ) {
+                                            for (item in thumbnailItems) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .weight(1f)
+                                                            .fillMaxHeight()
+                                                            .clip(RoundedCornerShape(8.dp)),
+                                                ) {
+                                                    ParticipantTile(
+                                                        participant = item.participant,
+                                                        isActiveSpeaker = activeSpeakers.contains(item.participant.sid),
+                                                        handRaisePosition = handRaisedMap[item.participant.sid] ?: 0,
+                                                        isScreenShare = item.isScreenShare,
+                                                        onClick = {
+                                                            val fi = FocusItem(item.participant.sid, item.source)
+                                                            focusedItem = fi
+                                                            userPinnedItem = fi // user-initiated pin
+                                                        },
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -898,7 +913,8 @@ fun CallScreen(
                 // Reaction overlay on top of video grid
                 ReactionOverlay(reactions = reactions)
 
-                // Persistent adaptive mode indicator (on top of everything)
+                // Persistent adaptive mode indicator (on top of everything) — hidden in fullscreen focus
+                if (!isFullscreenFocus)
                 Row(
                     modifier =
                         Modifier
@@ -924,9 +940,10 @@ fun CallScreen(
                 }
             }
 
+            // Control bar — hidden in fullscreen focus mode unless tapped
+            if (focusedItem == null || controlsVisible) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Control bar
             ControlBar(
                 micEnabled = micEnabled,
                 cameraEnabled = cameraEnabled,
@@ -982,8 +999,8 @@ fun CallScreen(
                         if (hasPermission) {
                             coroutineScope.launch(Dispatchers.IO) {
                                 try {
-                                    VisioManager.client.setCameraEnabled(true)
                                     VisioManager.startCameraCapture()
+                                    VisioManager.client.setCameraEnabled(true)
                                     cameraEnabled = true
                                     VisioManager.refreshParticipantsPublic()
                                 } catch (e: Exception) {
@@ -1042,6 +1059,7 @@ fun CallScreen(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+            } // end control bar visibility
         }
 
         // Lobby: persistent banner when participants are waiting
