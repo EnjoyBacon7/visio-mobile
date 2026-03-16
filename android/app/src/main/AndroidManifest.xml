@@ -45,12 +45,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".auth.OidcLoginActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize"
-            android:windowSoftInputMode="adjustResize" />
-
         <service
             android:name=".CallForegroundService"
             android:foregroundServiceType="phoneCall"

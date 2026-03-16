@@ -12,6 +12,7 @@ import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import io.visio.mobile.auth.OidcAuthManager
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +29,13 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data ?: return null
         if (uri.scheme != "visio") return null
         val host = uri.host ?: return null
+
+        // Handle auth callback deep link: visio://auth-callback
+        if (host == OidcAuthManager.AUTH_CALLBACK_HOST) {
+            handleAuthCallback()
+            return null
+        }
+
         val slug = uri.path?.trimStart('/') ?: return null
         if (host.isBlank() || slug.isBlank()) return null
 
@@ -36,6 +44,21 @@ class MainActivity : ComponentActivity() {
             "https://$host/$slug"
         } else {
             null
+        }
+    }
+
+    /**
+     * Handle the OIDC auth callback from Chrome Custom Tab.
+     * Extracts the sessionid cookie from CookieManager and completes authentication.
+     */
+    private fun handleAuthCallback() {
+        val result = VisioManager.authManager.handleAuthCallback()
+        if (result != null) {
+            val (sessionId, meetInstance) = result
+            Log.i(TAG, "Auth callback: session cookie received for $meetInstance")
+            VisioManager.onAuthCookieReceived(sessionId, meetInstance)
+        } else {
+            Log.w(TAG, "Auth callback: failed to extract session cookie")
         }
     }
 

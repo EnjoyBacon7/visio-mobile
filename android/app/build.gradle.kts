@@ -70,6 +70,7 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.14.0@aar")
     implementation(files("libs/libwebrtc.jar"))
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.browser:browser:1.8.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

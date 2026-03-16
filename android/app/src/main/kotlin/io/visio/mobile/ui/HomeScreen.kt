@@ -1,10 +1,7 @@
 package io.visio.mobile.ui
 
-import android.app.Activity
 import android.content.Intent
 import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -84,18 +81,6 @@ fun HomeScreen(
     onSettings: () -> Unit,
 ) {
     val context = LocalContext.current
-    val oidcLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val cookie = result.data?.getStringExtra("sessionid")
-                val meetInstance = result.data?.getStringExtra("meet_instance")
-                if (cookie != null && meetInstance != null) {
-                    VisioManager.onAuthCookieReceived(cookie, meetInstance)
-                }
-            }
-        }
     var roomUrl by remember { mutableStateOf("") }
     var resolvedRoomUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
@@ -257,7 +242,7 @@ fun HomeScreen(
                 onClick = {
                     if (meetInstances.size <= 1) {
                         val meetInstance = meetInstances.firstOrNull() ?: return@Button
-                        VisioManager.authManager.launchOidcFlow(oidcLauncher, context, meetInstance)
+                        VisioManager.authManager.launchOidcFlow(context, meetInstance)
                     } else {
                         customServer = ""
                         showServerPicker = true
@@ -292,7 +277,7 @@ fun HomeScreen(
                 lang = lang,
                 onSelect = { instance ->
                     showServerPicker = false
-                    VisioManager.authManager.launchOidcFlow(oidcLauncher, context, instance)
+                    VisioManager.authManager.launchOidcFlow(context, instance)
                 },
                 onDismiss = { showServerPicker = false },
             )

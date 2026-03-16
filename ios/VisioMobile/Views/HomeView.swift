@@ -14,7 +14,6 @@ struct HomeView: View {
     @State private var showServerPicker: Bool = false
     @State private var customServer: String = ""
     @State private var showCreateRoom: Bool = false
-    @State private var pendingOidcInstance: String? = nil
     @State private var roomHistory: [String] = []
 
     private var lang: String { manager.currentLang }
@@ -309,24 +308,15 @@ struct HomeView: View {
                 onDismiss: { showServerPicker = false }
             )
         }
-        .sheet(isPresented: Binding(
-            get: { pendingOidcInstance != nil },
-            set: { if !$0 { pendingOidcInstance = nil } }
-        )) {
-            if let instance = pendingOidcInstance {
-                OidcLoginSheet(meetInstance: instance) { cookie in
-                    let inst = instance
-                    pendingOidcInstance = nil
-                    if let cookie {
-                        manager.onAuthCookieReceived(cookie, meetInstance: inst)
-                    }
-                }
-            }
-        }
+        // OIDC auth uses ASWebAuthenticationSession (presents its own Safari sheet)
     }
 
     private func launchOidc(meetInstance: String) {
-        pendingOidcInstance = meetInstance
+        manager.authManager.launchOidcFlow(meetInstance: meetInstance) { cookie in
+            if let cookie {
+                manager.onAuthCookieReceived(cookie, meetInstance: meetInstance)
+            }
+        }
     }
 }
 
@@ -340,7 +330,7 @@ private struct ServerPickerWithOidc: View {
     let onComplete: (String?, String) -> Void  // (cookie?, meetInstance)
     let onDismiss: () -> Void
 
-    @State private var selectedInstance: String? = nil
+    @EnvironmentObject private var manager: VisioManager
 
     /// Normalizes a meet instance by stripping protocol prefixes and trailing slashes.
     private func normalizeInstance(_ input: String) -> String {
@@ -358,53 +348,45 @@ private struct ServerPickerWithOidc: View {
         return result
     }
 
+    private func selectInstance(_ instance: String) {
+        // Dismiss the server picker sheet, then launch ASWebAuthenticationSession
+        onDismiss()
+        manager.authManager.launchOidcFlow(meetInstance: instance) { cookie in
+            onComplete(cookie, instance)
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            if let instance = selectedInstance {
-                // OIDC web view — pushed in same sheet
-                OidcWebView(meetInstance: instance) { cookie in
-                    onComplete(cookie, instance)
-                }
-                .navigationTitle(instance)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
-                            onDismiss()
+            // Server picker list
+            List {
+                Section {
+                    ForEach(instances, id: \.self) { instance in
+                        Button(instance) {
+                            selectInstance(instance)
                         }
                     }
                 }
-            } else {
-                // Server picker list
-                List {
-                    Section {
-                        ForEach(instances, id: \.self) { instance in
-                            Button(instance) {
-                                selectedInstance = instance
-                            }
+                Section {
+                    TextField(Strings.t("home.serverPicker.custom", lang: lang), text: $customServer)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    Button(Strings.t("home.connect", lang: lang)) {
+                        let normalized = normalizeInstance(customServer)
+                        if !normalized.isEmpty {
+                            selectInstance(normalized)
                         }
                     }
-                    Section {
-                        TextField(Strings.t("home.serverPicker.custom", lang: lang), text: $customServer)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                        Button(Strings.t("home.connect", lang: lang)) {
-                            let normalized = normalizeInstance(customServer)
-                            if !normalized.isEmpty {
-                                selectedInstance = normalized
-                            }
-                        }
-                        .disabled(customServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
+                    .disabled(customServer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .navigationTitle(Strings.t("home.serverPicker.title", lang: lang))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
-                            onDismiss()
-                        }
+            }
+            .navigationTitle(Strings.t("home.serverPicker.title", lang: lang))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(Strings.t("home.serverPicker.cancel", lang: lang)) {
+                        onDismiss()
                     }
                 }
             }
