@@ -66,7 +66,9 @@ Visio Mobile supports authentication via **OpenID Connect** (OIDC), compatible w
 
 - The OIDC session cookie is stored securely in the platform keychain (Android Keystore / iOS Keychain / Desktop OS credential store)
 - Sessions persist across app restarts — no need to re-authenticate each time
-- The OIDC flow uses an embedded `WKWebView` (iOS) / `WebView` (Android) with a non-persistent cookie jar to ensure clean login state
+- On iOS, the OIDC flow uses `ASWebAuthenticationSession` (system Safari sheet) with fallback to `WKWebView` for servers that don't support custom scheme redirects
+- On Android, the OIDC flow uses Chrome Custom Tabs with shared cookies, falling back to embedded WebView
+- On Desktop, the OIDC flow uses an embedded Tauri WebView (system browser requires server-side support for custom scheme redirects)
 
 ## Background blur and replacement
 
@@ -348,7 +350,7 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 - Remixicon icon set across all controls
 - Grouped control bar: mic+chevron, cam+chevron, hand raise, chat, participants, tools, info, hangup
 - Device picker popovers (mic/speaker/camera enumeration via WebRTC API)
-- Adaptive video grid (1x1 to 3x3) + click-to-focus layout with filmstrip
+- Adaptive video grid (dynamic columns/rows for any participant count) + click-to-focus layout with filmstrip
 - Participant tiles with initials avatar (deterministic color), active speaker glow, hand raise badge, connection quality bars
 - Chat sidebar (358px, slide-in animation, own messages right-aligned in accent color)
 - Participants sidebar with live count
@@ -383,9 +385,32 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 - Room URL validation with real-time debounced feedback
 - Settings view (display name, language, mic/camera on join)
 
-## Recent additions (v0.4.0)
+## Recent additions (v0.5.0)
 
-- **OIDC / ProConnect authentication**: Full login flow with embedded WebView, session persistence in platform keychain, user profile display, and logout
+- **Desktop CI/CD**: Automated builds for macOS, Windows, and Linux via GitHub Actions with GitHub Releases
+- **Room history**: Recent rooms displayed on the home screen with direct-join on tap (all platforms)
+- **Active speaker auto-focus**: Automatically switches focus to the speaking participant when 3+ participants are present, with manual pin override (all platforms)
+- **OIDC system browser login**: iOS uses ASWebAuthenticationSession (Safari sheet), Android uses Chrome Custom Tabs — enabling password manager and SSO session reuse
+- **Lobby/waiting room UX (Desktop)**: Clear "Waiting for host" overlay when placed in a waiting room, instead of a stuck "Connecting" state
+- **Screen share improvements (Desktop)**: Fixed white screen sent to remote participants (RGBA stride mismatch), use `object-fit: contain` to prevent cropping
+- **Audio output device selection (Desktop)**: macOS AudioUnit now correctly routes audio to selected USB/Bluetooth devices (e.g., Jabra)
+- **Camera permission handling (Desktop)**: Explicit macOS camera permission request before AVCaptureSession, preventing silent capture failure
+- **Audio lifecycle (Desktop)**: Microphone only grabbed when connected to a room, not at app startup — other apps can use audio freely
+- **White screen prevention (Desktop)**: Throttled video frame updates and track cleanup to prevent memory-driven UI crashes in large calls
+- **Dynamic video grid (Desktop)**: Uniform tile sizes for any participant count (dynamic column/row calculation replaces fixed 3x3 cap)
+- **Auto-enable mic/camera on join (Desktop)**: Reads user settings and auto-activates mic/camera when joining a call
+- **App renamed to "Visio Mobile"**: Proper display name in macOS Spotlight, Windows Start menu, and Linux launchers
+- **iOS camera & audio fixes**: Camera/mic permissions requested before use, audio interruption handling, device orientation rotation, video frame buffering for late-joining views
+- **Android stability fixes**: Bluetooth auto-switch, fullscreen screen share, green frame flash, OIDC WebView auth
+- **VP9 codec**: Camera tracks use VP9 for better quality at lower bitrate (mobile platforms)
+- **Screen share audio** (macOS): ScreenCaptureKit-based audio capture for screen sharing
+- **Meet parity**: Connect timeout (60s), disconnect reasons, RNNoise noise reduction, device hot-swap detection, participant context menu, push-to-talk, admin actions (mute everyone, mute participant)
+- **E2E testing infrastructure**: visio-bot (Rust), cross-platform orchestrator, Maestro (Android), Playwright (Desktop)
+- **Rebranding**: New app icons and logo across all platforms
+
+### v0.4.0
+
+- **OIDC / ProConnect authentication**: Full login flow with session persistence in platform keychain, user profile display, and logout
 - **Room creation**: Authenticated users can create rooms with public, trusted, or restricted access levels
 - **Waiting room / lobby**: Host notification banner, participant admit/deny, waiting room section in participant list
 - **Restricted rooms**: Invitation-only rooms with user search and member management
@@ -399,7 +424,6 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 
 ## What's next
 
-- Official App store packaging (APK/IPA/DMG)
 - Live subtitles (on-device Whisper)
 - Silent catch-up (join summary)
 - Live subtitle translation (on-device NLLB)
