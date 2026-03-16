@@ -418,8 +418,10 @@ class VisioManager: ObservableObject {
             guard let self else { return }
             do {
                 try self.client.setCameraEnabled(enabled: enabled)
+                let parts = self.client.participants()
                 DispatchQueue.main.async {
                     self.isCameraEnabled = enabled
+                    self.participants = parts
                     if enabled {
                         let capture = CameraCapture()
                         capture.start()
@@ -860,6 +862,20 @@ extension VisioManager: VisioEventListener {
                 VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     self?.client.stopVideoRenderer(trackSid: trackSid)
+                }
+                if let idx = self.participants.firstIndex(where: {
+                    $0.videoTrackSid == trackSid || $0.screenShareTrackSid == trackSid
+                }) {
+                    var p = self.participants[idx]
+                    if p.videoTrackSid == trackSid {
+                        p.hasVideo = false
+                        p.videoTrackSid = nil
+                    }
+                    if p.screenShareTrackSid == trackSid {
+                        p.hasScreenShare = false
+                        p.screenShareTrackSid = nil
+                    }
+                    self.participants[idx] = p
                 }
 
             case .handRaisedChanged(let participantSid, let raised, let position):
