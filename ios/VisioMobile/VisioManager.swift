@@ -258,13 +258,13 @@ class VisioManager: ObservableObject {
         cameraCapture = nil
         contextDetector?.stop()
         contextDetector = nil
-        // Stop all video renderers
         let sids = videoTrackSids
         for sid in sids {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.client.stopVideoRenderer(trackSid: sid)
             }
         }
+        VideoFrameRouter.shared.clearAll()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             self.client.disconnect()

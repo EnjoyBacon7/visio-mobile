@@ -2,17 +2,10 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 
-/// Routes I420 video frames from the Rust callback to the correct VideoDisplayView.
-///
-/// The Rust `visio_video` crate calls `visio_video_set_ios_callback` once at startup.
-/// Each frame arrives with a `track_sid`; this singleton looks up the registered
-/// VideoDisplayView and enqueues a CMSampleBuffer for display.
 final class VideoFrameRouter {
     static let shared = VideoFrameRouter()
 
-    /// Registered views, keyed by track SID.
     private var views: [String: VideoDisplayView] = [:]
-    /// Buffered last sample buffer per track SID, so late-registering views get the latest frame.
     private var lastBuffers: [String: CMSampleBuffer] = [:]
     private let lock = NSLock()
 
@@ -24,12 +17,77 @@ final class VideoFrameRouter {
         let buffered = lastBuffers[trackSid]
         lock.unlock()
 
-        // If frames arrived before the view registered, deliver the last one immediately.
         if let buffered {
             DispatchQueue.main.async {
                 view.enqueueSampleBuffer(buffered)
             }
         }
+    }
+
+
+    func deliverLocalPreviewBuffer(_ sampleBuffer: CMSampleBuffer) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        let width  = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let chromaW = width / 2
+        let chromaH = height / 2
+
+        guard let yBase  = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
+              let uvBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+            return
+        }
+        let yStride  = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+        let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
+        let yPtr  = yBase.assumingMemoryBound(to: UInt8.self)
+        let uvPtr = uvBase.assumingMemoryBound(to: UInt8.self)
+
+        let chromaSize = chromaW * chromaH
+        var uPlane = [UInt8](repeating: 0, count: chromaSize)
+        var vPlane = [UInt8](repeating: 0, count: chromaSize)
+        for row in 0..<chromaH {
+            let uvRow = uvPtr.advanced(by: row * uvStride)
+            let dstOffset = row * chromaW
+            for col in 0..<chromaW {
+                uPlane[dstOffset + col] = uvRow[col * 2]
+                vPlane[dstOffset + col] = uvRow[col * 2 + 1]
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+
+        let converted: CMSampleBuffer? = uPlane.withUnsafeBufferPointer { uBuf in
+            vPlane.withUnsafeBufferPointer { vBuf in
+                guard let uBase = uBuf.baseAddress,
+                      let vBase = vBuf.baseAddress else { return nil }
+                guard let pb = createNV12PixelBuffer(
+                    width: width, height: height,
+                    yPtr: yPtr, yStride: yStride,
+                    uPtr: uBase, uStride: chromaW,
+                    vPtr: vBase, vStride: chromaW
+                ) else { return nil }
+                return createSampleBuffer(from: pb)
+            }
+        }
+        guard let converted else { return }
+
+        lock.lock()
+        lastBuffers["local-camera"] = converted
+        let view = views["local-camera"]
+        lock.unlock()
+
+        guard let view else { return }
+        DispatchQueue.main.async {
+            view.enqueueSampleBuffer(converted)
+        }
+    }
+
+    func clearAll() {
+        lock.lock()
+        views.removeAll()
+        lastBuffers.removeAll()
+        lock.unlock()
     }
 
     func unregister(trackSid: String) {
@@ -39,7 +97,6 @@ final class VideoFrameRouter {
         lock.unlock()
     }
 
-    /// Called from the C callback on a background thread.
     func deliverFrame(
         width: UInt32, height: UInt32,
         yPtr: UnsafePointer<UInt8>, yStride: UInt32,
@@ -47,8 +104,6 @@ final class VideoFrameRouter {
         vPtr: UnsafePointer<UInt8>, vStride: UInt32,
         trackSid: String
     ) {
-        // Create a bi-planar (NV12) CVPixelBuffer from I420 planes.
-        // AVSampleBufferDisplayLayer prefers kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange.
         guard let pixelBuffer = createNV12PixelBuffer(
             width: Int(width), height: Int(height),
             yPtr: yPtr, yStride: Int(yStride),
@@ -58,8 +113,6 @@ final class VideoFrameRouter {
 
         guard let sampleBuffer = createSampleBuffer(from: pixelBuffer) else { return }
 
-        // Buffer the latest frame so late-registering views can display immediately,
-        // and look up the view under the same lock to avoid races.
         lock.lock()
         lastBuffers[trackSid] = sampleBuffer
         let view = views[trackSid]
@@ -74,8 +127,6 @@ final class VideoFrameRouter {
 
     // MARK: - Pixel buffer creation
 
-    /// Convert I420 (Y + U + V planar) to NV12 (Y + interleaved UV).
-    /// NV12 is hardware-friendly on iOS and avoids a shader/conversion step.
     private func createNV12PixelBuffer(
         width: Int, height: Int,
         yPtr: UnsafePointer<UInt8>, yStride: Int,
@@ -97,7 +148,6 @@ final class VideoFrameRouter {
         CVPixelBufferLockBaseAddress(pb, [])
         defer { CVPixelBufferUnlockBaseAddress(pb, []) }
 
-        // Copy Y plane
         if let yDst = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
             let yDstStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
             for row in 0..<height {
@@ -107,7 +157,6 @@ final class VideoFrameRouter {
             }
         }
 
-        // Interleave U + V into NV12 UV plane
         let chromaH = height / 2
         let chromaW = width / 2
         if let uvDst = CVPixelBufferGetBaseAddressOfPlane(pb, 1) {
@@ -158,8 +207,6 @@ final class VideoFrameRouter {
 
 // MARK: - Global C callback for Rust → Swift video frames
 
-/// This function is registered with `visio_video_set_ios_callback` at app startup.
-/// It is called from Rust worker threads whenever a video frame is decoded.
 func visioOnVideoFrame(
     width: UInt32, height: UInt32,
     yPtr: UnsafePointer<UInt8>?, yStride: UInt32,
