@@ -142,12 +142,15 @@ jobs:
             NOTES="Desktop Build #${{ github.run_number }} from $(date -u +%Y-%m-%d)"
           fi
 
-          # Collect all release files
-          FILES=$(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \))
+          # Collect all release files (use NUL-delimited to handle spaces in names)
+          FILES=()
+          while IFS= read -r -d '' f; do
+            FILES+=("$f")
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) -print0)
 
-          if [ -n "$FILES" ]; then
+          if [ ${#FILES[@]} -gt 0 ]; then
             gh release create "$TAG" \
-              $FILES \
+              "${FILES[@]}" \
               --title "Desktop Build #${{ github.run_number }}" \
               --notes "$NOTES" \
               --prerelease
