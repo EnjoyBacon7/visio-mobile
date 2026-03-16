@@ -375,6 +375,10 @@ function ParticipantTile({
           <span className="tile-muted-icon">
             <RiMicOffFill size={14} />
           </span>
+        ) : isActiveSpeaker ? (
+          <span className="tile-speaking-icon">
+            <RiMicLine size={14} />
+          </span>
         ) : null}
         {!isScreenShare && handRaisePosition != null && handRaisePosition > 0 && (
           <span className="tile-hand-badge">
@@ -1346,6 +1350,7 @@ function CallView({
 }) {
   const t = useT();
   const [focusedItem, setFocusedItem] = useState<FocusItem>(null);
+  const userPinnedRef = useRef(false); // tracks whether user manually pinned a participant
   const [showFocusThumbnails, setShowFocusThumbnails] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
@@ -1410,16 +1415,41 @@ function CallView({
       const isLocal = localParticipant && focusedItem.participantSid === localParticipant.sid;
       if (isLocal) {
         if (!isScreenSharing) {
+          userPinnedRef.current = false;
           setFocusedItem(null);
         }
       } else {
         const p = participants.find(p => p.sid === focusedItem.participantSid);
         if (!p?.has_screen_share) {
+          userPinnedRef.current = false;
           setFocusedItem(null);
         }
       }
     }
   }, [participants, focusedItem, localParticipant, isScreenSharing]);
+
+  // Auto-focus on active speaker when there are 3+ participants and user hasn't manually pinned
+  useEffect(() => {
+    // Only auto-focus when there are enough participants to benefit from speaker view
+    const allP: Participant[] = [];
+    if (localParticipant) allP.push(localParticipant);
+    allP.push(...participants.filter((p) => !localParticipant || p.sid !== localParticipant.sid));
+    if (allP.length < 3) return;
+    if (userPinnedRef.current) return;
+    if (activeSpeakers.length === 0) return;
+
+    // Find the first active speaker that is NOT the local participant
+    const remoteSpeaker = activeSpeakers.find(
+      (sid) => !localParticipant || sid !== localParticipant.sid
+    );
+    const speakerSid = remoteSpeaker || activeSpeakers[0];
+    if (!speakerSid) return;
+
+    // Only switch if the speaker is different from the currently focused participant
+    if (focusedItem?.participantSid === speakerSid && focusedItem?.source === "camera") return;
+
+    setFocusedItem({ participantSid: speakerSid, source: "camera" });
+  }, [activeSpeakers, participants, localParticipant]);
 
   const handleSendReaction = async (emojiId: string) => {
     try {
@@ -1501,7 +1531,17 @@ function CallView({
   const thumbnailItems = focusedDisplayItem
     ? displayItems.filter(d => d.key !== focusedDisplayItem.key)
     : [];
-  const gridCount = Math.min(displayItems.length, 9);
+  // Compute grid layout: choose columns so all tiles are uniform
+  const gridCount = displayItems.length;
+  const gridCols = gridCount <= 1 ? 1
+    : gridCount <= 4 ? 2
+    : gridCount <= 9 ? 3
+    : gridCount <= 16 ? 4
+    : 5;
+  const gridRows = Math.ceil(gridCount / gridCols);
+  const gridStyle: React.CSSProperties = gridCount > 0
+    ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gridTemplateRows: `repeat(${gridRows}, 1fr)` }
+    : {};
 
   return (
     <div id="call" className="section active">
@@ -1558,7 +1598,7 @@ function CallView({
                   <button className="focus-toolbar-btn" onClick={() => setShowFocusThumbnails(v => !v)} title={showFocusThumbnails ? "Masquer les vignettes" : "Afficher les vignettes"}>
                     {showFocusThumbnails ? <RiFullscreenLine size={18} /> : <RiFullscreenExitLine size={18} />}
                   </button>
-                  <button className="focus-toolbar-btn" onClick={() => { setFocusedItem(null); setShowFocusThumbnails(true); }} title="Retour à la grille">
+                  <button className="focus-toolbar-btn" onClick={() => { setFocusedItem(null); userPinnedRef.current = false; setShowFocusThumbnails(true); }} title="Retour à la grille">
                     <RiCloseLine size={18} />
                   </button>
                 </div>
@@ -1566,7 +1606,7 @@ function CallView({
               {showFocusThumbnails && thumbnailItems.length > 0 && (
                 <div className="focus-thumbnails">
                   {thumbnailItems.map((d) => (
-                    <div key={d.key} className="tile" onClick={() => setFocusedItem({ participantSid: d.participant.sid, source: d.source })}>
+                    <div key={d.key} className="tile" onClick={() => { userPinnedRef.current = true; setFocusedItem({ participantSid: d.participant.sid, source: d.source }); }}>
                       <ParticipantTile
                         participant={d.participant}
                         videoFrames={videoFrames}
@@ -1580,19 +1620,19 @@ function CallView({
               )}
             </div>
           ) : (
-            <div className={`video-grid video-grid-${gridCount}`} data-testid="call-participant-grid">
+            <div className={`video-grid${gridCount === 0 ? " video-grid-0" : ""}`} style={gridStyle} data-testid="call-participant-grid">
               {displayItems.length === 0 ? (
                 <div className="empty-state">{t("call.noParticipants")}</div>
               ) : (
                 displayItems.map((d) => (
-                  <div key={d.key} onClick={() => setFocusedItem({ participantSid: d.participant.sid, source: d.source })}>
+                  <div key={d.key} onClick={() => { userPinnedRef.current = true; setFocusedItem({ participantSid: d.participant.sid, source: d.source }); }}>
                     <ParticipantTile
                       participant={d.participant}
                       videoFrames={videoFrames}
                       isActiveSpeaker={activeSpeakers.includes(d.participant.sid)}
                       handRaisePosition={handRaisedMap[d.participant.sid]}
                       displayItem={d}
-                      onExpand={d.isScreenShare ? () => setFocusedItem({ participantSid: d.participant.sid, source: d.source }) : undefined}
+                      onExpand={d.isScreenShare ? () => { userPinnedRef.current = true; setFocusedItem({ participantSid: d.participant.sid, source: d.source }); } : undefined}
                     />
                   </div>
                 ))
@@ -1736,8 +1776,10 @@ function CallView({
                             <div className="participant-context-menu" onClick={() => setParticipantMenu(null)}>
                               <button className="context-menu-item" onClick={() => {
                                 if (isPinned) {
+                                  userPinnedRef.current = false;
                                   setFocusedItem(null);
                                 } else {
+                                  userPinnedRef.current = true;
                                   setFocusedItem({ participantSid: p.sid, source: "camera" });
                                 }
                               }}>
@@ -2578,20 +2620,33 @@ export default function App() {
   useEffect(() => {
     if (view === "home") return;
 
-    let unlisten: UnlistenFn | null = null;
+    let unlistenFrame: UnlistenFn | null = null;
+    let unlistenTrackUnsub: UnlistenFn | null = null;
 
-    // Backpressure: batch frame updates via requestAnimationFrame to avoid
-    // accumulating state updates faster than the browser can render.
+    // Backpressure: batch frame updates and throttle to ~20 fps (50ms)
+    // to avoid overwhelming React with state updates when many participants
+    // are streaming video simultaneously.  The previous approach used
+    // requestAnimationFrame which still fires at 60fps — too fast when
+    // 12+ participants each push frames.
     let pendingFrames: Map<string, string> = new Map();
-    let rafId: number | null = null;
+    let pendingRemovals: Set<string> = new Set();
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const FLUSH_INTERVAL_MS = 50; // cap at ~20 fps
 
     const flushFrames = () => {
-      rafId = null;
-      if (pendingFrames.size === 0) return;
+      flushTimer = null;
+      if (pendingFrames.size === 0 && pendingRemovals.size === 0) return;
       const batch = pendingFrames;
+      const removals = pendingRemovals;
       pendingFrames = new Map();
+      pendingRemovals = new Set();
       setVideoFrames((prev) => {
         const next = new Map(prev);
+        // Remove unsubscribed tracks first
+        for (const sid of removals) {
+          next.delete(sid);
+        }
+        // Apply new frames
         for (const [sid, d] of batch) {
           next.set(sid, d);
         }
@@ -2599,19 +2654,35 @@ export default function App() {
       });
     };
 
+    const scheduleFlush = () => {
+      if (flushTimer === null) {
+        flushTimer = setTimeout(flushFrames, FLUSH_INTERVAL_MS);
+      }
+    };
+
     listen<VideoFrame>("video-frame", (event) => {
       const { track_sid, data } = event.payload;
       pendingFrames.set(track_sid, data);
-      if (rafId === null) {
-        rafId = requestAnimationFrame(flushFrames);
-      }
+      scheduleFlush();
     }).then((fn) => {
-      unlisten = fn;
+      unlistenFrame = fn;
+    });
+
+    // Clean up video frames when tracks are unsubscribed — prevents the
+    // videoFrames Map from growing unboundedly and leaking memory.
+    listen<string>("track-unsubscribed", (event) => {
+      const trackSid = event.payload;
+      pendingFrames.delete(trackSid);
+      pendingRemovals.add(trackSid);
+      scheduleFlush();
+    }).then((fn) => {
+      unlistenTrackUnsub = fn;
     });
 
     return () => {
-      if (unlisten) unlisten();
-      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (unlistenFrame) unlistenFrame();
+      if (unlistenTrackUnsub) unlistenTrackUnsub();
+      if (flushTimer !== null) clearTimeout(flushTimer);
     };
   }, [view]);
 
@@ -2674,6 +2745,7 @@ export default function App() {
   // ---- Lobby events -------------------------------------------------------
   useEffect(() => {
     let unlistenDenied: UnlistenFn | null = null;
+    let unlistenTimeout: UnlistenFn | null = null;
     let unlistenJoined: UnlistenFn | null = null;
     let unlistenLeft: UnlistenFn | null = null;
 
@@ -2683,6 +2755,14 @@ export default function App() {
       alert(t("lobby.denied"));
     }).then((fn) => {
       unlistenDenied = fn;
+    });
+
+    listen("lobby-timeout", () => {
+      setConnectionState("disconnected");
+      setView("home");
+      alert(t("lobby.timeout"));
+    }).then((fn) => {
+      unlistenTimeout = fn;
     });
 
     listen<{ id: string; username: string }>("lobby-participant-joined", (event) => {
@@ -2704,6 +2784,7 @@ export default function App() {
 
     return () => {
       if (unlistenDenied) unlistenDenied();
+      if (unlistenTimeout) unlistenTimeout();
       if (unlistenJoined) unlistenJoined();
       if (unlistenLeft) unlistenLeft();
     };
@@ -2876,7 +2957,7 @@ export default function App() {
   // ---- Render -------------------------------------------------------------
   return (
     <I18nContext.Provider value={t}>
-      {view === "call" && (
+      {(view === "call" || connectionState === "waiting_for_host") && (
         <header>
           <h1>{t("app.title")}</h1>
           <StatusBadge state={connectionState} />
@@ -2944,7 +3025,7 @@ export default function App() {
             )}
           </>
         )}
-        {view === "call" && (
+        {view === "call" && connectionState !== "waiting_for_host" && (
           <CallView
             participants={participants}
             localParticipant={localParticipant}

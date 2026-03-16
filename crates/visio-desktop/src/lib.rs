@@ -400,6 +400,21 @@ async fn connect(
     meet_url: String,
     username: Option<String>,
 ) -> Result<(), String> {
+    // Start audio playout on connect (deferred from app startup to avoid
+    // grabbing the microphone before the user joins a room).
+    {
+        let mut engine = state.audio_engine.lock().unwrap_or_else(|e| e.into_inner());
+        // Stop first for idempotency (no-op if not running).
+        engine.stop_playout();
+        engine.start_playout(state.playout_buffer.clone())?;
+        engine.set_device_change_callback(Arc::new(|| {
+            tracing::info!("audio devices changed — re-enumerating");
+            if let Some(app) = APP_HANDLE.get() {
+                let _ = app.emit("audio-devices-changed", ());
+            }
+        }));
+    }
+
     let cookie = {
         let session = state.session.lock().await;
         session.cookie()
@@ -417,6 +432,21 @@ async fn connect_with_token(
     token: String,
 ) -> Result<(), String> {
     tracing::info!("connect_with_token called: url={}", livekit_url);
+
+    // Start audio playout on connect (deferred from app startup).
+    {
+        let mut engine = state.audio_engine.lock().unwrap_or_else(|e| e.into_inner());
+        // Stop first for idempotency (no-op if not running).
+        engine.stop_playout();
+        engine.start_playout(state.playout_buffer.clone())?;
+        engine.set_device_change_callback(Arc::new(|| {
+            tracing::info!("audio devices changed — re-enumerating");
+            if let Some(app) = APP_HANDLE.get() {
+                let _ = app.emit("audio-devices-changed", ());
+            }
+        }));
+    }
+
     let room = state.room.lock().await;
     room.connect_with_token(&livekit_url, &token)
         .await
@@ -430,6 +460,13 @@ async fn connect_with_token(
 
 #[tauri::command]
 async fn disconnect(state: tauri::State<'_, VisioState>) -> Result<(), String> {
+    // Stop audio engine (capture + playout) so the microphone is released.
+    {
+        let mut engine = state.audio_engine.lock().unwrap_or_else(|e| e.into_inner());
+        engine.stop_capture();
+        engine.stop_playout();
+    }
+
     let room = state.room.lock().await;
     room.disconnect().await;
     Ok(())
@@ -1487,19 +1524,10 @@ pub fn run() {
     let controls = room_manager.controls();
     let chat = room_manager.chat();
 
-    let mut audio_engine_instance = audio_engine::create_audio_engine(None, None);
-    audio_engine_instance
-        .start_playout(playout_buffer.clone())
-        .expect("failed to start audio playout");
-
-    // Register device-change listener so the frontend can re-enumerate devices
-    // when headphones are plugged/unplugged.
-    audio_engine_instance.set_device_change_callback(Arc::new(move || {
-        tracing::info!("audio devices changed — re-enumerating");
-        if let Some(app) = APP_HANDLE.get() {
-            let _ = app.emit("audio-devices-changed", ());
-        }
-    }));
+    // Audio engine is created eagerly (so device enumeration works) but
+    // playout is NOT started until the user actually connects to a room.
+    // This avoids grabbing the microphone / audio device at app startup.
+    let audio_engine_instance = audio_engine::create_audio_engine(None, None);
 
     let room_arc = Arc::new(Mutex::new(room_manager));
 
@@ -1630,13 +1658,14 @@ pub fn run() {
                 tracing::info!("window close requested, disconnecting gracefully");
                 let state: tauri::State<'_, VisioState> = window.state();
                 let room = state.room.clone();
-                // Stop audio/camera capture before disconnect
+                // Stop audio engine (capture + playout) before disconnect
                 {
                     let mut engine = state
                         .audio_engine
                         .lock()
                         .unwrap_or_else(|e| e.into_inner());
                     engine.stop_capture();
+                    engine.stop_playout();
                 }
                 #[cfg(target_os = "macos")]
                 {
