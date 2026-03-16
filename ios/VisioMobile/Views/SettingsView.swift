@@ -15,7 +15,7 @@ struct SettingsView: View {
     @State private var newInstance: String = ""
 
     private var lang: String { manager.currentLang }
-    private var isDark: Bool { manager.currentTheme == "dark" }
+    private var isDark: Bool { theme == "dark" }
 
     /// Normalizes a meet instance by stripping protocol prefixes and trailing slashes.
     /// Converts "https://meet.example.com/" to "meet.example.com".
@@ -128,6 +128,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .preferredColorScheme(isDark ? .dark : .light)
         .onAppear { load() }
     }
 
