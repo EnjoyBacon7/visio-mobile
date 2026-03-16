@@ -812,18 +812,46 @@ extension VisioManager: VisioEventListener {
                 self.participants.removeAll { $0.sid == sid }
                 self.handRaisedMap.removeValue(forKey: sid)
 
-            case .trackMuted(let sid, _):
+            case .trackMuted(let sid, let source):
                 if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
                     var p = self.participants[idx]
-                    p.isMuted = true
+                    switch source {
+                    case .microphone:
+                        p.isMuted = true
+                    case .camera:
+                        if let trackSid = p.videoTrackSid {
+                            VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
+                        }
+                        p.hasVideo = false
+                        p.videoTrackSid = nil
+                    case .screenShare:
+                        if let trackSid = p.screenShareTrackSid {
+                            VideoFrameRouter.shared.invalidateTrack(trackSid: trackSid)
+                        }
+                        p.hasScreenShare = false
+                        p.screenShareTrackSid = nil
+                    case .unknown:
+                        break
+                    }
                     self.participants[idx] = p
                 }
 
-            case .trackUnmuted(let sid, _):
-                if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
-                    var p = self.participants[idx]
-                    p.isMuted = false
-                    self.participants[idx] = p
+            case .trackUnmuted(let sid, let source):
+                switch source {
+                case .microphone:
+                    if let idx = self.participants.firstIndex(where: { $0.sid == sid }) {
+                        var p = self.participants[idx]
+                        p.isMuted = false
+                        self.participants[idx] = p
+                    }
+                case .camera, .screenShare:
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                        guard let self else { return }
+                        let updated = self.client.participants()
+                        DispatchQueue.main.async { self.participants = updated }
+                    }
+                case .unknown:
+                    break
                 }
 
             case .activeSpeakersChanged(let sids):
@@ -847,13 +875,19 @@ extension VisioManager: VisioEventListener {
                     if !self.videoTrackSids.contains(sid) {
                         self.videoTrackSids.append(sid)
                     }
+                    let participantSid = info.participantSid
+                    let isScreenShare = info.source == .screenShare
                     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                        self?.client.startVideoRenderer(trackSid: sid)
-                    }
-                    if info.source == .screenShare {
-                        // Clear first so re-sharing by the same participant triggers onChange
-                        self.lastScreenShareParticipantSid = nil
-                        self.lastScreenShareParticipantSid = info.participantSid
+                        guard let self else { return }
+                        self.client.startVideoRenderer(trackSid: sid)
+                        let updated = self.client.participants()
+                        DispatchQueue.main.async {
+                            self.participants = updated
+                            if isScreenShare {
+                                self.lastScreenShareParticipantSid = nil
+                                self.lastScreenShareParticipantSid = participantSid
+                            }
+                        }
                     }
                 }
 
