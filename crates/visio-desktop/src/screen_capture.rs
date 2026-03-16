@@ -199,7 +199,9 @@ impl Drop for ScreenCapture {
 }
 
 /// Convert an RGBA image to an I420 buffer.
-fn rgba_to_i420(rgba: &[u8], width: u32, height: u32) -> I420Buffer {
+/// `rgba_stride` is the number of pixels per row in the source RGBA buffer
+/// (may differ from `width` when dimensions are masked to even).
+fn rgba_to_i420(rgba: &[u8], width: u32, height: u32, rgba_stride: usize) -> I420Buffer {
     let w = width as usize;
     let h = height as usize;
     let mut buf = I420Buffer::new(width, height);
@@ -209,7 +211,7 @@ fn rgba_to_i420(rgba: &[u8], width: u32, height: u32) -> I420Buffer {
 
     for row in 0..h {
         for col in 0..w {
-            let px = (row * w + col) * 4;
+            let px = (row * rgba_stride + col) * 4;
             let r = rgba[px] as f32;
             let g = rgba[px + 1] as f32;
             let b = rgba[px + 2] as f32;
@@ -227,7 +229,7 @@ fn rgba_to_i420(rgba: &[u8], width: u32, height: u32) -> I420Buffer {
             let mut b_sum = 0u32;
             for dy in 0..2 {
                 for dx in 0..2 {
-                    let px = ((row * 2 + dy) * w + (col * 2 + dx)) * 4;
+                    let px = ((row * 2 + dy) * rgba_stride + (col * 2 + dx)) * 4;
                     r_sum += rgba[px] as u32;
                     g_sum += rgba[px + 1] as u32;
                     b_sum += rgba[px + 2] as u32;
@@ -254,12 +256,13 @@ fn capture_and_convert(
 ) -> Result<(I420Buffer, u32, u32), String> {
     let img = capturer()?;
     let rgba_img = img.to_rgba8();
+    let actual_width = rgba_img.width() as usize;
     let width = rgba_img.width() & !1;
     let height = rgba_img.height() & !1;
     if width == 0 || height == 0 {
         return Err("zero dimensions".into());
     }
-    let i420 = rgba_to_i420(&rgba_img, width, height);
+    let i420 = rgba_to_i420(&rgba_img, width, height, actual_width);
     Ok((i420, width, height))
 }
 

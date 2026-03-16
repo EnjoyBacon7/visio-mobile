@@ -33,9 +33,12 @@ const K_OUTPUT_ELEMENT: u32 = 0; // Speaker
 
 // Property IDs
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_ENABLE_IO: u32 = 2003;
+const K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE: u32 = 2002;
 const K_AUDIO_UNIT_PROPERTY_STREAM_FORMAT: u32 = 8;
 const K_AUDIO_UNIT_PROPERTY_SET_RENDER_CALLBACK: u32 = 23;
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_SET_INPUT_CALLBACK: u32 = 2005;
+const K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFString: u32 = 0x6C6E616D; // 'lnam'
+const K_AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT: u32 = 0x6F757470; // 'outp'
 
 // Format constants
 const K_AUDIO_FORMAT_LINEAR_PCM: u32 = u32::from_be_bytes(*b"lpcm");
@@ -154,6 +157,130 @@ unsafe extern "C" {
         listener: unsafe extern "C" fn(u32, u32, *const AudioObjectPropertyAddress, *mut c_void) -> OSStatus,
         client_data: *mut c_void,
     ) -> OSStatus;
+
+    fn AudioObjectGetPropertyDataSize(
+        object_id: u32,
+        address: *const AudioObjectPropertyAddress,
+        qualifier_data_size: u32,
+        qualifier_data: *const c_void,
+        out_data_size: *mut u32,
+    ) -> OSStatus;
+
+    fn AudioObjectGetPropertyData(
+        object_id: u32,
+        address: *const AudioObjectPropertyAddress,
+        qualifier_data_size: u32,
+        qualifier_data: *const c_void,
+        io_data_size: *mut u32,
+        out_data: *mut c_void,
+    ) -> OSStatus;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    fn CFStringGetCString(
+        string: *const c_void,
+        buffer: *mut u8,
+        buffer_size: i64,
+        encoding: u32,
+    ) -> bool;
+    fn CFRelease(cf: *const c_void);
+}
+
+const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
+
+/// Resolve a CoreAudio device ID by matching against device name.
+fn resolve_device_id_by_name(name: &str, output: bool) -> Option<u32> {
+    unsafe {
+        // Get list of all audio devices
+        let address = AudioObjectPropertyAddress {
+            selector: K_AUDIO_HARDWARE_PROPERTY_DEVICES,
+            scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+            element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+        };
+        let mut size: u32 = 0;
+        let status = AudioObjectGetPropertyDataSize(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            &address,
+            0,
+            std::ptr::null(),
+            &mut size,
+        );
+        if status != 0 || size == 0 {
+            return None;
+        }
+        let device_count = size as usize / std::mem::size_of::<u32>();
+        let mut device_ids = vec![0u32; device_count];
+        let status = AudioObjectGetPropertyData(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            &address,
+            0,
+            std::ptr::null(),
+            &mut size,
+            device_ids.as_mut_ptr() as *mut c_void,
+        );
+        if status != 0 {
+            return None;
+        }
+
+        let scope = if output {
+            K_AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT
+        } else {
+            0x696E7074 // 'inpt'
+        };
+
+        for &device_id in &device_ids {
+            // Check if device has streams in the requested scope
+            let stream_addr = AudioObjectPropertyAddress {
+                selector: 0x73746D23, // 'stm#' kAudioDevicePropertyStreams
+                scope,
+                element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+            };
+            let mut stream_size: u32 = 0;
+            let status = AudioObjectGetPropertyDataSize(
+                device_id,
+                &stream_addr,
+                0,
+                std::ptr::null(),
+                &mut stream_size,
+            );
+            if status != 0 || stream_size == 0 {
+                continue; // No streams in this scope
+            }
+
+            // Get device name
+            let name_addr = AudioObjectPropertyAddress {
+                selector: K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFString,
+                scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+                element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+            };
+            let mut cf_name: *const c_void = std::ptr::null();
+            let mut name_size = std::mem::size_of::<*const c_void>() as u32;
+            let status = AudioObjectGetPropertyData(
+                device_id,
+                &name_addr,
+                0,
+                std::ptr::null(),
+                &mut name_size,
+                &mut cf_name as *mut _ as *mut c_void,
+            );
+            if status != 0 || cf_name.is_null() {
+                continue;
+            }
+            let mut buf = [0u8; 256];
+            let ok = CFStringGetCString(cf_name, buf.as_mut_ptr(), 256, K_CF_STRING_ENCODING_UTF8);
+            CFRelease(cf_name);
+            if !ok {
+                continue;
+            }
+            let device_name = std::ffi::CStr::from_ptr(buf.as_ptr() as *const i8)
+                .to_string_lossy();
+            if device_name == name {
+                return Some(device_id);
+            }
+        }
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +406,7 @@ pub struct MacAudioEngine {
     input_wrapper: Option<Box<InputCallbackWrapper>>,
     drain_running: Option<Arc<AtomicBool>>,
     _input_device: Option<String>,
-    _output_device: Option<String>,
+    output_device: Option<String>,
     device_change_cb: Option<Box<DeviceChangeCallback>>,
 }
 
@@ -295,7 +422,7 @@ impl MacAudioEngine {
             input_wrapper: None,
             drain_running: None,
             _input_device: input_device.map(String::from),
-            _output_device: output_device.map(String::from),
+            output_device: output_device.map(String::from),
             device_change_cb: None,
         }
     }
@@ -319,6 +446,27 @@ impl MacAudioEngine {
             let status = AudioComponentInstanceNew(component, &mut unit);
             if status != 0 {
                 return Err(format!("AudioComponentInstanceNew failed: {status}"));
+            }
+
+            // Set output device if specified (before enabling IO)
+            if let Some(ref device_name) = self.output_device {
+                if let Some(device_id) = resolve_device_id_by_name(device_name, true) {
+                    let status = AudioUnitSetProperty(
+                        unit,
+                        K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE,
+                        K_AUDIO_UNIT_SCOPE_GLOBAL,
+                        K_OUTPUT_ELEMENT,
+                        &device_id as *const u32 as *const c_void,
+                        std::mem::size_of::<u32>() as u32,
+                    );
+                    if status != 0 {
+                        tracing::warn!("failed to set output device to {device_name:?}: {status}");
+                    } else {
+                        tracing::info!("audio output device set to {device_name:?} (id={device_id})");
+                    }
+                } else {
+                    tracing::warn!("output device {device_name:?} not found, using default");
+                }
             }
 
             // Enable input (microphone)
