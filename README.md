@@ -385,42 +385,28 @@ scripts/            Build scripts (Android NDK, iOS fat libs)
 - Room URL validation with real-time debounced feedback
 - Settings view (display name, language, mic/camera on join)
 
-## Recent additions (v0.5.0)
+## Changelog
 
-- **Desktop CI/CD**: Automated builds for macOS, Windows, and Linux via GitHub Actions with GitHub Releases
-- **Room history**: Recent rooms displayed on the home screen with direct-join on tap (all platforms)
-- **Active speaker auto-focus**: Automatically switches focus to the speaking participant when 3+ participants are present, with manual pin override (all platforms)
-- **OIDC system browser login**: iOS uses ASWebAuthenticationSession (Safari sheet), Android uses Chrome Custom Tabs — enabling password manager and SSO session reuse
-- **Lobby/waiting room UX (Desktop)**: Clear "Waiting for host" overlay when placed in a waiting room, instead of a stuck "Connecting" state
-- **Screen share improvements (Desktop)**: Fixed white screen sent to remote participants (RGBA stride mismatch), use `object-fit: contain` to prevent cropping
-- **Audio output device selection (Desktop)**: macOS AudioUnit now correctly routes audio to selected USB/Bluetooth devices (e.g., Jabra)
-- **Camera permission handling (Desktop)**: Explicit macOS camera permission request before AVCaptureSession, preventing silent capture failure
-- **Audio lifecycle (Desktop)**: Microphone only grabbed when connected to a room, not at app startup — other apps can use audio freely
-- **White screen prevention (Desktop)**: Throttled video frame updates and track cleanup to prevent memory-driven UI crashes in large calls
-- **Dynamic video grid (Desktop)**: Uniform tile sizes for any participant count (dynamic column/row calculation replaces fixed 3x3 cap)
-- **Auto-enable mic/camera on join (Desktop)**: Reads user settings and auto-activates mic/camera when joining a call
-- **App renamed to "Visio Mobile"**: Proper display name in macOS Spotlight, Windows Start menu, and Linux launchers
-- **iOS camera & audio fixes**: Camera/mic permissions requested before use, audio interruption handling, device orientation rotation, video frame buffering for late-joining views
-- **Android stability fixes**: Bluetooth auto-switch, fullscreen screen share, green frame flash, OIDC WebView auth
-- **VP9 codec**: Camera tracks use VP9 for better quality at lower bitrate (mobile platforms)
-- **Screen share audio** (macOS): ScreenCaptureKit-based audio capture for screen sharing
-- **Meet parity**: Connect timeout (60s), disconnect reasons, RNNoise noise reduction, device hot-swap detection, participant context menu, push-to-talk, admin actions (mute everyone, mute participant)
-- **E2E testing infrastructure**: visio-bot (Rust), cross-platform orchestrator, Maestro (Android), Playwright (Desktop)
-- **Rebranding**: New app icons and logo across all platforms
+### v0.5.0
+
+- **Desktop app** — Full cross-platform desktop support (macOS, Windows, Linux) with CI/CD builds and GitHub Releases
+- **Room history** — Recent rooms on the home screen with one-tap rejoin on all platforms
+- **Active speaker** — Auto-focus on the speaking participant in large calls, with manual pin override
+- **Screen sharing (Desktop)** — Screen and window capture with audio (macOS), proper aspect ratio display
+- **OIDC login via system browser** — iOS (Safari sheet) and Android (Chrome Custom Tabs) for password manager and SSO session reuse
+- **Audio device selection (Desktop)** — USB and Bluetooth output device routing (e.g., Jabra, headsets)
+- **Meet parity** — VP9 codec, noise reduction (RNNoise), admin actions (mute all/participant), push-to-talk, participant context menu, device hot-swap
+- **Stability** — Memory leak fixes for large calls, proper audio lifecycle, camera permission handling
+- **Rebranding** — New app icons and identity across all platforms
+- **E2E testing** — Automated cross-platform test infrastructure (visio-bot, Maestro, Playwright)
 
 ### v0.4.0
 
-- **OIDC / ProConnect authentication**: Full login flow with session persistence in platform keychain, user profile display, and logout
-- **Room creation**: Authenticated users can create rooms with public, trusted, or restricted access levels
-- **Waiting room / lobby**: Host notification banner, participant admit/deny, waiting room section in participant list
-- **Restricted rooms**: Invitation-only rooms with user search and member management
-- **Background blur & replacement**: On-device AI-powered background processing using selfie segmentation (ONNX Runtime), with 8 built-in replacement images
-- **Animated reactions**: Real-time emoji reactions via LiveKit data channels with floating animation overlay
-- **Wake lock**: Screen stays on during active calls; audio continues when screen is manually turned off (Android partial wake lock, iOS idle timer disabled)
-- **Independent audio routing**: Select input and output audio devices separately (e.g., Bluetooth mic + phone speaker)
-- **In-call settings panel**: Tabbed bottom sheet for microphone/camera/notification/background settings during a call
-- **Network resilience**: Automatic reconnection with UI banner (via LiveKit SDK)
-- **Adaptive context modes**: Automatic Office/Pedestrian/Car detection with adapted UI, active speaker view in pedestrian mode, audio-only car mode, Bluetooth auto-routing, and manual override
+- **Authentication** — OIDC / ProConnect login with persistent sessions, room creation (public/trusted/restricted), waiting room management
+- **Background processing** — On-device AI background blur and replacement (ONNX Runtime selfie segmentation)
+- **In-call features** — Animated reactions, hand raise, chat, audio device picker, in-call settings panel
+- **Adaptive modes** — Automatic Office/Pedestrian/Car context detection with adapted UI and audio routing
+- **Platform polish** — Wake lock, network resilience, edge-to-edge display (Android), CallKit + PiP (iOS)
 
 ## What's next
 
