@@ -145,6 +145,14 @@ class VisioManager: ObservableObject {
                 let msgs = self.client.chatMessages()
                 let state = self.client.connectionState()
                 let hand = self.client.isHandRaised()
+
+                // Start mic capture on this background thread (not main)
+                if mic {
+                    let capture = AudioCapture()
+                    capture.start()
+                    DispatchQueue.main.async { self.audioCapture = capture }
+                }
+
                 DispatchQueue.main.async {
                     self.participants = parts
                     self.isMicEnabled = mic
@@ -158,13 +166,6 @@ class VisioManager: ObservableObject {
                         let capture = CameraCapture()
                         capture.start()
                         self.cameraCapture = capture
-                    }
-
-                    // Start mic capture if mic was enabled on join
-                    if mic {
-                        let capture = AudioCapture()
-                        capture.start()
-                        self.audioCapture = capture
                     }
 
                     // Start audio playout now that connection is established
@@ -202,6 +203,14 @@ class VisioManager: ObservableObject {
                 let mic = self.client.isMicrophoneEnabled()
                 let cam = self.client.isCameraEnabled()
                 let state = self.client.connectionState()
+
+                // Start mic capture on background thread
+                if mic {
+                    let capture = AudioCapture()
+                    capture.start()
+                    DispatchQueue.main.async { self.audioCapture = capture }
+                }
+
                 DispatchQueue.main.async {
                     self.participants = parts
                     self.isMicEnabled = mic
@@ -212,11 +221,6 @@ class VisioManager: ObservableObject {
                         let capture = CameraCapture()
                         capture.start()
                         self.cameraCapture = capture
-                    }
-                    if mic {
-                        let capture = AudioCapture()
-                        capture.start()
-                        self.audioCapture = capture
                     }
                     // Start audio playout now that connection is established
                     self.startAudioPlayout()
@@ -295,19 +299,26 @@ class VisioManager: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
+                if enabled {
+                    // Configure audio session before enabling mic
+                    Self.configureAudioSession()
+                }
                 try self.client.setMicrophoneEnabled(enabled: enabled)
+
+                if enabled {
+                    // Start mic capture on background thread (AVAudioEngine must not start on main)
+                    if self.audioCapture == nil {
+                        let capture = AudioCapture()
+                        capture.start()
+                        DispatchQueue.main.async { self.audioCapture = capture }
+                    }
+                } else {
+                    self.audioCapture?.stop()
+                    DispatchQueue.main.async { self.audioCapture = nil }
+                }
+
                 DispatchQueue.main.async {
                     self.isMicEnabled = enabled
-                    if enabled {
-                        if self.audioCapture == nil {
-                            let capture = AudioCapture()
-                            capture.start()
-                            self.audioCapture = capture
-                        }
-                    } else {
-                        self.audioCapture?.stop()
-                        self.audioCapture = nil
-                    }
                 }
             } catch {
                 DispatchQueue.main.async {
