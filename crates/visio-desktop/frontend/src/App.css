@@ -687,6 +687,11 @@ main {
   display: block;
 }
 
+.tile-video-screen {
+  object-fit: contain;
+  background: #000;
+}
+
 .tile-avatar {
   display: flex;
   align-items: center;

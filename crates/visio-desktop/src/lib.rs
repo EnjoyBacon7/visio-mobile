@@ -557,6 +557,11 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
                 .unwrap_or_else(|e| e.into_inner());
             if cam.is_none() {
                 if let Some(source) = source {
+                    // Must request permission before starting AVCaptureSession,
+                    // otherwise startRunning silently produces no frames.
+                    if !camera_macos::request_camera_permission() {
+                        return Err("Camera permission denied".into());
+                    }
                     let capture = camera_macos::MacCameraCapture::start(source)
                         .map_err(|e| format!("camera capture: {e}"))?;
                     *cam = Some(capture);

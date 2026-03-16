@@ -346,7 +346,7 @@ function ParticipantTile({
     <div className={`tile ${isActiveSpeaker && !isScreenShare ? "tile-active-speaker" : ""}`}>
       {videoSrc ? (
         <img
-          className="tile-video"
+          className={`tile-video${isScreenShare ? " tile-video-screen" : ""}`}
           src={`data:image/jpeg;base64,${videoSrc}`}
           alt=""
         />

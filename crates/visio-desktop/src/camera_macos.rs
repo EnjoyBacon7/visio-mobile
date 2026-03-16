@@ -345,6 +345,38 @@ define_class!(
 );
 
 // ---------------------------------------------------------------------------
+// Permission helpers
+// ---------------------------------------------------------------------------
+
+/// Request camera permission synchronously (blocks until user responds).
+/// Returns true if permission was granted.
+pub fn request_camera_permission() -> bool {
+    use std::sync::mpsc;
+    unsafe {
+        let cls = match AnyClass::get(c"AVCaptureDevice") {
+            Some(c) => c,
+            None => return false,
+        };
+        // Check current status first: 0=notDetermined, 3=authorized
+        let status: i64 = msg_send![cls, authorizationStatusForMediaType: AVMediaTypeVideo];
+        if status == 3 {
+            return true;
+        }
+        if status == 2 || status == 1 {
+            // denied or restricted
+            return false;
+        }
+        // notDetermined — request access
+        let (tx, rx) = mpsc::channel();
+        let block = block2::StackBlock::new(move |granted: Bool| {
+            let _ = tx.send(granted.as_bool());
+        });
+        let _: () = msg_send![cls, requestAccessForMediaType: AVMediaTypeVideo, completionHandler: &*block];
+        rx.recv().unwrap_or(false)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
