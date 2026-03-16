@@ -50,14 +50,16 @@ struct SettingsView: View {
                 }
 
                 Section(Strings.t("settings.theme", lang: lang)) {
-                    Picker(Strings.t("settings.theme", lang: lang), selection: $theme) {
-                        Text(Strings.t("settings.theme.light", lang: lang)).tag("light")
-                        Text(Strings.t("settings.theme.dark", lang: lang)).tag("dark")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .onChange(of: theme) { newTheme in
-                        manager.setTheme(newTheme)
+                    ForEach(["light", "dark"], id: \.self) { option in
+                        ThemeOptionRow(
+                            label: Strings.t("settings.theme.\(option)", lang: lang),
+                            isSelected: theme == option,
+                            isDark: isDark,
+                            onTap: {
+                                theme = option
+                                manager.setTheme(option)
+                            }
+                        )
                     }
                 }
 
@@ -158,6 +160,51 @@ struct SettingsView: View {
             manager.startContextDetection()
         }
         manager.client.setMeetInstances(instances: meetInstances)
+    }
+}
+
+private struct PressedKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
+private struct ThemeRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .preference(key: PressedKey.self, value: configuration.isPressed)
+    }
+}
+
+private struct ThemeOptionRow: View {
+    let label: String
+    let isSelected: Bool
+    let isDark: Bool
+    let onTap: () -> Void
+
+    @State private var pressed = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Text(label)
+                    .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(VisioColors.primary500)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ThemeRowStyle())
+        .onPreferenceChange(PressedKey.self) { pressed = $0 }
+        .listRowBackground(
+            pressed
+                ? VisioColors.surfaceVariant(dark: isDark)
+                : VisioColors.surface(dark: isDark)
+        )
     }
 }
 
