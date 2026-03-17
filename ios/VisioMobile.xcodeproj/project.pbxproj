@@ -230,6 +230,20 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		A10007000000000000000003 /* Build Rust FFI Library */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust FFI Library";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Determine Rust target from Xcode SDK\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n    RUST_TARGET=\"aarch64-apple-ios-sim\"\n    BUILD_ARG=\"sim\"\nelse\n    RUST_TARGET=\"aarch64-apple-ios\"\n    BUILD_ARG=\"device\"\nfi\n\nLIB_PATH=\"${PROJECT_DIR}/../target/${RUST_TARGET}/release/libvisio_ffi.a\"\n\n# Only build if the library is missing\nif [ ! -f \"$LIB_PATH\" ]; then\n    echo \"Building libvisio_ffi.a for ${RUST_TARGET}...\"\n    \"${PROJECT_DIR}/../scripts/build-ios.sh\" \"$BUILD_ARG\"\nelse\n    echo \"libvisio_ffi.a already built for ${RUST_TARGET}, skipping.\"\nfi\n";
+		};
 		A10007000000000000000002 /* Copy i18n JSON */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -274,6 +288,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A10008000000000000000001 /* Build configuration list for PBXNativeTarget "VisioMobile" */;
 			buildPhases = (
+				A10007000000000000000003 /* Build Rust FFI Library */,
 				A10007000000000000000002 /* Copy i18n JSON */,
 				A10007000000000000000001 /* Sources */,
 				A10004000000000000000001 /* Frameworks */,
@@ -396,7 +411,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/release";
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios/release",
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/release",
+				);
 				MARKETING_VERSION = 0.5.0;
 				OTHER_LDFLAGS = (
 					"-lvisio_ffi",
@@ -429,7 +447,10 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/aarch64-apple-ios/release";
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios/release",
+					"$(PROJECT_DIR)/../target/aarch64-apple-ios-sim/release",
+				);
 				MARKETING_VERSION = 0.5.0;
 				OTHER_LDFLAGS = (
 					"-lvisio_ffi",
