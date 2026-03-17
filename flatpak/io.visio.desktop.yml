@@ -44,6 +44,7 @@ modules:
       append-path: /app/bin
       env:
         CARGO_HOME: /run/build/visio-desktop/cargo
+        LIBCLANG_PATH: /usr/lib
     build-commands:
       # Configure cargo for vendored (offline) deps
       - |
