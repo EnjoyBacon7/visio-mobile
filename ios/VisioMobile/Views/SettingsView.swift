@@ -131,7 +131,6 @@ struct SettingsView: View {
             .appToolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(Strings.t("settings.done", lang: lang)) {
-                        save()
                         dismiss()
                     }
                     .foregroundStyle(VisioColors.primary500)
@@ -139,6 +138,7 @@ struct SettingsView: View {
             }
         }
         .preferredColorScheme(isDark ? .dark : .light)
+        .onDisappear { save() }
         .onAppear { load() }
     }
 
