@@ -64,7 +64,9 @@ jobs:
             libasound2-dev \
             libpipewire-0.3-dev \
             libspa-0.2-dev \
-            libgbm-dev
+            libgbm-dev \
+            flatpak \
+            flatpak-builder
 
       # --- Node.js + frontend build ---
       - name: Set up Node.js
@@ -90,6 +92,17 @@ jobs:
         env:
           # Disable Apple code signing in CI (no certificate yet for Developer ID)
           APPLE_SIGNING_IDENTITY: "-"
+
+      # --- Flatpak build (Linux only) ---
+      - name: Install Flatpak runtime
+        if: matrix.platform == 'linux'
+        run: |
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.gnome.Platform//46 org.gnome.Sdk//46
+
+      - name: Build Flatpak bundle
+        if: matrix.platform == 'linux'
+        run: flatpak/build-flatpak.sh
 
       # --- Upload artifacts ---
       - name: Upload macOS artifacts
@@ -118,6 +131,7 @@ jobs:
           path: |
             target/release/bundle/appimage/*.AppImage
             target/release/bundle/deb/*.deb
+            target/release/bundle/flatpak/*.flatpak
 
   # --- GitHub Release with all artifacts ---
   release:
@@ -146,7 +160,7 @@ jobs:
           FILES=()
           while IFS= read -r -d '' f; do
             FILES+=("$f")
-          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) -print0)
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.flatpak" \) -print0)
 
           if [ ${#FILES[@]} -gt 0 ]; then
             gh release create "$TAG" \

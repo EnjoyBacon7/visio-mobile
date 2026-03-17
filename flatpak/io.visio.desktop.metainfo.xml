@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.visio.desktop</id>
+  <name>Visio Mobile</name>
+  <summary>Open-source video conferencing client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <description>
+    <p>
+      Visio Mobile is an open-source native video conferencing client
+      built on the LiveKit real-time communication platform.
+      Available on Android, iOS, and Desktop.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/AgoraFr/visio-mobile</url>
+  <url type="bugtracker">https://github.com/AgoraFr/visio-mobile/issues</url>
+  <launchable type="desktop-id">io.visio.desktop.desktop</launchable>
+  <content_rating type="oars-1.1" />
+  <categories>
+    <category>Network</category>
+    <category>VideoConference</category>
+  </categories>
+</component>

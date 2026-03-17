@@ -1,0 +1,55 @@
+app-id: io.visio.desktop
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: visio-desktop
+
+finish-args:
+  # Display
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  # Network (WebRTC/LiveKit)
+  - --share=network
+  # Audio (PulseAudio + PipeWire for AEC)
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # Camera
+  - --device=all
+  # Screen share via XDG portal
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.ScreenCast
+  # GPU acceleration
+  - --device=dri
+  # Deep link handler
+  - --talk-name=org.freedesktop.portal.URIHandler
+
+modules:
+  - name: visio-desktop
+    buildsystem: simple
+    build-commands:
+      # Binary
+      - install -Dm755 visio-desktop /app/bin/visio-desktop
+      # Desktop entry
+      - install -Dm644 io.visio.desktop.desktop /app/share/applications/io.visio.desktop.desktop
+      # AppStream metadata
+      - install -Dm644 io.visio.desktop.metainfo.xml /app/share/metainfo/io.visio.desktop.metainfo.xml
+      # Icons
+      - install -Dm644 icon-32.png /app/share/icons/hicolor/32x32/apps/io.visio.desktop.png
+      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/io.visio.desktop.png
+      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/io.visio.desktop.png
+      # Resources: i18n
+      - mkdir -p /app/share/visio/i18n
+      - cp i18n/*.json /app/share/visio/i18n/
+      # Resources: backgrounds
+      - mkdir -p /app/share/visio/backgrounds
+      - cp backgrounds/*.jpg /app/share/visio/backgrounds/
+      # Resources: models
+      - mkdir -p /app/share/visio/models
+      - cp models/*.onnx /app/share/visio/models/ || true
+      # Frontend dist (Tauri webview)
+      - mkdir -p /app/share/visio/frontend
+      - cp -r frontend-dist/* /app/share/visio/frontend/
+    sources:
+      - type: dir
+        path: staging

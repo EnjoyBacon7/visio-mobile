@@ -1,0 +1,4 @@
+staging/
+build/
+repo/
+.flatpak-builder/
