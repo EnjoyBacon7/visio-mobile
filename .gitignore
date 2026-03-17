@@ -53,7 +53,7 @@ docs/plans/
 vendor/bundle/
 
 # Cargo vendor (used by Flatpak build)
-/vendor/
+/cargo-vendor/
 Gemfile.lock
 
 # Signing

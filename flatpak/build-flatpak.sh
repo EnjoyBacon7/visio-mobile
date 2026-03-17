@@ -6,7 +6,7 @@
 #   - org.gnome.Platform//46 + org.gnome.Sdk//46
 #   - org.freedesktop.Sdk.Extension.rust-stable//24.08
 #   - Frontend already built (crates/visio-desktop/frontend/dist/)
-#   - cargo vendor already run (vendor/ directory exists)
+#   - cargo vendor cargo-vendor already run (cargo-vendor/ directory exists)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,9 +15,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # 1. Vendor cargo deps if not already done
-if [ ! -d "vendor" ]; then
+if [ ! -d "cargo-vendor" ]; then
     echo "==> Vendoring cargo dependencies"
-    cargo vendor > /dev/null
+    cargo vendor cargo-vendor > /dev/null
 fi
 
 # 2. Build frontend if not already done

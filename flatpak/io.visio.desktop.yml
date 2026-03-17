@@ -53,7 +53,7 @@ modules:
         replace-with = "vendored-sources"
 
         [source.vendored-sources]
-        directory = "vendor"
+        directory = "cargo-vendor"
         VENDORCFG
       # Build the Tauri desktop binary
       - cargo build --release --offline -p visio-desktop

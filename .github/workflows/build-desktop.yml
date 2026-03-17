@@ -104,7 +104,7 @@ jobs:
 
       - name: Vendor cargo dependencies for Flatpak
         if: matrix.platform == 'linux'
-        run: cargo vendor
+        run: cargo vendor cargo-vendor
 
       - name: Build Flatpak bundle
         if: matrix.platform == 'linux'
