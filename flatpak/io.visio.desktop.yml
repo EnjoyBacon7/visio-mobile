@@ -2,8 +2,6 @@ app-id: io.visio.desktop
 runtime: org.gnome.Platform
 runtime-version: '46'
 sdk: org.gnome.Sdk
-sdk-extensions:
-  - org.freedesktop.Sdk.Extension.rust-stable
 command: visio-desktop
 
 finish-args:
@@ -24,16 +22,24 @@ finish-args:
   # GPU acceleration
   - --device=dri
 
-build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
-  env:
-    CARGO_HOME: /run/build/visio-desktop/cargo
-    # Tauri needs to find the frontend dist at build time
-    TAURI_FRONTEND_DIST: /run/build/visio-desktop/crates/visio-desktop/frontend/dist
-
 modules:
+  # Install Rust toolchain directly (avoids SDK extension version mismatch)
+  - name: rust-toolchain
+    buildsystem: simple
+    cleanup:
+      - '*'
+    build-commands:
+      - ./install.sh --prefix=/usr --disable-ldconfig
+    sources:
+      - type: archive
+        url: https://static.rust-lang.org/dist/rust-1.85.0-x86_64-unknown-linux-gnu.tar.xz
+        sha256: 6f8b323ed2a34ccf0031631b85d79e1133da662094566bc910432da9bd3a5b42
+
   - name: visio-desktop
     buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/visio-desktop/cargo
     build-commands:
       # Configure cargo for vendored (offline) deps
       - |
