@@ -40,7 +40,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 32) {
                     VStack(spacing: 8) {
-                    VisioLogo(size: 96)
+                        VisioLogo(size: 96)
                         Text(Strings.t("app.title", lang: lang))
                             .font(.largeTitle)
                             .fontWeight(.bold)
@@ -48,8 +48,8 @@ struct HomeView: View {
                     }
                     .padding(.top, 16)
                     .background(GeometryReader { geo in
-                        Color.clear.onChange(of: geo.frame(in: .named("scroll")).minY) {
-                            showCompactHeader = $0 < -20
+                        Color.clear.onChange(of: geo.frame(in: .named("scroll")).minY) { _, newValue in
+                            showCompactHeader = newValue < -20
                         }
                     })
 
