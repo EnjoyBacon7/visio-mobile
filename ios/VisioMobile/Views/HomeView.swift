@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var showCreateRoom: Bool = false
     @State private var roomHistory: [String] = []
     @State private var historyJoinPending: Bool = false
+    @State private var showCompactHeader: Bool = false
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
@@ -36,17 +37,21 @@ struct HomeView: View {
         ZStack {
             VisioColors.background(dark: isDark).ignoresSafeArea()
 
-            VStack(spacing: 32) {
-                Spacer()
-
-                // App branding with tricolore logo
-                VStack(spacing: 8) {
-                    VisioLogo(size: 96)
-                    Text(Strings.t("app.title", lang: lang))
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundStyle(VisioColors.onBackground(dark: isDark))
-                }
+            ScrollView {
+                VStack(spacing: 32) {
+                    VStack(spacing: 8) {
+                        VisioLogo(size: 96)
+                        Text(Strings.t("app.title", lang: lang))
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                    }
+                    .padding(.top, 16)
+                    .background(GeometryReader { geo in
+                        Color.clear.onChange(of: geo.frame(in: .named("scroll")).minY) { _, newValue in
+                            showCompactHeader = newValue < -20
+                        }
+                    })
 
                 Text(Strings.t("home.subtitle", lang: lang))
                     .font(.subheadline)
@@ -240,16 +245,26 @@ struct HomeView: View {
                     .padding(.horizontal, 32)
                 }
 
-                Spacer()
-                Spacer()
+                }
+                .padding(.bottom, 32)
             }
+            .coordinateSpace(name: "scroll")
         }
-        .navigationTitle(Strings.t("app.title", lang: lang))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
-        .toolbarBackground(VisioColors.surface(dark: isDark), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(VisioColors.background(dark: isDark), for: .navigationBar)
+        .toolbarBackground(showCompactHeader ? .visible : .hidden, for: .navigationBar)
         .appToolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    VisioLogo(size: 24)
+                    Text(Strings.t("app.title", lang: lang))
+                        .font(.headline)
+                        .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                }
+                .opacity(showCompactHeader ? 1 : 0)
+                .animation(.easeInOut(duration: 0.2), value: showCompactHeader)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showSettings = true
