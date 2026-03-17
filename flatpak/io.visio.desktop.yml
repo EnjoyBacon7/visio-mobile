@@ -35,8 +35,8 @@ modules:
       - ./install.sh --prefix=/app --disable-ldconfig
     sources:
       - type: archive
-        url: https://static.rust-lang.org/dist/rust-1.85.0-x86_64-unknown-linux-gnu.tar.xz
-        sha256: 6f8b323ed2a34ccf0031631b85d79e1133da662094566bc910432da9bd3a5b42
+        url: https://static.rust-lang.org/dist/rust-1.88.0-x86_64-unknown-linux-gnu.tar.xz
+        sha256: 7b5437c1d18a174faae253a18eac22c32288dccfc09ff78d5ee99b7467e21bca
 
   - name: visio-desktop
     buildsystem: simple
