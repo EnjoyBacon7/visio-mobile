@@ -47,6 +47,7 @@ modules:
       env:
         CARGO_HOME: /run/build/visio-desktop/cargo
         LIBCLANG_PATH: /usr/lib/sdk/llvm18/lib
+        LK_CUSTOM_WEBRTC: /run/build/visio-desktop/lk-webrtc/webrtc-linux-x64-release
     build-commands:
       # Configure cargo for vendored (offline) deps
       - |

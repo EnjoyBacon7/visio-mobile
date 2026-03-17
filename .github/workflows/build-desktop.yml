@@ -107,6 +107,14 @@ jobs:
         if: matrix.platform == 'linux'
         run: cargo vendor cargo-vendor
 
+      - name: Pre-download libwebrtc for Flatpak offline build
+        if: matrix.platform == 'linux'
+        run: |
+          WEBRTC_URL="https://github.com/livekit/rust-sdks/releases/download/webrtc-0001d84-2/webrtc-linux-x64-release.zip"
+          mkdir -p lk-webrtc
+          curl -L -o /tmp/webrtc.zip "$WEBRTC_URL"
+          cd lk-webrtc && unzip -qo /tmp/webrtc.zip && rm /tmp/webrtc.zip
+
       - name: Build Flatpak bundle
         if: matrix.platform == 'linux'
         run: flatpak/build-flatpak.sh
