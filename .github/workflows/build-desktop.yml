@@ -93,12 +93,19 @@ jobs:
           # Disable Apple code signing in CI (no certificate yet for Developer ID)
           APPLE_SIGNING_IDENTITY: "-"
 
-      # --- Flatpak build (Linux only) ---
-      - name: Install Flatpak runtime
+      # --- Flatpak build (Linux only, from source in GNOME SDK) ---
+      - name: Install Flatpak SDK and runtime
         if: matrix.platform == 'linux'
         run: |
           sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y flathub org.gnome.Platform//46 org.gnome.Sdk//46
+          sudo flatpak install -y flathub \
+            org.gnome.Platform//46 \
+            org.gnome.Sdk//46 \
+            org.freedesktop.Sdk.Extension.rust-stable//24.08
+
+      - name: Vendor cargo dependencies for Flatpak
+        if: matrix.platform == 'linux'
+        run: cargo vendor
 
       - name: Build Flatpak bundle
         if: matrix.platform == 'linux'

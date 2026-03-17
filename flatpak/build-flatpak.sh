@@ -1,57 +1,50 @@
 #!/usr/bin/env bash
-# Build a Flatpak bundle from the pre-built Tauri binary.
-# Run this AFTER `cargo tauri build` on Linux.
+# Build a Flatpak bundle from source inside the GNOME SDK.
+#
+# Prerequisites (CI installs these):
+#   - flatpak + flatpak-builder
+#   - org.gnome.Platform//46 + org.gnome.Sdk//46
+#   - org.freedesktop.Sdk.Extension.rust-stable//24.08
+#   - Frontend already built (crates/visio-desktop/frontend/dist/)
+#   - cargo vendor already run (vendor/ directory exists)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-STAGING="$SCRIPT_DIR/staging"
-BUNDLE_DIR="$PROJECT_ROOT/target/release/bundle"
-BINARY="$PROJECT_ROOT/target/release/visio-desktop"
 
-echo "==> Preparing staging directory"
-rm -rf "$STAGING"
-mkdir -p "$STAGING"
+cd "$PROJECT_ROOT"
 
-# Binary
-cp "$BINARY" "$STAGING/visio-desktop"
+# 1. Vendor cargo deps if not already done
+if [ ! -d "vendor" ]; then
+    echo "==> Vendoring cargo dependencies"
+    cargo vendor > /dev/null
+fi
 
-# Desktop + metadata
-cp "$SCRIPT_DIR/io.visio.desktop.desktop" "$STAGING/"
-cp "$SCRIPT_DIR/io.visio.desktop.metainfo.xml" "$STAGING/"
+# 2. Build frontend if not already done
+if [ ! -d "crates/visio-desktop/frontend/dist" ]; then
+    echo "==> Building frontend"
+    cd crates/visio-desktop/frontend
+    npm ci
+    npm run build
+    cd "$PROJECT_ROOT"
+fi
 
-# Icons
-cp "$PROJECT_ROOT/crates/visio-desktop/icons/32x32.png" "$STAGING/icon-32.png"
-cp "$PROJECT_ROOT/crates/visio-desktop/icons/128x128.png" "$STAGING/icon-128.png"
-cp "$PROJECT_ROOT/crates/visio-desktop/icons/icon.png" "$STAGING/icon-256.png"
-
-# i18n
-mkdir -p "$STAGING/i18n"
-cp "$PROJECT_ROOT/i18n/"*.json "$STAGING/i18n/"
-
-# Backgrounds
-mkdir -p "$STAGING/backgrounds"
-cp "$PROJECT_ROOT/assets/backgrounds/"*.jpg "$STAGING/backgrounds/"
-
-# Models
-mkdir -p "$STAGING/models"
-cp "$PROJECT_ROOT/models/"*.onnx "$STAGING/models/" 2>/dev/null || true
-
-# Frontend dist (bundled by Tauri)
-mkdir -p "$STAGING/frontend-dist"
-cp -r "$PROJECT_ROOT/crates/visio-desktop/frontend/dist/"* "$STAGING/frontend-dist/"
-
-echo "==> Building Flatpak"
+# 3. Build Flatpak
+echo "==> Building Flatpak (from source in GNOME SDK sandbox)"
 flatpak-builder --force-clean \
-  --repo="$SCRIPT_DIR/repo" \
-  "$SCRIPT_DIR/build" \
-  "$SCRIPT_DIR/io.visio.desktop.yml"
+    --repo="$SCRIPT_DIR/repo" \
+    "$SCRIPT_DIR/build" \
+    "$SCRIPT_DIR/io.visio.desktop.yml"
 
-echo "==> Creating Flatpak bundle"
+# 4. Create distributable bundle
 mkdir -p "$PROJECT_ROOT/target/release/bundle/flatpak"
+BUNDLE="$PROJECT_ROOT/target/release/bundle/flatpak/visio-mobile.flatpak"
 flatpak build-bundle \
-  "$SCRIPT_DIR/repo" \
-  "$PROJECT_ROOT/target/release/bundle/flatpak/visio-mobile.flatpak" \
-  io.visio.desktop
+    "$SCRIPT_DIR/repo" \
+    "$BUNDLE" \
+    io.visio.desktop
 
-echo "==> Done: target/release/bundle/flatpak/visio-mobile.flatpak"
+echo "==> Done: $BUNDLE"
+echo ""
+echo "Install with:  flatpak install visio-mobile.flatpak"
+echo "Run with:      flatpak run io.visio.desktop"

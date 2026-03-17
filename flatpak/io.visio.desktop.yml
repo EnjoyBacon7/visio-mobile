@@ -2,6 +2,8 @@ app-id: io.visio.desktop
 runtime: org.gnome.Platform
 runtime-version: '46'
 sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
 command: visio-desktop
 
 finish-args:
@@ -21,35 +23,44 @@ finish-args:
   - --talk-name=org.freedesktop.portal.ScreenCast
   # GPU acceleration
   - --device=dri
-  # Deep link handler
-  - --talk-name=org.freedesktop.portal.URIHandler
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/visio-desktop/cargo
+    # Tauri needs to find the frontend dist at build time
+    TAURI_FRONTEND_DIST: /run/build/visio-desktop/crates/visio-desktop/frontend/dist
 
 modules:
   - name: visio-desktop
     buildsystem: simple
     build-commands:
-      # Binary
-      - install -Dm755 visio-desktop /app/bin/visio-desktop
-      # Desktop entry
-      - install -Dm644 io.visio.desktop.desktop /app/share/applications/io.visio.desktop.desktop
-      # AppStream metadata
-      - install -Dm644 io.visio.desktop.metainfo.xml /app/share/metainfo/io.visio.desktop.metainfo.xml
+      # Configure cargo for vendored (offline) deps
+      - |
+        cat >> .cargo/config.toml <<'VENDORCFG'
+
+        [source.crates-io]
+        replace-with = "vendored-sources"
+
+        [source.vendored-sources]
+        directory = "vendor"
+        VENDORCFG
+      # Build the Tauri desktop binary
+      - cargo build --release --offline -p visio-desktop
+      # Install binary
+      - install -Dm755 target/release/visio-desktop /app/bin/visio-desktop
+      # Desktop entry + metadata
+      - install -Dm644 flatpak/io.visio.desktop.desktop /app/share/applications/io.visio.desktop.desktop
+      - install -Dm644 flatpak/io.visio.desktop.metainfo.xml /app/share/metainfo/io.visio.desktop.metainfo.xml
       # Icons
-      - install -Dm644 icon-32.png /app/share/icons/hicolor/32x32/apps/io.visio.desktop.png
-      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/io.visio.desktop.png
-      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/io.visio.desktop.png
-      # Resources: i18n
-      - mkdir -p /app/share/visio/i18n
-      - cp i18n/*.json /app/share/visio/i18n/
-      # Resources: backgrounds
-      - mkdir -p /app/share/visio/backgrounds
-      - cp backgrounds/*.jpg /app/share/visio/backgrounds/
-      # Resources: models
-      - mkdir -p /app/share/visio/models
-      - cp models/*.onnx /app/share/visio/models/ || true
-      # Frontend dist (Tauri webview)
-      - mkdir -p /app/share/visio/frontend
-      - cp -r frontend-dist/* /app/share/visio/frontend/
+      - install -Dm644 crates/visio-desktop/icons/32x32.png /app/share/icons/hicolor/32x32/apps/io.visio.desktop.png
+      - install -Dm644 crates/visio-desktop/icons/128x128.png /app/share/icons/hicolor/128x128/apps/io.visio.desktop.png
+      - install -Dm644 crates/visio-desktop/icons/icon.png /app/share/icons/hicolor/256x256/apps/io.visio.desktop.png
+      # Resources
+      - mkdir -p /app/share/visio
+      - cp -r i18n /app/share/visio/i18n
+      - cp -r assets/backgrounds /app/share/visio/backgrounds
+      - cp -r models /app/share/visio/models || true
     sources:
       - type: dir
-        path: staging
+        path: ..

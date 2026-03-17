@@ -51,6 +51,9 @@ docs/plans/
 
 # Ruby / Fastlane
 vendor/bundle/
+
+# Cargo vendor (used by Flatpak build)
+/vendor/
 Gemfile.lock
 
 # Signing
