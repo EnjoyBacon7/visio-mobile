@@ -98,9 +98,9 @@ pub fn render_i420_to_surface(
 
         for out_row in 0..surf_h {
             for out_col in 0..surf_w {
-                // Nearest-neighbour scale to video coordinates.
-                let vid_col = (out_col + off_x) * vid_w / render_w;
-                let vid_row = (out_row + off_y) * vid_h / render_h;
+                // Nearest-neighbour scale to video coordinates (clamped for safety).
+                let vid_col = ((out_col + off_x) * vid_w / render_w).min(vid_w - 1);
+                let vid_row = ((out_row + off_y) * vid_h / render_h).min(vid_h - 1);
 
                 // Apply mirror (horizontal flip).
                 let vc = if mirror { vid_w - 1 - vid_col } else { vid_col };
@@ -151,7 +151,7 @@ pub fn render_i420_to_surface(
 /// Render a single I420 frame to an ANativeWindow surface.
 /// Returns `false` if the surface is invalid (destroyed/released),
 /// signalling the caller to stop the frame loop.
-pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_sid: &str) -> bool {
+pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_sid: &str, is_screencast: bool) -> bool {
     let buffer = &frame.buffer;
     let width = buffer.width() as usize;
     let height = buffer.height() as usize;
@@ -215,21 +215,29 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
             *pixels.add(i) = 0xFF000000u32;
         }
 
-        // Fill video to entire surface
-        let scale = (surf_w as f64 / width as f64).max(surf_h as f64 / height as f64);
+        // Cover (crop) for camera, letterbox (fit) for screen share.
+        let scale_w = surf_w as f64 / width as f64;
+        let scale_h = surf_h as f64 / height as f64;
+        let scale = if is_screencast { scale_w.min(scale_h) } else { scale_w.max(scale_h) };
         let render_w = (width as f64 * scale) as usize;
         let render_h = (height as f64 * scale) as usize;
-        let off_x = (render_w - surf_w) / 2;
-        let off_y = (render_h - surf_h) / 2;
+        // For cover: offset into the source (crop). For letterbox: offset into the surface (padding).
+        let (loop_w, loop_h, off_x, off_y) = if is_screencast {
+            (render_w, render_h, 0usize, 0usize)
+        } else {
+            (surf_w, surf_h, render_w.saturating_sub(surf_w) / 2, render_h.saturating_sub(surf_h) / 2)
+        };
+        let pad_x = if is_screencast { surf_w.saturating_sub(render_w) / 2 } else { 0 };
+        let pad_y = if is_screencast { surf_h.saturating_sub(render_h) / 2 } else { 0 };
 
         // ---------------------------------------------------------------
-        // I420 → RGBA conversion (BT.601 full-range) with cover crop
+        // I420 → RGBA conversion (BT.601 full-range)
         // ---------------------------------------------------------------
-        for out_row in 0..surf_h {
-            for out_col in 0..surf_w {
+        for out_row in 0..loop_h {
+            for out_col in 0..loop_w {
                 // Nearest-neighbour scale to source coordinates.
-                let src_row = (out_row + off_y) * height / render_h;
-                let src_col = (out_col + off_x) * width / render_w;
+                let src_row = ((out_row + off_y) * height / render_h).min(height - 1);
+                let src_col = ((out_col + off_x) * width / render_w).min(width - 1);
 
                 let y_idx = src_row * y_stride + src_col;
                 let u_idx = (src_row / 2) * u_stride + (src_col / 2);
@@ -243,7 +251,9 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
                 let g = (y - 0.344136 * u - 0.714136 * v).clamp(0.0, 255.0) as u8;
                 let b = (y + 1.772 * u).clamp(0.0, 255.0) as u8;
 
-                let out_offset = (out_row * dst_stride + out_col) * 4;
+                let dx = out_col + pad_x;
+                let dy = out_row + pad_y;
+                let out_offset = (dy * dst_stride + dx) * 4;
                 debug_assert!(out_offset + 3 < surf_h * dst_stride * 4);
                 *bits.add(out_offset) = r;
                 *bits.add(out_offset + 1) = g;

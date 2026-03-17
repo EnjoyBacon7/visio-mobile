@@ -138,15 +138,17 @@ impl VisioEventListener for DesktopEventListener {
             }) => {
                 let room = self.room.clone();
                 let sid = track_sid.clone();
+                let is_screencast = *source == TrackSource::ScreenShare;
                 tokio::spawn(async move {
                     let rm = room.lock().await;
                     if let Some(video_track) = rm.get_video_track(&sid).await {
-                        tracing::info!("auto-starting video renderer for track {sid}");
+                        tracing::info!("auto-starting video renderer for track {sid} screencast={is_screencast}");
                         visio_video::start_track_renderer(
                             sid,
                             video_track,
                             std::ptr::null_mut(),
                             None,
+                            is_screencast,
                         );
                     }
                 });

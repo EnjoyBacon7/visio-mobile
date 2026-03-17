@@ -288,6 +288,14 @@ impl RoomManager {
         self.subscribed_tracks.lock().await.get(track_sid).cloned()
     }
 
+    /// Check if a track SID belongs to a screen share (vs camera).
+    pub async fn is_track_screencast(&self, track_sid: &str) -> bool {
+        let pm = self.participants.lock().await;
+        pm.participants()
+            .iter()
+            .any(|p| p.screen_share_track_sid.as_deref() == Some(track_sid))
+    }
+
     /// Get all currently subscribed video track SIDs.
     pub async fn video_track_sids(&self) -> Vec<String> {
         self.subscribed_tracks

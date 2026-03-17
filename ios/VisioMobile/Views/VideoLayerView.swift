@@ -3,11 +3,12 @@ import AVFoundation
 
 struct VideoLayerView: UIViewRepresentable {
     let trackSid: String
+    var isScreenShare: Bool = false
 
     func makeUIView(context: Context) -> VideoDisplayView {
         let view = VideoDisplayView()
         view.trackSid = trackSid
-        view.setupDisplayLayer()
+        view.setupDisplayLayer(fill: !isScreenShare)
         VideoFrameRouter.shared.register(trackSid: trackSid, view: view)
         return view
     }
@@ -16,6 +17,7 @@ struct VideoLayerView: UIViewRepresentable {
         guard uiView.trackSid != trackSid else { return }
         let oldSid = uiView.trackSid
         uiView.trackSid = trackSid
+        uiView.setupDisplayLayer(fill: !isScreenShare)
         VideoFrameRouter.shared.unregister(trackSid: oldSid, view: uiView)
         VideoFrameRouter.shared.register(trackSid: trackSid, view: uiView)
     }
@@ -34,11 +36,11 @@ class VideoDisplayView: UIView {
         displayLayer?.frame = bounds
     }
 
-    func setupDisplayLayer() {
+    func setupDisplayLayer(fill: Bool = true) {
         displayLayer?.removeFromSuperlayer()
 
         let layer = AVSampleBufferDisplayLayer()
-        layer.videoGravity = .resizeAspectFill
+        layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
         layer.frame = bounds
         self.layer.addSublayer(layer)
         displayLayer = layer

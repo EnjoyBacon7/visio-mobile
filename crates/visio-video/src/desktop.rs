@@ -127,7 +127,7 @@ fn encode_and_deliver(
 }
 
 /// Render a single I420 frame by converting to JPEG and calling the callback.
-pub(crate) fn render_frame(frame: &BoxVideoFrame, _surface: *mut c_void, track_sid: &str) {
+pub(crate) fn render_frame(frame: &BoxVideoFrame, _surface: *mut c_void, track_sid: &str, _is_screencast: bool) {
     let buffer = &frame.buffer;
     let width = buffer.width();
     let height = buffer.height();

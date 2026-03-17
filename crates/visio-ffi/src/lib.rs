@@ -682,6 +682,7 @@ impl visio_core::VisioEventListener for BridgeListener {
                     if client_addr != 0 {
                         let client = unsafe { &*(client_addr as *const VisioClient) };
                         let sid = info.sid.clone();
+                        let is_screencast = info.source == visio_core::events::TrackSource::ScreenShare;
                         let rt_handle = client.rt.handle().clone();
                         // Wrap raw pointers in Send-able newtypes for the async block.
                         let send_client = SendClientPtr(client_addr);
@@ -696,6 +697,7 @@ impl visio_core::VisioEventListener for BridgeListener {
                                     video_track,
                                     send_surface.as_ptr(),
                                     Some(client.rt.handle().clone()),
+                                    is_screencast,
                                 );
                                 visio_log(&format!(
                                     "VISIO JNI: pending surface attached for track {sid}"
@@ -1392,18 +1394,20 @@ impl VisioClient {
     }
 
     pub fn start_video_renderer(&self, track_sid: String) {
+        let is_screencast = self.rt.block_on(self.room_manager.is_track_screencast(&track_sid));
         let track = self
             .rt
             .block_on(self.room_manager.get_video_track(&track_sid));
         if let Some(video_track) = track {
             visio_log(&format!(
-                "VISIO FFI: starting video renderer for {track_sid}"
+                "VISIO FFI: starting video renderer for {track_sid} screencast={is_screencast}"
             ));
             visio_video::start_track_renderer(
                 track_sid,
                 video_track,
                 std::ptr::null_mut(),
                 Some(self.rt.handle().clone()),
+                is_screencast,
             );
         } else {
             visio_log(&format!("VISIO FFI: no video track found for {track_sid}"));
@@ -2098,6 +2102,7 @@ pub unsafe extern "C" fn visio_attach_video_surface(
     };
 
     // Look up the track from the room manager
+    let is_screencast = client.rt.block_on(client.room_manager.is_track_screencast(&sid_str));
     let track = client
         .rt
         .block_on(client.room_manager.get_video_track(&sid_str));
@@ -2108,6 +2113,7 @@ pub unsafe extern "C" fn visio_attach_video_surface(
                 video_track,
                 surface,
                 Some(client.rt.handle().clone()),
+                is_screencast,
             );
             0
         }
@@ -2198,12 +2204,13 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
 
     let client = unsafe { &*(client_addr as *const VisioClient) };
     visio_log("VISIO JNI: about to block_on get_video_track");
+    let is_screencast = client.rt.block_on(client.room_manager.is_track_screencast(&track_sid));
     let track = client
         .rt
         .block_on(client.room_manager.get_video_track(&track_sid));
     visio_log(&format!(
-        "VISIO JNI: block_on done, track found={}",
-        track.is_some()
+        "VISIO JNI: block_on done, track found={}, screencast={}",
+        track.is_some(), is_screencast
     ));
 
     match track {
@@ -2217,6 +2224,7 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
                 video_track,
                 window_handle.into_raw() as *mut std::ffi::c_void,
                 Some(client.rt.handle().clone()),
+                is_screencast,
             );
             visio_log(&format!(
                 "VISIO JNI: start_track_renderer returned for {track_sid}"

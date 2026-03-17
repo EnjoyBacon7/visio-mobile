@@ -116,10 +116,11 @@ pub fn start_track_renderer(
     track: RemoteVideoTrack,
     surface: *mut c_void,
     rt_handle: Option<Handle>,
+    is_screencast: bool,
 ) {
-    tracing::info!(track_sid = %track_sid, "start_track_renderer called");
+    tracing::info!(track_sid = %track_sid, is_screencast, "start_track_renderer called");
     #[cfg(target_os = "android")]
-    android_log(&format!("VISIO VIDEO: start_track_renderer track={track_sid}"));
+    android_log(&format!("VISIO VIDEO: start_track_renderer track={track_sid} screencast={is_screencast}"));
 
     // If there is already a renderer for this track, stop it first.
     stop_track_renderer(&track_sid);
@@ -128,8 +129,8 @@ pub fn start_track_renderer(
     let sid = track_sid.clone();
 
     let handle = match rt_handle {
-        Some(h) => h.spawn(frame_loop(sid, track, SurfacePtr(surface), cancel_rx)),
-        None => runtime().spawn(frame_loop(sid, track, SurfacePtr(surface), cancel_rx)),
+        Some(h) => h.spawn(frame_loop(sid, track, SurfacePtr(surface), cancel_rx, is_screencast)),
+        None => runtime().spawn(frame_loop(sid, track, SurfacePtr(surface), cancel_rx, is_screencast)),
     };
 
     let renderer = TrackRenderer {
@@ -169,6 +170,7 @@ async fn frame_loop(
     track: RemoteVideoTrack,
     surface: SurfacePtr,
     mut cancel_rx: watch::Receiver<bool>,
+    is_screencast: bool,
 ) {
     #[cfg(target_os = "android")]
     android_log(&format!(
@@ -233,7 +235,7 @@ async fn frame_loop(
                             if android_frame_count == 1 || android_frame_count % 100 == 0 {
                                 android_log(&format!("VISIO VIDEO: frame #{android_frame_count} track={track_sid} {}x{}", frame.buffer.width(), frame.buffer.height()));
                             }
-                            if !android::render_frame(&frame, surface.0, &track_sid) {
+                            if !android::render_frame(&frame, surface.0, &track_sid, is_screencast) {
                                 android_log(&format!("VISIO VIDEO: surface invalid, stopping frame_loop track={track_sid}"));
                                 break;
                             }
@@ -242,7 +244,7 @@ async fn frame_loop(
                         // --- iOS ---
                         #[cfg(target_os = "ios")]
                         {
-                            ios::render_frame(&frame, surface.0, &track_sid);
+                            ios::render_frame(&frame, surface.0, &track_sid, is_screencast);
                         }
 
                         // --- Desktop (macOS / Linux / Windows) ---
@@ -255,7 +257,7 @@ async fn frame_loop(
                             // Throttle: render every 3rd frame (~10fps at 30fps input)
                             // to avoid memory explosion from JPEG+base64 encoding.
                             if frame_count % 3 == 0 {
-                                desktop::render_frame(&frame, surface.0, &track_sid);
+                                desktop::render_frame(&frame, surface.0, &track_sid, is_screencast);
                             }
                         }
                     }
