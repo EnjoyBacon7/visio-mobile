@@ -36,17 +36,16 @@ struct HomeView: View {
         ZStack {
             VisioColors.background(dark: isDark).ignoresSafeArea()
 
-            VStack(spacing: 32) {
-                Spacer()
-
-                // App branding with tricolore logo
-                VStack(spacing: 8) {
-                    VisioLogo(size: 96)
-                    Text(Strings.t("app.title", lang: lang))
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundStyle(VisioColors.onBackground(dark: isDark))
-                }
+            ScrollView {
+                VStack(spacing: 32) {
+                    VStack(spacing: 8) {
+                        VisioLogo(size: 96)
+                        Text(Strings.t("app.title", lang: lang))
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(VisioColors.onBackground(dark: isDark))
+                    }
+                    .padding(.top, 16)
 
                 Text(Strings.t("home.subtitle", lang: lang))
                     .font(.subheadline)
@@ -240,8 +239,8 @@ struct HomeView: View {
                     .padding(.horizontal, 32)
                 }
 
-                Spacer()
-                Spacer()
+                }
+                .padding(.bottom, 32)
             }
         }
         .navigationTitle(Strings.t("app.title", lang: lang))
