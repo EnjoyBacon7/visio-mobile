@@ -83,24 +83,24 @@ pub fn render_i420_to_surface(
             return;
         }
 
-        // Clear to opaque black — RGBA(0,0,0,255) = 0xFF000000 on little-endian.
+        // Clear to opaque black - even if the video fills the surface of the card, this guards against integer-truncation leaving a 1-pixel strip at the edge
         let pixels = bits as *mut u32;
         for i in 0..(surf_h * dst_stride) {
             *pixels.add(i) = 0xFF000000u32;
         }
 
-        // Fit video inside surface preserving aspect ratio (letterbox).
-        let scale = (surf_w as f64 / vid_w as f64).min(surf_h as f64 / vid_h as f64);
+        // Fill video to entire surface
+        let scale = (surf_w as f64 / vid_w as f64).max(surf_h as f64 / vid_h as f64);
         let render_w = (vid_w as f64 * scale) as usize;
         let render_h = (vid_h as f64 * scale) as usize;
-        let off_x = (surf_w - render_w) / 2;
-        let off_y = (surf_h - render_h) / 2;
+        let off_x = (render_w - surf_w) / 2;
+        let off_y = (render_h - surf_h) / 2;
 
-        for out_row in 0..render_h {
-            for out_col in 0..render_w {
+        for out_row in 0..surf_h {
+            for out_col in 0..surf_w {
                 // Nearest-neighbour scale to video coordinates.
-                let vid_col = out_col * vid_w / render_w;
-                let vid_row = out_row * vid_h / render_h;
+                let vid_col = (out_col + off_x) * vid_w / render_w;
+                let vid_row = (out_row + off_y) * vid_h / render_h;
 
                 // Apply mirror (horizontal flip).
                 let vc = if mirror { vid_w - 1 - vid_col } else { vid_col };
@@ -125,9 +125,7 @@ pub fn render_i420_to_surface(
                 let g = (y - 0.344136 * u - 0.714136 * v).clamp(0.0, 255.0) as u8;
                 let b = (y + 1.772 * u).clamp(0.0, 255.0) as u8;
 
-                let dx = out_col + off_x;
-                let dy = out_row + off_y;
-                let out_offset = (dy * dst_stride + dx) * 4;
+                let out_offset = (out_row * dst_stride + out_col) * 4;
                 debug_assert!(out_offset + 3 < surf_h * dst_stride * 4);
                 *bits.add(out_offset) = r;
                 *bits.add(out_offset + 1) = g;
@@ -173,7 +171,7 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
     let window = surface as *mut ndk_sys::ANativeWindow;
 
     unsafe {
-        // Use the surface's actual dimensions for letterboxing.
+        // Use the surface's actual dimensions for cover-crop scaling.
         let surf_w = ndk_sys::ANativeWindow_getWidth(window) as usize;
         let surf_h = ndk_sys::ANativeWindow_getHeight(window) as usize;
         if surf_w == 0 || surf_h == 0 {
@@ -211,27 +209,27 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
             return true; // Odd but not a fatal surface error.
         }
 
-        // Clear to opaque black.
+        // Clear to opaque black - even if the video fills the surface of the card, this guards against integer-truncation leaving a 1-pixel strip at the edge
         let pixels = bits as *mut u32;
         for i in 0..(surf_h * dst_stride) {
             *pixels.add(i) = 0xFF000000u32;
         }
 
-        // Fit video inside surface preserving aspect ratio (letterbox).
-        let scale = (surf_w as f64 / width as f64).min(surf_h as f64 / height as f64);
+        // Fill video to entire surface
+        let scale = (surf_w as f64 / width as f64).max(surf_h as f64 / height as f64);
         let render_w = (width as f64 * scale) as usize;
         let render_h = (height as f64 * scale) as usize;
-        let off_x = (surf_w - render_w) / 2;
-        let off_y = (surf_h - render_h) / 2;
+        let off_x = (render_w - surf_w) / 2;
+        let off_y = (render_h - surf_h) / 2;
 
         // ---------------------------------------------------------------
-        // I420 → RGBA conversion (BT.601 full-range) with letterbox
+        // I420 → RGBA conversion (BT.601 full-range) with cover crop
         // ---------------------------------------------------------------
-        for out_row in 0..render_h {
-            for out_col in 0..render_w {
+        for out_row in 0..surf_h {
+            for out_col in 0..surf_w {
                 // Nearest-neighbour scale to source coordinates.
-                let src_row = out_row * height / render_h;
-                let src_col = out_col * width / render_w;
+                let src_row = (out_row + off_y) * height / render_h;
+                let src_col = (out_col + off_x) * width / render_w;
 
                 let y_idx = src_row * y_stride + src_col;
                 let u_idx = (src_row / 2) * u_stride + (src_col / 2);
@@ -245,9 +243,7 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
                 let g = (y - 0.344136 * u - 0.714136 * v).clamp(0.0, 255.0) as u8;
                 let b = (y + 1.772 * u).clamp(0.0, 255.0) as u8;
 
-                let dx = out_col + off_x;
-                let dy = out_row + off_y;
-                let out_offset = (dy * dst_stride + dx) * 4;
+                let out_offset = (out_row * dst_stride + out_col) * 4;
                 debug_assert!(out_offset + 3 < surf_h * dst_stride * 4);
                 *bits.add(out_offset) = r;
                 *bits.add(out_offset + 1) = g;

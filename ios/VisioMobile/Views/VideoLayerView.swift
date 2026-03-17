@@ -38,7 +38,7 @@ class VideoDisplayView: UIView {
         displayLayer?.removeFromSuperlayer()
 
         let layer = AVSampleBufferDisplayLayer()
-        layer.videoGravity = .resizeAspect
+        layer.videoGravity = .resizeAspectFill
         layer.frame = bounds
         self.layer.addSublayer(layer)
         displayLayer = layer
