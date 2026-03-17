@@ -29,7 +29,7 @@ modules:
     cleanup:
       - '*'
     build-commands:
-      - ./install.sh --prefix=/usr --disable-ldconfig
+      - ./install.sh --prefix=/app --disable-ldconfig
     sources:
       - type: archive
         url: https://static.rust-lang.org/dist/rust-1.85.0-x86_64-unknown-linux-gnu.tar.xz
@@ -38,6 +38,7 @@ modules:
   - name: visio-desktop
     buildsystem: simple
     build-options:
+      append-path: /app/bin
       env:
         CARGO_HOME: /run/build/visio-desktop/cargo
     build-commands:
