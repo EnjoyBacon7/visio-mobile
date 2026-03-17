@@ -111,9 +111,16 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           WEBRTC_URL="https://github.com/livekit/rust-sdks/releases/download/webrtc-0001d84-2/webrtc-linux-x64-release.zip"
-          mkdir -p lk-webrtc
           curl -L -o /tmp/webrtc.zip "$WEBRTC_URL"
-          cd lk-webrtc && unzip -qo /tmp/webrtc.zip && rm /tmp/webrtc.zip
+          unzip -qo /tmp/webrtc.zip -d /tmp/webrtc-extract
+          # Move extracted content to lk-webrtc (strip top-level dir if present)
+          if [ -d /tmp/webrtc-extract/webrtc-linux-x64-release ]; then
+            mv /tmp/webrtc-extract/webrtc-linux-x64-release lk-webrtc
+          else
+            mv /tmp/webrtc-extract lk-webrtc
+          fi
+          ls lk-webrtc/
+          rm -f /tmp/webrtc.zip
 
       - name: Build Flatpak bundle
         if: matrix.platform == 'linux'

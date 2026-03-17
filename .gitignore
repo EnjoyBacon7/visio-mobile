@@ -54,7 +54,6 @@ vendor/bundle/
 
 # Cargo vendor / Flatpak build
 /cargo-vendor/
-/lk-webrtc/
 Gemfile.lock
 
 # Signing
