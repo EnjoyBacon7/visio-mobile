@@ -28,6 +28,9 @@ modules:
     buildsystem: simple
     cleanup:
       - '*'
+    build-options:
+      no-debuginfo: true
+      strip: false
     build-commands:
       - ./install.sh --prefix=/app --disable-ldconfig
     sources:
