@@ -15,7 +15,7 @@ struct SettingsView: View {
     @State private var newInstance: String = ""
 
     private var lang: String { manager.currentLang }
-    private var isDark: Bool { manager.currentTheme == "dark" }
+    private var isDark: Bool { theme == "dark" }
 
     /// Normalizes a meet instance by stripping protocol prefixes and trailing slashes.
     /// Converts "https://meet.example.com/" to "meet.example.com".
@@ -41,23 +41,33 @@ struct SettingsView: View {
                 Section(Strings.t("settings.profile", lang: lang)) {
                     TextField(Strings.t("settings.displayName", lang: lang), text: $displayName)
                         .autocorrectionDisabled()
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                 }
 
                 Section(Strings.t("settings.joinMeeting", lang: lang)) {
                     Toggle(Strings.t("settings.micOnJoin", lang: lang), isOn: $micOnJoin)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     Toggle(Strings.t("settings.camOnJoin", lang: lang), isOn: $cameraOnJoin)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     Toggle(Strings.t("settings.adaptiveMode", lang: lang), isOn: $adaptiveModeEnabled)
+                        .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                 }
 
                 Section(Strings.t("settings.theme", lang: lang)) {
-                    Picker(Strings.t("settings.theme", lang: lang), selection: $theme) {
-                        Text(Strings.t("settings.theme.light", lang: lang)).tag("light")
-                        Text(Strings.t("settings.theme.dark", lang: lang)).tag("dark")
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .onChange(of: theme) { newTheme in
-                        manager.setTheme(newTheme)
+                    ForEach(["light", "dark"], id: \.self) { option in
+                        ThemeOptionRow(
+                            label: Strings.t("settings.theme.\(option)", lang: lang),
+                            isSelected: theme == option,
+                            isDark: isDark,
+                            onTap: {
+                                theme = option
+                                manager.setTheme(option)
+                            }
+                        )
                     }
                 }
 
@@ -68,6 +78,8 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                    .listRowBackground(VisioColors.surface(dark: isDark))
                     .onChange(of: language) { newLang in
                         manager.setLanguage(newLang)
                     }
@@ -77,6 +89,7 @@ struct SettingsView: View {
                     ForEach(meetInstances, id: \.self) { instance in
                         HStack {
                             Text(instance)
+                                .foregroundStyle(VisioColors.onSurface(dark: isDark))
                             Spacer()
                             Button {
                                 meetInstances.removeAll { $0 == instance }
@@ -85,12 +98,14 @@ struct SettingsView: View {
                                     .foregroundStyle(.red)
                             }
                         }
+                        .listRowBackground(VisioColors.surface(dark: isDark))
                     }
                     HStack {
                         TextField(Strings.t("settings.instancePlaceholder", lang: lang), text: $newInstance)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
+                            .foregroundStyle(VisioColors.onSurface(dark: isDark))
                         Button {
                             let normalized = normalizeInstance(newInstance)
                             if !normalized.isEmpty && !meetInstances.contains(normalized) {
@@ -103,6 +118,7 @@ struct SettingsView: View {
                         }
                         .disabled(newInstance.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    .listRowBackground(VisioColors.surface(dark: isDark))
                 }
             }
             .scrollContentBackground(.hidden)
@@ -114,20 +130,15 @@ struct SettingsView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .appToolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(Strings.t("settings.save", lang: lang)) {
+                    Button(Strings.t("settings.done", lang: lang)) {
                         save()
                         dismiss()
                     }
                     .foregroundStyle(VisioColors.primary500)
                 }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(Strings.t("settings.cancel", lang: lang)) {
-                        dismiss()
-                    }
-                    .foregroundStyle(VisioColors.secondaryText(dark: isDark))
-                }
             }
         }
+        .preferredColorScheme(isDark ? .dark : .light)
         .onAppear { load() }
     }
 
@@ -157,6 +168,51 @@ struct SettingsView: View {
             manager.startContextDetection()
         }
         manager.client.setMeetInstances(instances: meetInstances)
+    }
+}
+
+private struct PressedKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
+private struct ThemeRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .preference(key: PressedKey.self, value: configuration.isPressed)
+    }
+}
+
+private struct ThemeOptionRow: View {
+    let label: String
+    let isSelected: Bool
+    let isDark: Bool
+    let onTap: () -> Void
+
+    @State private var pressed = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                Text(label)
+                    .foregroundStyle(VisioColors.onSurface(dark: isDark))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(VisioColors.primary500)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ThemeRowStyle())
+        .onPreferenceChange(PressedKey.self) { pressed = $0 }
+        .listRowBackground(
+            pressed
+                ? VisioColors.surfaceVariant(dark: isDark)
+                : VisioColors.surface(dark: isDark)
+        )
     }
 }
 
