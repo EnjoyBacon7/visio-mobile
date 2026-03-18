@@ -86,7 +86,12 @@ jobs:
 
       - name: Build Tauri app
         working-directory: crates/visio-desktop
-        run: cargo tauri build
+        run: |
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            cargo tauri build --features pipewire-camera
+          else
+            cargo tauri build
+          fi
         env:
           # Disable Apple code signing in CI (no certificate yet for Developer ID)
           APPLE_SIGNING_IDENTITY: "-"

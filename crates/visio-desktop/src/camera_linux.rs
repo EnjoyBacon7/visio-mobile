@@ -4,9 +4,11 @@
 //! falls back to V4L2 direct access otherwise.
 
 mod camera_linux_convert;
+#[cfg(feature = "pipewire-camera")]
 mod camera_linux_pipewire;
 mod camera_linux_v4l2;
 
+#[cfg(feature = "pipewire-camera")]
 use std::sync::OnceLock;
 
 use livekit::webrtc::video_source::native::NativeVideoSource;
@@ -29,6 +31,7 @@ pub struct VideoDeviceInfo {
 
 /// Check if the PipeWire Camera portal is available.
 /// Result is cached — tested once per process lifetime.
+#[cfg(feature = "pipewire-camera")]
 fn pipewire_portal_available() -> bool {
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
     *AVAILABLE.get_or_init(|| {
@@ -67,11 +70,11 @@ fn pipewire_portal_available() -> bool {
 // ---------------------------------------------------------------------------
 
 pub fn list_cameras() -> Vec<VideoDeviceInfo> {
+    #[cfg(feature = "pipewire-camera")]
     if pipewire_portal_available() {
-        camera_linux_pipewire::list_cameras()
-    } else {
-        camera_linux_v4l2::list_cameras()
+        return camera_linux_pipewire::list_cameras();
     }
+    camera_linux_v4l2::list_cameras()
 }
 
 pub struct LinuxCameraCapture {
@@ -80,45 +83,47 @@ pub struct LinuxCameraCapture {
 
 enum CaptureBackend {
     V4l(camera_linux_v4l2::V4lCameraCapture),
+    #[cfg(feature = "pipewire-camera")]
     Pipewire(camera_linux_pipewire::PipewireCameraCapture),
 }
 
 impl LinuxCameraCapture {
     pub fn start(source: NativeVideoSource) -> Result<Self, String> {
+        #[cfg(feature = "pipewire-camera")]
         if pipewire_portal_available() {
             let cap = camera_linux_pipewire::PipewireCameraCapture::start(source)?;
-            Ok(Self { inner: CaptureBackend::Pipewire(cap) })
-        } else {
-            let cap = camera_linux_v4l2::V4lCameraCapture::start(0, source)?;
-            Ok(Self { inner: CaptureBackend::V4l(cap) })
+            return Ok(Self { inner: CaptureBackend::Pipewire(cap) });
         }
+        let cap = camera_linux_v4l2::V4lCameraCapture::start(0, source)?;
+        Ok(Self { inner: CaptureBackend::V4l(cap) })
     }
 
     pub fn start_with_unique_id(
         unique_id: &str,
         source: NativeVideoSource,
     ) -> Result<Self, String> {
+        #[cfg(feature = "pipewire-camera")]
         if unique_id == "pipewire:camera" {
             let cap = camera_linux_pipewire::PipewireCameraCapture::start(source)?;
-            Ok(Self { inner: CaptureBackend::Pipewire(cap) })
-        } else {
-            // V4L2: parse "/dev/videoN" → index N
-            let idx = if unique_id.starts_with("/dev/video") {
-                unique_id
-                    .trim_start_matches("/dev/video")
-                    .parse::<usize>()
-                    .unwrap_or(0)
-            } else {
-                0
-            };
-            let cap = camera_linux_v4l2::V4lCameraCapture::start(idx, source)?;
-            Ok(Self { inner: CaptureBackend::V4l(cap) })
+            return Ok(Self { inner: CaptureBackend::Pipewire(cap) });
         }
+        // V4L2: parse "/dev/videoN" → index N
+        let idx = if unique_id.starts_with("/dev/video") {
+            unique_id
+                .trim_start_matches("/dev/video")
+                .parse::<usize>()
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let cap = camera_linux_v4l2::V4lCameraCapture::start(idx, source)?;
+        Ok(Self { inner: CaptureBackend::V4l(cap) })
     }
 
     pub fn stop(&mut self) {
         match &mut self.inner {
             CaptureBackend::V4l(cap) => cap.stop(),
+            #[cfg(feature = "pipewire-camera")]
             CaptureBackend::Pipewire(cap) => cap.stop(),
         }
     }
