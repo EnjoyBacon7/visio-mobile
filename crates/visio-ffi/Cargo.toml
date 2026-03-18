@@ -19,9 +19,9 @@ ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "n
 ndarray = "0.17"
 jpeg-decoder = "0.3"
 
-# On Linux, use pkg-config to link against system libonnxruntime
+# On Linux, use load-dynamic to avoid duplicate protobuf symbols with webrtc-sys
 [target.'cfg(target_os = "linux")'.dependencies]
-ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "pkg-config", "api-18"] }
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "load-dynamic", "download-binaries", "api-18", "tls-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "load-dynamic", "download-binaries", "api-18", "tls-native"] }
