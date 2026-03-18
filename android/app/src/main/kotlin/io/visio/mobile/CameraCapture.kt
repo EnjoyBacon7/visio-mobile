@@ -274,14 +274,19 @@ class CameraCapture(private val context: Context) {
                     }
                     synchronized(lock) { captureSession = session }
 
-                    val request =
-                        camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
-                            addTarget(surface)
-                            set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-                        }.build()
+                    try {
+                        val request =
+                            camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                                addTarget(surface)
+                                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                            }.build()
 
-                    session.setRepeatingRequest(request, null, handler)
-                    Log.i(TAG, "Camera capture session started")
+                        session.setRepeatingRequest(request, null, handler)
+                        Log.i(TAG, "Camera capture session started")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to start capture request: ${e.message}")
+                        session.close()
+                    }
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {

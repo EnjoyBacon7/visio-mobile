@@ -42,18 +42,13 @@ pub struct MeetingControls {
 
 /// Build TrackPublishOptions for the camera track.
 ///
-/// VP9 is only available on desktop (macOS/Linux). The prebuilt WebRTC library
-/// for Android and iOS was compiled with `rtc_libvpx_build_vp9=false`, so
-/// VP9 software encoder is not linked. On mobile, fall back to VP8.
+/// Use VP8 on all platforms for maximum cross-platform decode compatibility.
+/// VP9 was used on desktop but caused decode failures on some mobile clients
+/// (the prebuilt WebRTC library for Android/iOS may not include VP9 decoder).
 fn camera_publish_options() -> TrackPublishOptions {
-    let video_codec = if cfg!(any(target_os = "android", target_os = "ios")) {
-        VideoCodec::VP8
-    } else {
-        VideoCodec::VP9
-    };
     TrackPublishOptions {
         source: LkTrackSource::Camera,
-        video_codec,
+        video_codec: VideoCodec::VP8,
         ..Default::default()
     }
 }
@@ -471,21 +466,12 @@ mod tests {
     fn camera_publish_options_codec() {
         use livekit::options::VideoCodec;
         let opts = super::camera_publish_options();
-        // Desktop (macOS/Linux) uses VP9; mobile (Android/iOS) uses VP8
-        // because prebuilt WebRTC for mobile has rtc_libvpx_build_vp9=false
-        if cfg!(any(target_os = "android", target_os = "ios")) {
-            assert!(
-                matches!(opts.video_codec, VideoCodec::VP8),
-                "expected VP8 on mobile, got {:?}",
-                opts.video_codec
-            );
-        } else {
-            assert!(
-                matches!(opts.video_codec, VideoCodec::VP9),
-                "expected VP9 on desktop, got {:?}",
-                opts.video_codec
-            );
-        }
+        // VP8 on all platforms for cross-platform decode compatibility
+        assert!(
+            matches!(opts.video_codec, VideoCodec::VP8),
+            "expected VP8, got {:?}",
+            opts.video_codec
+        );
     }
 
     #[tokio::test]

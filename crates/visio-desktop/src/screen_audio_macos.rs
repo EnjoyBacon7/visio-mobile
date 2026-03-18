@@ -41,7 +41,7 @@ unsafe extern "C" {
     fn dispatch_queue_create(
         label: *const std::ffi::c_char,
         attr: *const std::ffi::c_void,
-    ) -> *mut AnyObject;
+    ) -> *mut std::ffi::c_void;
 }
 
 impl ScreenAudioCapture {
@@ -62,7 +62,7 @@ impl ScreenAudioCapture {
         let sc_filter_cls = AnyClass::get(c"SCContentFilter")
             .ok_or("SCContentFilter not available")?;
 
-        let content = Self::get_shareable_content_sync(sc_shareable_cls)?;
+        let content = unsafe { Self::get_shareable_content_sync(sc_shareable_cls) }?;
 
         // Get the first display
         let displays: *const AnyObject = msg_send![&*content, displays];
@@ -109,18 +109,18 @@ impl ScreenAudioCapture {
         if stream.is_null() {
             return Err("SCStream init returned nil".into());
         }
-        let stream: Retained<AnyObject> = Retained::retain(stream).unwrap();
+        let stream: Retained<AnyObject> = unsafe { Retained::retain(stream) }.unwrap();
 
         // Add stream output for audio
         // SCStreamOutputType.audio = 1
-        let queue = dispatch_queue_create(
+        let queue = unsafe { dispatch_queue_create(
             c"io.visio.screen-audio".as_ptr(),
             std::ptr::null(),
-        );
+        ) };
         if queue.is_null() {
             return Err("failed to create dispatch queue".into());
         }
-        let dispatch_queue: Retained<AnyObject> = Retained::retain(queue).unwrap();
+        let dispatch_queue: Retained<AnyObject> = unsafe { Retained::retain(queue as *mut AnyObject) }.unwrap();
 
         let result: Bool = msg_send![
             &*stream,
@@ -167,10 +167,10 @@ impl ScreenAudioCapture {
                 if !err.is_null() {
                     let desc: *const AnyObject = msg_send![err, localizedDescription];
                     let cstr: *const std::ffi::c_char = msg_send![desc, UTF8String];
-                    let msg = std::ffi::CStr::from_ptr(cstr).to_string_lossy().to_string();
+                    let msg = unsafe { std::ffi::CStr::from_ptr(cstr) }.to_string_lossy().to_string();
                     *error_clone.lock().unwrap() = Some(msg);
                 } else if !content.is_null() {
-                    let retained: Retained<AnyObject> = Retained::retain(content).unwrap();
+                    let retained: Retained<AnyObject> = unsafe { Retained::retain(content) }.unwrap();
                     *result_clone.lock().unwrap() = Some(retained);
                 }
                 let (lock, cvar) = &*done_clone;
@@ -370,11 +370,11 @@ unsafe fn register_delegate_class() -> &'static AnyClass {
         }
     }
 
-    builder.add_method(
+    unsafe { builder.add_method(
         Sel::register(c"stream:didOutputSampleBuffer:ofType:"),
         did_output_sample_buffer
             as unsafe extern "C" fn(*mut AnyObject, Sel, *const AnyObject, *const AnyObject, i64),
-    );
+    ) };
 
     builder.register()
 }

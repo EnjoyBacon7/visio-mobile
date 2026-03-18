@@ -13,7 +13,7 @@ use livekit::webrtc::audio_source::native::NativeAudioSource;
 use serde::Serialize;
 use tauri::AppHandle;
 // Re-export for platform modules
-pub use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer, CapturedFrame};
+pub use visio_core::{AudioCaptureBuffer, AudioPlayoutBuffer};
 
 /// Internal sample rate used by LiveKit (48kHz mono i16).
 pub const LK_SAMPLE_RATE: u32 = 48_000;
@@ -164,6 +164,7 @@ pub fn list_output_devices() -> Vec<AudioDeviceInfo> {
 // ---------------------------------------------------------------------------
 
 /// Linear interpolation resampling.
+#[allow(dead_code)]
 pub fn linear_resample(input: &[i16], output_len: usize) -> Vec<i16> {
     if input.is_empty() || output_len == 0 {
         return vec![0i16; output_len];
@@ -188,6 +189,7 @@ pub fn linear_resample(input: &[i16], output_len: usize) -> Vec<i16> {
 }
 
 /// Mix multi-channel f32 interleaved audio to mono.
+#[allow(dead_code)]
 pub fn mix_to_mono(data: &[f32], channels: usize) -> Vec<f32> {
     if channels == 0 {
         return Vec::new();

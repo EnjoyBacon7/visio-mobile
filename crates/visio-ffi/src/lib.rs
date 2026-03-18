@@ -2182,6 +2182,10 @@ pub unsafe extern "C" fn Java_io_visio_mobile_NativeVideo_attachSurface(
 
     visio_log(&format!("VISIO JNI: attachSurface track={track_sid}"));
 
+    // Paint the surface black immediately to replace the uninitialized green
+    // TextureView buffer. This runs before any WebRTC negotiation.
+    visio_video::paint_surface_black(native_window as *mut std::ffi::c_void);
+
     // Wrap in RAII handle — Drop calls ANativeWindow_release on early return.
     let window_handle = unsafe { NativeWindowHandle::from_raw(native_window) };
 

@@ -22,6 +22,9 @@ mod android;
 pub use android::render_i420_to_surface;
 
 #[cfg(target_os = "android")]
+pub use android::paint_surface_black;
+
+#[cfg(target_os = "android")]
 fn android_log(msg: &str) {
     use std::ffi::CString;
     let text = CString::new(msg).unwrap_or_else(|_| c"(invalid)".into());
@@ -339,6 +342,12 @@ pub unsafe extern "C" fn visio_video_attach_surface(
     };
 
     tracing::info!(track_sid = %sid, "visio_video_attach_surface called (track not yet wired)");
+
+    // Paint the surface black immediately to replace the uninitialized green
+    // TextureView buffer. This runs on the UI thread via JNI, before any
+    // WebRTC frames are available.
+    #[cfg(target_os = "android")]
+    android::paint_surface_black(surface);
 
     // NOTE: The actual track attachment happens when visio-core calls
     // start_track_renderer() with the real RemoteVideoTrack. This C FFI

@@ -44,6 +44,7 @@ impl NoiseReducer {
         self.output_buf.clone()
     }
 
+    #[cfg(test)]
     pub fn reset(&mut self) {
         self.input_buf.clear();
         self.output_buf.clear();

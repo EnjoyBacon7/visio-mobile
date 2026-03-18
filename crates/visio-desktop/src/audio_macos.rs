@@ -37,7 +37,7 @@ const K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE: u32 = 2002;
 const K_AUDIO_UNIT_PROPERTY_STREAM_FORMAT: u32 = 8;
 const K_AUDIO_UNIT_PROPERTY_SET_RENDER_CALLBACK: u32 = 23;
 const K_AUDIO_OUTPUT_UNIT_PROPERTY_SET_INPUT_CALLBACK: u32 = 2005;
-const K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFString: u32 = 0x6C6E616D; // 'lnam'
+const K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFSTRING: u32 = 0x6C6E616D; // 'lnam'
 const K_AUDIO_OBJECT_PROPERTY_SCOPE_OUTPUT: u32 = 0x6F757470; // 'outp'
 
 // Format constants
@@ -122,14 +122,6 @@ unsafe extern "C" {
         element: u32,
         data: *const c_void,
         size: u32,
-    ) -> OSStatus;
-    fn AudioUnitGetProperty(
-        unit: AudioUnit,
-        id: u32,
-        scope: u32,
-        element: u32,
-        data: *mut c_void,
-        size: *mut u32,
     ) -> OSStatus;
     fn AudioUnitInitialize(unit: AudioUnit) -> OSStatus;
     fn AudioUnitUninitialize(unit: AudioUnit) -> OSStatus;
@@ -250,7 +242,7 @@ fn resolve_device_id_by_name(name: &str, output: bool) -> Option<u32> {
 
             // Get device name
             let name_addr = AudioObjectPropertyAddress {
-                selector: K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFString,
+                selector: K_AUDIO_DEVICE_PROPERTY_DEVICE_NAME_CFSTRING,
                 scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
                 element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
             };

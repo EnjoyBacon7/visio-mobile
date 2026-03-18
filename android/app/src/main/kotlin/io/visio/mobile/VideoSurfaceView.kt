@@ -1,51 +1,42 @@
 package io.visio.mobile
 
 import android.content.Context
-import android.graphics.SurfaceTexture
+import android.graphics.PixelFormat
 import android.util.Log
-import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 
+/**
+ * SurfaceView-based video renderer.
+ *
+ * SurfaceView is used instead of TextureView because TextureView's internal
+ * triple-buffered SurfaceTexture starts with uninitialized green (YUV 0,0,0)
+ * content that cannot be fully overwritten before display. SurfaceView does
+ * not have this issue — its surface starts with a transparent/black background.
+ */
 class VideoSurfaceView(
     context: Context,
     private val trackSid: String,
-) : TextureView(context), TextureView.SurfaceTextureListener {
-    private var surface: Surface? = null
+) : SurfaceView(context), SurfaceHolder.Callback {
 
     init {
-        surfaceTextureListener = this
+        holder.addCallback(this)
+        holder.setFormat(PixelFormat.RGBA_8888)
         Log.d(TAG, "VideoSurfaceView created for track=$trackSid")
     }
 
-    override fun onSurfaceTextureAvailable(
-        texture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) {
-        Log.d(TAG, "surfaceCreated track=$trackSid ${width}x$height, attaching surface")
-        val s = Surface(texture)
-        surface = s
-        NativeVideo.attachSurface(trackSid, s)
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        Log.d(TAG, "surfaceCreated track=$trackSid, attaching surface")
+        NativeVideo.attachSurface(trackSid, holder.surface)
     }
 
-    override fun onSurfaceTextureSizeChanged(
-        texture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) {
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         Log.d(TAG, "surfaceChanged track=$trackSid ${width}x$height")
     }
 
-    override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
         Log.d(TAG, "surfaceDestroyed track=$trackSid, detaching surface")
         NativeVideo.detachSurface(trackSid)
-        surface?.release()
-        surface = null
-        return true
-    }
-
-    override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
-        // Called after each frame is drawn to the texture
     }
 
     companion object {

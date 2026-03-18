@@ -37,10 +37,16 @@ windows = { version = "=0.58", features = [
     "Win32_System_Com",
 ] }
 
+[features]
+default = []
+pipewire-camera = ["ashpd", "pipewire"]
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libpulse-binding = "2"
 libpulse-simple-binding = "2"
 v4l = "0.14"
+ashpd = { version = "0.10", optional = true }
+pipewire = { version = "0.9", optional = true }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

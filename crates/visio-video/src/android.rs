@@ -266,3 +266,34 @@ pub(crate) fn render_frame(frame: &BoxVideoFrame, surface: *mut c_void, _track_s
     }
     true
 }
+
+/// Paint an ANativeWindow surface solid black.
+/// Called before the frame loop starts to avoid showing the uninitialized
+/// green TextureView buffer while waiting for the first WebRTC frame.
+pub fn paint_surface_black(surface: *mut c_void) {
+    if surface.is_null() {
+        return;
+    }
+    let window = surface as *mut ndk_sys::ANativeWindow;
+    unsafe {
+        let surf_w = ndk_sys::ANativeWindow_getWidth(window) as usize;
+        let surf_h = ndk_sys::ANativeWindow_getHeight(window) as usize;
+        if surf_w == 0 || surf_h == 0 {
+            return;
+        }
+        if ndk_sys::ANativeWindow_setBuffersGeometry(window, surf_w as i32, surf_h as i32, 1) != 0 {
+            return;
+        }
+        let mut native_buf = std::mem::MaybeUninit::<ndk_sys::ANativeWindow_Buffer>::uninit();
+        if ndk_sys::ANativeWindow_lock(window, native_buf.as_mut_ptr(), std::ptr::null_mut()) != 0 {
+            return;
+        }
+        let native_buf = native_buf.assume_init();
+        let pixels = native_buf.bits as *mut u32;
+        let stride = native_buf.stride as usize;
+        for i in 0..(surf_h * stride) {
+            *pixels.add(i) = 0xFF000000u32; // opaque black
+        }
+        ndk_sys::ANativeWindow_unlockAndPost(window);
+    }
+}
