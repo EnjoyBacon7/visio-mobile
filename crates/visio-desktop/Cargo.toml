@@ -41,6 +41,8 @@ windows = { version = "=0.58", features = [
 libpulse-binding = "2"
 libpulse-simple-binding = "2"
 v4l = "0.14"
+ashpd = "0.10"
+pipewire = "0.8"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
