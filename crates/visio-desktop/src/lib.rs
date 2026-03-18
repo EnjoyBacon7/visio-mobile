@@ -1686,7 +1686,7 @@ pub fn run() {
 
                 let png_bytes = include_bytes!("../icons/icon.png");
                 let data = NSData::with_bytes(png_bytes);
-                let ns_image = unsafe { NSImage::initWithData(NSImage::alloc(), &data) };
+                let ns_image = NSImage::initWithData(NSImage::alloc(), &data);
                 if let Some(ns_image) = ns_image {
                     // We're in the Tauri setup which runs on the main thread
                     let mtm = unsafe { MainThreadMarker::new_unchecked() };

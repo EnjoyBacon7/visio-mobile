@@ -26,6 +26,7 @@ use crate::hand_raise::HandRaiseManager;
 use crate::participants::ParticipantManager;
 
 /// Returns true if the disconnect reason means we should NOT auto-reconnect.
+#[allow(dead_code)]
 fn should_not_reconnect(reason: DisconnectReason) -> bool {
     matches!(
         reason,
