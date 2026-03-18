@@ -139,7 +139,7 @@ fn pipewire_capture_loop(
     // Process callback — called for each video frame
     let _listener = stream
         .add_local_listener()
-        .param_changed(move |_stream, id, param| {
+        .param_changed(move |_stream, _user_data: &(), id, param| {
             // Extract video format from SPA param when negotiated
             let Some(param) = param else { return };
             if id == pipewire::spa::param::ParamType::Format.as_raw() {
@@ -153,7 +153,7 @@ fn pipewire_capture_loop(
                 }
             }
         })
-        .process(move |stream| {
+        .process(move |stream, _user_data: &()| {
             if !running_cb.load(Ordering::Relaxed) {
                 return;
             }
