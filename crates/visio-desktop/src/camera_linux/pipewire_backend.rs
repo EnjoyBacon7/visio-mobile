@@ -4,7 +4,7 @@
 //! then opens a PipeWire stream to receive video frames. This enables
 //! proper Flatpak sandboxing without --device=all.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
@@ -44,7 +44,7 @@ impl PipewireCameraCapture {
                     .await
                     .map_err(|e| format!("camera portal: {e}"))?;
                 camera
-                    .access_camera()
+                    .request_access()
                     .await
                     .map_err(|e| format!("camera access denied: {e}"))?;
                 let fd = camera
@@ -99,10 +99,13 @@ fn pipewire_capture_loop(
     source: NativeVideoSource,
     quit_receiver: pipewire::channel::Receiver<()>,
 ) -> Result<(), String> {
-    let main_loop = pipewire::main_loop::MainLoop::new(None)
-        .map_err(|e| format!("MainLoop::new: {e}"))?;
-    let context = pipewire::context::Context::new(&main_loop)
-        .map_err(|e| format!("Context::new: {e}"))?;
+    use pipewire::main_loop::MainLoopBox;
+    use pipewire::context::ContextBox;
+
+    let mainloop = MainLoopBox::new(None)
+        .map_err(|e| format!("MainLoopBox::new: {e}"))?;
+    let context = ContextBox::new(&mainloop.loop_(), None)
+        .map_err(|e| format!("ContextBox::new: {e}"))?;
 
     use std::os::fd::AsRawFd;
     let core = context
@@ -133,37 +136,31 @@ fn pipewire_capture_loop(
     let vf_cb = video_format.clone();
 
     // Register quit signal
-    let main_loop_weak = main_loop.loop_().downgrade();
-    let _quit_listener = quit_receiver.attach(&main_loop.loop_(), move |_| {
-        if let Some(main_loop) = main_loop_weak.upgrade() {
-            main_loop.quit();
+    let mainloop_weak = mainloop.loop_().downgrade();
+    let _quit_listener = quit_receiver.attach(&mainloop.loop_(), move |_| {
+        if let Some(ml) = mainloop_weak.upgrade() {
+            ml.quit();
         }
     });
 
     // Process callback — called for each video frame
     let _listener = stream
         .add_local_listener()
-        .param_changed(move |_stream, id, _user_data, param| {
+        .param_changed(move |_stream, id, param| {
             // Extract video format from SPA param when negotiated
-            if param.is_none() {
-                return;
-            }
-            let param = param.unwrap();
+            let Some(param) = param else { return };
             if id == pipewire::spa::param::ParamType::Format.as_raw() {
-                if let Ok(info) = pipewire::spa::param::video::VideoInfoRaw::parse(param) {
-                    vw_cb.store(info.size().width as u64, Ordering::SeqCst);
-                    vh_cb.store(info.size().height as u64, Ordering::SeqCst);
-                    vf_cb.store(info.format().as_raw() as u64, Ordering::SeqCst);
-                    tracing::info!(
-                        "PipeWire format negotiated: {}x{} format={}",
-                        info.size().width,
-                        info.size().height,
-                        info.format().as_raw()
-                    );
+                // Try to parse the format pod to extract width/height/format.
+                // The exact API depends on pipewire-rs version; use raw pod parsing.
+                if let Some((w, h, fmt)) = parse_video_format_pod(param) {
+                    vw_cb.store(w as u64, Ordering::SeqCst);
+                    vh_cb.store(h as u64, Ordering::SeqCst);
+                    vf_cb.store(fmt as u64, Ordering::SeqCst);
+                    tracing::info!("PipeWire format negotiated: {w}x{h} format={fmt}");
                 }
             }
         })
-        .process(move |stream, _| {
+        .process(move |stream| {
             let width = video_width.load(Ordering::SeqCst) as u32;
             let height = video_height.load(Ordering::SeqCst) as u32;
             let format = video_format.load(Ordering::SeqCst) as u32;
@@ -230,10 +227,58 @@ fn pipewire_capture_loop(
         .map_err(|e| format!("stream connect: {e}"))?;
 
     tracing::info!("PipeWire stream connected, entering main loop");
-    main_loop.run();
+    mainloop.run();
     tracing::info!("PipeWire main loop exited");
 
     Ok(())
+}
+
+/// Parse a SPA format pod to extract (width, height, video_format).
+/// Returns None if parsing fails.
+fn parse_video_format_pod(pod: &pipewire::spa::pod::Pod) -> Option<(u32, u32, u32)> {
+    // Use the raw pod parser to extract video format info.
+    // The SPA video format object contains:
+    //   - mediaType (id)
+    //   - mediaSubtype (id)
+    //   - format (id/enum)
+    //   - size (rectangle: width, height)
+    //   - framerate (fraction)
+    use pipewire::spa::pod::deserialize::PodDeserializer;
+    // Attempt structured parsing; fall back gracefully
+    let deserializer = PodDeserializer::deserialize_from::<pipewire::spa::pod::Value>(pod.as_bytes());
+    match deserializer {
+        Ok((_, pipewire::spa::pod::Value::Object(obj))) => {
+            let mut format: Option<u32> = None;
+            let mut width: Option<u32> = None;
+            let mut height: Option<u32> = None;
+
+            for prop in &obj.properties {
+                use pipewire::spa::pod::Value;
+                match prop.key {
+                    // SPA_FORMAT_VIDEO_format = 0x20001
+                    0x20001 => {
+                        if let Value::Id(id) = &prop.value {
+                            format = Some(id.0);
+                        }
+                    }
+                    // SPA_FORMAT_VIDEO_size = 0x20003
+                    0x20003 => {
+                        if let Value::Rectangle(rect) = &prop.value {
+                            width = Some(rect.width);
+                            height = Some(rect.height);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            match (width, height, format) {
+                (Some(w), Some(h), Some(f)) => Some((w, h, f)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Convert a SPA video buffer to I420 based on the negotiated format.
@@ -244,25 +289,28 @@ fn convert_spa_frame(
     height: usize,
     i420: &mut I420Buffer,
 ) -> bool {
-    use pipewire::spa::param::video::VideoFormat;
+    // SPA video format IDs (from spa/param/video/format.h)
+    const SPA_VIDEO_FORMAT_NV12: u32 = 25;
+    const SPA_VIDEO_FORMAT_YUY2: u32 = 20;
+    const SPA_VIDEO_FORMAT_MJPG: u32 = 1; // encoded
+    const SPA_VIDEO_FORMAT_RGB: u32 = 12;
 
     let strides = i420.strides();
     let (y, u, v) = i420.data_mut();
 
-    // Match SPA video format raw values
-    if format == VideoFormat::NV12.as_raw() {
+    if format == SPA_VIDEO_FORMAT_NV12 {
         convert::nv12_to_i420(
             data, width, height,
             y, strides.0 as usize, u, strides.1 as usize, v, strides.2 as usize,
         );
         true
-    } else if format == VideoFormat::YUY2.as_raw() {
+    } else if format == SPA_VIDEO_FORMAT_YUY2 {
         convert::yuyv_to_i420(
             data, width, height,
             y, strides.0 as usize, u, strides.1 as usize, v, strides.2 as usize,
         );
         true
-    } else if format == VideoFormat::MJPG.as_raw() {
+    } else if format == SPA_VIDEO_FORMAT_MJPG {
         match convert::decode_mjpeg(data) {
             Ok(rgb) => {
                 convert::rgb_to_i420(
@@ -276,7 +324,7 @@ fn convert_spa_frame(
                 false
             }
         }
-    } else if format == VideoFormat::RGB.as_raw() {
+    } else if format == SPA_VIDEO_FORMAT_RGB {
         convert::rgb_to_i420(
             data, width, height,
             y, strides.0 as usize, u, strides.1 as usize, v, strides.2 as usize,

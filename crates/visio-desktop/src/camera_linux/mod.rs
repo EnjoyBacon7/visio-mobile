@@ -47,7 +47,10 @@ fn pipewire_portal_available() -> bool {
                 .map_err(|e| format!("tokio runtime: {e}"));
             match rt {
                 Ok(rt) => rt.block_on(async {
-                    ashpd::desktop::camera::Camera::new().await.is_ok()
+                    match ashpd::desktop::camera::Camera::new().await {
+                        Ok(camera) => camera.is_present().await.unwrap_or(false),
+                        Err(_) => false,
+                    }
                 }),
                 Err(_) => false,
             }
