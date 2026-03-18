@@ -16,6 +16,8 @@ mod audio_windows;
 mod audio_linux;
 #[cfg(target_os = "macos")]
 mod camera_macos;
+#[cfg(target_os = "linux")]
+mod camera_linux;
 mod noise_reduction;
 mod screen_capture;
 #[cfg(target_os = "macos")]
@@ -68,6 +70,8 @@ struct VisioState {
     settings: SettingsStore,
     #[cfg(target_os = "macos")]
     camera_capture: std::sync::Mutex<Option<camera_macos::MacCameraCapture>>,
+    #[cfg(target_os = "linux")]
+    camera_capture: std::sync::Mutex<Option<camera_linux::LinuxCameraCapture>>,
     audio_engine: std::sync::Mutex<Box<dyn audio_engine::VoiceAudioEngine>>,
     playout_buffer: Arc<AudioPlayoutBuffer>,
     selected_input_device: std::sync::Mutex<Option<String>>,
@@ -574,6 +578,7 @@ async fn toggle_mic(state: tauri::State<'_, VisioState>, enabled: bool) -> Resul
 
 #[tauri::command]
 async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Result<(), String> {
+    tracing::info!("toggle_camera called with enabled={}", enabled);
     let controls = state.controls.lock().await;
     if enabled {
         // Publish camera track if not yet published, or reuse existing source
@@ -608,9 +613,44 @@ async fn toggle_camera(state: tauri::State<'_, VisioState>, enabled: bool) -> Re
                 }
             }
         }
+
+        #[cfg(target_os = "linux")]
+        {
+            tracing::info!("Linux camera: attempting to start capture");
+            let mut cam = state
+                .camera_capture
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if cam.is_none() {
+                tracing::info!("Linux camera: no existing capture, source={}", source.is_some());
+                if let Some(source) = source {
+                    tracing::info!("Linux camera: starting LinuxCameraCapture");
+                    let capture = camera_linux::LinuxCameraCapture::start(source)
+                        .map_err(|e| {
+                            tracing::error!("Linux camera capture failed: {}", e);
+                            format!("camera capture: {e}")
+                        })?;
+                    *cam = Some(capture);
+                    tracing::info!("Linux camera capture (re)started successfully");
+                }
+            } else {
+                tracing::info!("Linux camera: capture already running");
+            }
+        }
     } else {
         // Stop camera capture when disabling
         #[cfg(target_os = "macos")]
+        {
+            let mut cam = state
+                .camera_capture
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if let Some(mut capture) = cam.take() {
+                capture.stop();
+            }
+        }
+
+        #[cfg(target_os = "linux")]
         {
             let mut cam = state
                 .camera_capture
@@ -1079,7 +1119,13 @@ fn list_video_input_devices() -> Vec<camera_macos::VideoDeviceInfo> {
     camera_macos::list_cameras()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn list_video_input_devices() -> Vec<camera_linux::VideoDeviceInfo> {
+    camera_linux::list_cameras()
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 fn list_video_input_devices() -> Vec<serde_json::Value> {
     Vec::new()
@@ -1187,13 +1233,48 @@ async fn select_video_input(
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn select_video_input(
+    state: tauri::State<'_, VisioState>,
+    unique_id: String,
+) -> Result<(), String> {
+    let controls = state.controls.lock().await;
+    let source = controls
+        .video_source()
+        .await
+        .ok_or("No video source — enable camera first")?;
+
+    // Stop existing camera
+    {
+        let mut cam = state
+            .camera_capture
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(mut capture) = cam.take() {
+            capture.stop();
+        }
+    }
+
+    // Start with selected camera
+    let capture = camera_linux::LinuxCameraCapture::start_with_unique_id(&unique_id, source)
+        .map_err(|e| format!("camera: {e}"))?;
+    let mut cam = state
+        .camera_capture
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    *cam = Some(capture);
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 async fn select_video_input(
     _state: tauri::State<'_, VisioState>,
     _unique_id: String,
 ) -> Result<(), String> {
-    Err("Video device selection not implemented on this platform".into())
+    Err("Video device selection not implemented on Windows".into())
 }
 
 // ---------------------------------------------------------------------------
@@ -1557,6 +1638,8 @@ pub fn run() {
         settings,
         #[cfg(target_os = "macos")]
         camera_capture: std::sync::Mutex::new(None),
+        #[cfg(target_os = "linux")]
+        camera_capture: std::sync::Mutex::new(None),
         audio_engine: std::sync::Mutex::new(audio_engine_instance),
         playout_buffer,
         selected_input_device: std::sync::Mutex::new(None),
@@ -1631,6 +1714,8 @@ pub fn run() {
 
             tracing::info!("Visio desktop app started, video callback registered");
 
+            // Note: devtools can be opened with Ctrl+Shift+I if needed
+
             // Log deep link events on the Rust side
             app.listen("deep-link://new-url", |event: tauri::Event| {
                 tracing::info!("Deep link received (Rust): {:?}", event.payload());
@@ -1670,6 +1755,16 @@ pub fn run() {
                     engine.stop_playout();
                 }
                 #[cfg(target_os = "macos")]
+                {
+                    let mut cam = state
+                        .camera_capture
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    if let Some(mut capture) = cam.take() {
+                        capture.stop();
+                    }
+                }
+                #[cfg(target_os = "linux")]
                 {
                     let mut cam = state
                         .camera_capture
