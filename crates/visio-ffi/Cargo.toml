@@ -15,11 +15,11 @@ tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "pkg-config"] }
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "download-binaries", "tls-native"] }
 ndarray = "0.17"
 jpeg-decoder = "0.3"
 
-# On Linux, use pkg-config to link against system libonnxruntime (1.21)
+# On Linux, use pkg-config to link against system libonnxruntime
 [target.'cfg(target_os = "linux")'.dependencies]
 ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "pkg-config", "api-18"] }
 
