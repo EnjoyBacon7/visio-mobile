@@ -103,6 +103,8 @@ struct AudioObjectPropertyAddress {
 }
 
 const K_AUDIO_HARDWARE_PROPERTY_DEVICES: u32 = 0x64657623; // 'dev#'
+const K_AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE: u32 = 0x64496E20; // 'dIn '
+const K_AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x644F7574; // 'dOut'
 const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0x676C6F62; // 'glob'
 const K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0x6D61696E; // 'main'
 const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
@@ -165,6 +167,15 @@ unsafe extern "C" {
         qualifier_data: *const c_void,
         io_data_size: *mut u32,
         out_data: *mut c_void,
+    ) -> OSStatus;
+
+    fn AudioObjectSetPropertyData(
+        object_id: u32,
+        address: *const AudioObjectPropertyAddress,
+        qualifier_data_size: u32,
+        qualifier_data: *const c_void,
+        data_size: u32,
+        data: *const c_void,
     ) -> OSStatus;
 }
 
@@ -275,12 +286,37 @@ fn resolve_device_id_by_name(name: &str, output: bool) -> Option<u32> {
     }
 }
 
+/// Set the system default input or output device by AudioDeviceID.
+/// VPIO always uses system defaults, so we change the default before starting.
+fn set_system_default_device(device_id: u32, output: bool) -> OSStatus {
+    let selector = if output {
+        K_AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE
+    } else {
+        K_AUDIO_HARDWARE_PROPERTY_DEFAULT_INPUT_DEVICE
+    };
+    let address = AudioObjectPropertyAddress {
+        selector,
+        scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+        element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+    };
+    unsafe {
+        AudioObjectSetPropertyData(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            &address,
+            0,
+            std::ptr::null(),
+            std::mem::size_of::<u32>() as u32,
+            &device_id as *const u32 as *const c_void,
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shared state passed to callbacks via raw pointer
 // ---------------------------------------------------------------------------
 
 /// Max frames per callback (CoreAudio typically uses 512 or 1024 at 48kHz).
-const MAX_CALLBACK_FRAMES: usize = 1024;
+const MAX_CALLBACK_FRAMES: usize = 4096;
 
 struct CallbackState {
     playout_buffer: Arc<AudioPlayoutBuffer>,
@@ -305,16 +341,17 @@ unsafe extern "C" fn render_callback(
     let buf_list = unsafe { &mut *io_data };
     let buf = &mut buf_list.buffers[0];
 
-    let sample_count = in_number_frames as usize;
+    let sample_count = (in_number_frames as usize).min(MAX_CALLBACK_FRAMES);
     // Use pre-allocated scratch buffer (no heap alloc on RT thread)
     let scratch = unsafe { &mut *state.playout_scratch.get() };
     let samples = &mut scratch[..sample_count];
     samples.fill(0);
     state.playout_buffer.pull_samples(samples);
 
-    // Write i16 samples to the output buffer
-    let dst = unsafe { std::slice::from_raw_parts_mut(buf.data as *mut i16, sample_count) };
-    dst.copy_from_slice(samples);
+    // Write i16 samples to the output buffer (clamp to actual buffer size)
+    let dst_len = (buf.data_byte_size as usize / 2).min(sample_count);
+    let dst = unsafe { std::slice::from_raw_parts_mut(buf.data as *mut i16, dst_len) };
+    dst.copy_from_slice(&samples[..dst_len]);
 
     0 // noErr
 }
@@ -397,7 +434,7 @@ pub struct MacAudioEngine {
     // Box the wrapper so its address is stable for the callback pointer
     input_wrapper: Option<Box<InputCallbackWrapper>>,
     drain_running: Option<Arc<AtomicBool>>,
-    _input_device: Option<String>,
+    input_device: Option<String>,
     output_device: Option<String>,
     device_change_cb: Option<Box<DeviceChangeCallback>>,
 }
@@ -413,7 +450,7 @@ impl MacAudioEngine {
             callback_state: None,
             input_wrapper: None,
             drain_running: None,
-            _input_device: input_device.map(String::from),
+            input_device: input_device.map(String::from),
             output_device: output_device.map(String::from),
             device_change_cb: None,
         }
@@ -440,21 +477,29 @@ impl MacAudioEngine {
                 return Err(format!("AudioComponentInstanceNew failed: {status}"));
             }
 
-            // Set output device if specified (before enabling IO)
+            // Change system default devices if specified.
+            // VPIO always uses system defaults — kAudioOutputUnitProperty_CurrentDevice
+            // is not supported on VoiceProcessingIO, so we change the OS-level default.
+            if let Some(ref device_name) = self.input_device {
+                if let Some(device_id) = resolve_device_id_by_name(device_name, false) {
+                    let status = set_system_default_device(device_id, false);
+                    if status != 0 {
+                        tracing::warn!("failed to set system default input to {device_name:?} (id={device_id}): {status}");
+                    } else {
+                        tracing::info!("system default input device set to {device_name:?} (id={device_id})");
+                    }
+                } else {
+                    tracing::warn!("input device {device_name:?} not found, using default");
+                }
+            }
+
             if let Some(ref device_name) = self.output_device {
                 if let Some(device_id) = resolve_device_id_by_name(device_name, true) {
-                    let status = AudioUnitSetProperty(
-                        unit,
-                        K_AUDIO_OUTPUT_UNIT_PROPERTY_CURRENT_DEVICE,
-                        K_AUDIO_UNIT_SCOPE_GLOBAL,
-                        K_OUTPUT_ELEMENT,
-                        &device_id as *const u32 as *const c_void,
-                        std::mem::size_of::<u32>() as u32,
-                    );
+                    let status = set_system_default_device(device_id, true);
                     if status != 0 {
-                        tracing::warn!("failed to set output device to {device_name:?}: {status}");
+                        tracing::warn!("failed to set system default output to {device_name:?} (id={device_id}): {status}");
                     } else {
-                        tracing::info!("audio output device set to {device_name:?} (id={device_id})");
+                        tracing::info!("system default output device set to {device_name:?} (id={device_id})");
                     }
                 } else {
                     tracing::warn!("output device {device_name:?} not found, using default");

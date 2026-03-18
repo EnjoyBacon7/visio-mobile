@@ -1,0 +1,80 @@
+app-id: io.visio.desktop
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.llvm18
+command: visio-desktop
+
+finish-args:
+  # Display
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  # Network (WebRTC/LiveKit)
+  - --share=network
+  # Audio (PulseAudio + PipeWire for AEC)
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # Camera
+  - --device=all
+  # Screen share via XDG portal
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.ScreenCast
+  # GPU acceleration
+  - --device=dri
+
+modules:
+  # Install Rust toolchain directly (avoids SDK extension version mismatch)
+  - name: rust-toolchain
+    buildsystem: simple
+    cleanup:
+      - '*'
+    build-options:
+      no-debuginfo: true
+      strip: false
+    build-commands:
+      - ./install.sh --prefix=/app --disable-ldconfig
+    sources:
+      - type: archive
+        url: https://static.rust-lang.org/dist/rust-1.88.0-x86_64-unknown-linux-gnu.tar.xz
+        sha256: 7b5437c1d18a174faae253a18eac22c32288dccfc09ff78d5ee99b7467e21bca
+
+  - name: visio-desktop
+    buildsystem: simple
+    build-options:
+      append-path: /app/bin:/usr/lib/sdk/llvm18/bin
+      env:
+        CARGO_HOME: /run/build/visio-desktop/cargo
+        LIBCLANG_PATH: /usr/lib/sdk/llvm18/lib
+        LK_CUSTOM_WEBRTC: /run/build/visio-desktop/lk-webrtc/linux-x64-release
+    build-commands:
+      # Configure cargo for vendored (offline) deps
+      - |
+        cat >> .cargo/config.toml <<'VENDORCFG'
+
+        [source.crates-io]
+        replace-with = "vendored-sources"
+
+        [source.vendored-sources]
+        directory = "cargo-vendor"
+        VENDORCFG
+      # Build the Tauri desktop binary
+      - cargo build --release --offline -p visio-desktop
+      # Install binary
+      - install -Dm755 target/release/visio-desktop /app/bin/visio-desktop
+      # Desktop entry + metadata
+      - install -Dm644 flatpak/io.visio.desktop.desktop /app/share/applications/io.visio.desktop.desktop
+      - install -Dm644 flatpak/io.visio.desktop.metainfo.xml /app/share/metainfo/io.visio.desktop.metainfo.xml
+      # Icons
+      - install -Dm644 crates/visio-desktop/icons/32x32.png /app/share/icons/hicolor/32x32/apps/io.visio.desktop.png
+      - install -Dm644 crates/visio-desktop/icons/128x128.png /app/share/icons/hicolor/128x128/apps/io.visio.desktop.png
+      - install -Dm644 crates/visio-desktop/icons/icon.png /app/share/icons/hicolor/256x256/apps/io.visio.desktop.png
+      # Resources
+      - mkdir -p /app/share/visio
+      - cp -r i18n /app/share/visio/i18n
+      - cp -r assets/backgrounds /app/share/visio/backgrounds
+      - cp -r models /app/share/visio/models || true
+    sources:
+      - type: dir
+        path: ..

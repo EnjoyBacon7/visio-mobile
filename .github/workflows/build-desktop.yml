@@ -64,7 +64,9 @@ jobs:
             libasound2-dev \
             libpipewire-0.3-dev \
             libspa-0.2-dev \
-            libgbm-dev
+            libgbm-dev \
+            flatpak \
+            flatpak-builder
 
       # --- Node.js + frontend build ---
       - name: Set up Node.js
@@ -97,6 +99,39 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: "-"
 
+      # --- Flatpak build (Linux only, from source in GNOME SDK) ---
+      - name: Install Flatpak SDK and runtime
+        if: matrix.platform == 'linux'
+        run: |
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub \
+            org.gnome.Platform//47 \
+            org.gnome.Sdk//47 \
+            org.freedesktop.Sdk.Extension.llvm18//24.08
+
+      - name: Vendor cargo dependencies for Flatpak
+        if: matrix.platform == 'linux'
+        run: cargo vendor cargo-vendor
+
+      - name: Pre-download libwebrtc for Flatpak offline build
+        if: matrix.platform == 'linux'
+        run: |
+          WEBRTC_URL="https://github.com/livekit/rust-sdks/releases/download/webrtc-0001d84-2/webrtc-linux-x64-release.zip"
+          curl -L -o /tmp/webrtc.zip "$WEBRTC_URL"
+          unzip -qo /tmp/webrtc.zip -d /tmp/webrtc-extract
+          # Move extracted content to lk-webrtc (strip top-level dir if present)
+          if [ -d /tmp/webrtc-extract/webrtc-linux-x64-release ]; then
+            mv /tmp/webrtc-extract/webrtc-linux-x64-release lk-webrtc
+          else
+            mv /tmp/webrtc-extract lk-webrtc
+          fi
+          ls lk-webrtc/
+          rm -f /tmp/webrtc.zip
+
+      - name: Build Flatpak bundle
+        if: matrix.platform == 'linux'
+        run: flatpak/build-flatpak.sh
+
       # --- Upload artifacts ---
       - name: Upload macOS artifacts
         if: matrix.platform == 'macos'
@@ -124,6 +159,7 @@ jobs:
           path: |
             target/release/bundle/appimage/*.AppImage
             target/release/bundle/deb/*.deb
+            target/release/bundle/flatpak/*.flatpak
 
   # --- GitHub Release with all artifacts ---
   release:
@@ -152,7 +188,7 @@ jobs:
           FILES=()
           while IFS= read -r -d '' f; do
             FILES+=("$f")
-          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) -print0)
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.flatpak" \) -print0)
 
           if [ ${#FILES[@]} -gt 0 ]; then
             gh release create "$TAG" \

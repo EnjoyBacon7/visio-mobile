@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Visio Mobile
+Comment=Video conferencing client
+GenericName=Video Conferencing
+Exec=visio-desktop %u
+Icon=io.visio.desktop
+Terminal=false
+Type=Application
+Categories=Network;VideoConference;Chat;
+Keywords=video;conference;meeting;call;livekit;
+MimeType=x-scheme-handler/visio;
+StartupNotify=true
+StartupWMClass=visio-desktop

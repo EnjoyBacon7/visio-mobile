@@ -25,7 +25,7 @@ pub struct Settings {
     pub notification_message_received: bool,
     #[serde(default = "default_background_mode")]
     pub background_mode: String,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub adaptive_mode_enabled: bool,
     #[serde(default)]
     pub room_history: Vec<String>,
@@ -81,7 +81,7 @@ impl Default for Settings {
             notification_hand_raised: true,
             notification_message_received: true,
             background_mode: "off".to_string(),
-            adaptive_mode_enabled: true,
+            adaptive_mode_enabled: false,
             room_history: Vec::new(),
             noise_reduction_enabled: true,
             audio_input_device: None,
@@ -555,9 +555,9 @@ mod tests {
     }
 
     #[test]
-    fn test_adaptive_mode_enabled_default_true() {
+    fn test_adaptive_mode_enabled_default_false() {
         let s = Settings::default();
-        assert!(s.adaptive_mode_enabled);
+        assert!(!s.adaptive_mode_enabled);
     }
 
     #[test]
@@ -566,11 +566,11 @@ mod tests {
         let path = dir.path().to_str().unwrap();
         {
             let store = SettingsStore::new(path);
-            assert!(store.is_adaptive_mode_enabled());
-            store.set_adaptive_mode_enabled(false);
+            assert!(!store.is_adaptive_mode_enabled());
+            store.set_adaptive_mode_enabled(true);
         }
         let store = SettingsStore::new(path);
-        assert!(!store.is_adaptive_mode_enabled());
+        assert!(store.is_adaptive_mode_enabled());
     }
 
     #[test]
