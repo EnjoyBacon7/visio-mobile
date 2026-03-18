@@ -4,7 +4,7 @@
 //! then opens a PipeWire stream to receive video frames. This enables
 //! proper Flatpak sandboxing without --device=all.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
@@ -24,7 +24,7 @@ pub fn list_cameras() -> Vec<VideoDeviceInfo> {
 }
 
 pub struct PipewireCameraCapture {
-    quit_sender: pipewire::channel::Sender<()>,
+    running: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -57,13 +57,13 @@ impl PipewireCameraCapture {
         .join()
         .map_err(|_| "portal thread panicked".to_string())??;
 
-        // Create PipeWire main loop on a dedicated thread
-        let (quit_sender, quit_receiver) = pipewire::channel::channel::<()>();
+        let running = Arc::new(AtomicBool::new(true));
+        let running_clone = running.clone();
 
         let capture_thread = thread::Builder::new()
             .name("visio-camera-pipewire".into())
             .spawn(move || {
-                if let Err(e) = pipewire_capture_loop(pw_fd, source, quit_receiver) {
+                if let Err(e) = pipewire_capture_loop(pw_fd, source, running_clone) {
                     tracing::error!("PipeWire camera capture error: {e}");
                 }
             })
@@ -72,13 +72,13 @@ impl PipewireCameraCapture {
         tracing::info!("PipeWire camera capture started");
 
         Ok(Self {
-            quit_sender,
+            running,
             thread: Some(capture_thread),
         })
     }
 
     pub fn stop(&mut self) {
-        let _ = self.quit_sender.send(());
+        self.running.store(false, Ordering::SeqCst);
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
@@ -97,7 +97,7 @@ impl Drop for PipewireCameraCapture {
 fn pipewire_capture_loop(
     pw_fd: std::os::fd::OwnedFd,
     source: NativeVideoSource,
-    quit_receiver: pipewire::channel::Receiver<()>,
+    running: Arc<AtomicBool>,
 ) -> Result<(), String> {
     use pipewire::main_loop::MainLoopBox;
     use pipewire::context::ContextBox;
@@ -107,12 +107,11 @@ fn pipewire_capture_loop(
     let context = ContextBox::new(&mainloop.loop_(), None)
         .map_err(|e| format!("ContextBox::new: {e}"))?;
 
-    use std::os::fd::AsRawFd;
     let core = context
-        .connect_fd(pw_fd.as_raw_fd(), None)
+        .connect_fd(pw_fd, None)
         .map_err(|e| format!("connect_fd: {e}"))?;
 
-    let stream = pipewire::stream::Stream::new(
+    let stream = pipewire::stream::StreamBox::new(
         &core,
         "visio-camera",
         pipewire::properties::properties! {
@@ -121,7 +120,7 @@ fn pipewire_capture_loop(
             *pipewire::keys::MEDIA_ROLE => "Camera",
         },
     )
-    .map_err(|e| format!("Stream::new: {e}"))?;
+    .map_err(|e| format!("StreamBox::new: {e}"))?;
 
     let frame_count = Arc::new(AtomicU64::new(0));
     let frame_count_cb = frame_count.clone();
@@ -135,13 +134,7 @@ fn pipewire_capture_loop(
     let vh_cb = video_height.clone();
     let vf_cb = video_format.clone();
 
-    // Register quit signal
-    let mainloop_weak = mainloop.loop_().downgrade();
-    let _quit_listener = quit_receiver.attach(&mainloop.loop_(), move |_| {
-        if let Some(ml) = mainloop_weak.upgrade() {
-            ml.quit();
-        }
-    });
+    let running_cb = running.clone();
 
     // Process callback — called for each video frame
     let _listener = stream
@@ -161,6 +154,9 @@ fn pipewire_capture_loop(
             }
         })
         .process(move |stream| {
+            if !running_cb.load(Ordering::Relaxed) {
+                return;
+            }
             let width = video_width.load(Ordering::SeqCst) as u32;
             let height = video_height.load(Ordering::SeqCst) as u32;
             let format = video_format.load(Ordering::SeqCst) as u32;
@@ -222,12 +218,16 @@ fn pipewire_capture_loop(
             None,
             pipewire::stream::StreamFlags::AUTOCONNECT
                 | pipewire::stream::StreamFlags::MAP_BUFFERS,
-            &mut [].iter(),
+            &mut [],
         )
         .map_err(|e| format!("stream connect: {e}"))?;
 
     tracing::info!("PipeWire stream connected, entering main loop");
-    mainloop.run();
+    // Run the main loop, checking the running flag periodically
+    while running.load(Ordering::Relaxed) {
+        // Iterate the main loop with a short timeout (10ms) to check running flag
+        mainloop.loop_().iterate(std::time::Duration::from_millis(10));
+    }
     tracing::info!("PipeWire main loop exited");
 
     Ok(())
