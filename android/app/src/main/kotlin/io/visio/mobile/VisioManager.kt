@@ -303,7 +303,8 @@ object VisioManager : VisioEventListener {
      * and CAMERA permission has been granted.
      */
     fun startCameraCapture() {
-        if (cameraCapture != null) return
+        // Stop any existing capture to avoid Camera2 state conflicts on reconnect
+        stopCameraCapture()
         cameraCapture = CameraCapture(appContext).also { it.start() }
     }
 
@@ -846,6 +847,18 @@ object VisioManager : VisioEventListener {
                             startContextDetection()
                         }
                         startAudioFocusMonitoring()
+                        // Republish camera track and restart capture on reconnection
+                        scope.launch {
+                            if (client.isCameraEnabled()) {
+                                try {
+                                    // Re-publish camera track in Rust (recreates NativeVideoSource)
+                                    client.setCameraEnabled(true)
+                                } catch (e: Exception) {
+                                    Log.e("VISIO", "Failed to republish camera on reconnect: ${e.message}")
+                                }
+                                startCameraCapture()
+                            }
+                        }
                     }
                     is ConnectionState.Disconnected -> {
                         _handRaisedMap.value = emptyMap()
