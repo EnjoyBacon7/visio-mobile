@@ -9,7 +9,7 @@ visio-core = { path = "../visio-core" }
 visio-ffi = { path = "../visio-ffi" }
 visio-video = { path = "../visio-video" }
 livekit = { workspace = true }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["devtools"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -40,6 +40,7 @@ windows = { version = "=0.58", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 libpulse-binding = "2"
 libpulse-simple-binding = "2"
+v4l = "0.14"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -37,6 +37,7 @@ import {
   RiPushpinLine,
   RiUnpinFill,
   RiVolumeMuteLine,
+  RiAddLine,
 } from "@remixicon/react";
 
 // ---------------------------------------------------------------------------
@@ -2188,6 +2189,17 @@ function SettingsModal({
     adaptiveModeEnabled: true,
   });
   const [meetInstances, setMeetInstances] = useState<string[]>(["meet.numerique.gouv.fr"]);
+  const [newInstance, setNewInstance] = useState("");
+
+  const addInstance = () => {
+    const val = newInstance.trim().toLowerCase();
+    if (val && !meetInstances.includes(val)) {
+      const next = [...meetInstances, val];
+      setMeetInstances(next);
+      invoke("set_meet_instances", { instances: next });
+      setNewInstance("");
+    }
+  };
 
   useEffect(() => {
     invoke<Settings>("get_settings")
@@ -2316,18 +2328,15 @@ function SettingsModal({
                 id="newInstance"
                 type="text"
                 placeholder={t("settings.instancePlaceholder")}
+                value={newInstance}
+                onChange={(e) => setNewInstance(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const val = (e.target as HTMLInputElement).value.trim().toLowerCase();
-                    if (val && !meetInstances.includes(val)) {
-                      const next = [...meetInstances, val];
-                      setMeetInstances(next);
-                      invoke("set_meet_instances", { instances: next });
-                      (e.target as HTMLInputElement).value = "";
-                    }
-                  }
+                  if (e.key === "Enter") addInstance();
                 }}
               />
+              <button className="btn-icon" onClick={addInstance} disabled={!newInstance.trim()}>
+                <RiAddLine size={16} />
+              </button>
             </div>
           </div>
         </div>
@@ -2531,15 +2540,24 @@ export default function App() {
   viewRef.current = view;
 
   // ---- Device enumeration -------------------------------------------------
+  // WORKAROUND: Defer device enumeration to avoid USB blocking at startup.
+  // Only enumerate when settings view is opened.
+  const [devicesEnumerated, setDevicesEnumerated] = useState(false);
+
   useEffect(() => {
+    // Only enumerate when in settings view to avoid USB blocking on some systems
+    if (view !== "settings" || devicesEnumerated) return;
+
     const enumerate = async () => {
       try {
+        console.log("Enumerating audio/video devices...");
         const inputs: NativeAudioDevice[] = await invoke("list_audio_input_devices");
         const outputs: NativeAudioDevice[] = await invoke("list_audio_output_devices");
         const cameras: NativeVideoDevice[] = await invoke("list_video_input_devices");
         setAudioInputs(inputs);
         setAudioOutputs(outputs);
         setVideoInputs(cameras);
+        setDevicesEnumerated(true);
 
         // Auto-select defaults on first load
         setSelectedAudioInput((prev) => {
@@ -2562,10 +2580,8 @@ export default function App() {
       }
     };
     enumerate();
-    // Re-enumerate every 3s to catch USB hotplug
-    const interval = setInterval(enumerate, 3000);
 
-    // Listen for audio device errors (e.g. USB unplug) to re-enumerate immediately
+    // Listen for audio device errors (e.g. USB unplug) to re-enumerate
     let unlistenFn: (() => void) | null = null;
     listen("audio-device-error", (event) => {
       console.warn("Audio device error:", event.payload);
@@ -2575,10 +2591,9 @@ export default function App() {
     });
 
     return () => {
-      clearInterval(interval);
       unlistenFn?.();
     };
-  }, []);
+  }, [view, devicesEnumerated]);
 
   // ---- Click outside to close device pickers ------------------------------
   useEffect(() => {

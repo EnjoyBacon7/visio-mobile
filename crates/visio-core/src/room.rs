@@ -220,9 +220,22 @@ impl RoomManager {
         let room = self.room.lock().await;
         let room = room.as_ref()?;
         let local = room.local_participant();
+        // Prefer the stored username (what the user entered) over LiveKit's
+        // local.name() which comes from the JWT token and may be truncated
+        // or corrupted by the server.
         let name = {
-            let n = local.name().to_string();
-            if n.is_empty() { None } else { Some(n) }
+            let stored = self.last_username.lock().await.clone();
+            if let Some(ref s) = stored {
+                if !s.is_empty() {
+                    stored
+                } else {
+                    let n = local.name().to_string();
+                    if n.is_empty() { None } else { Some(n) }
+                }
+            } else {
+                let n = local.name().to_string();
+                if n.is_empty() { None } else { Some(n) }
+            }
         };
         // Use the authoritative camera_enabled flag rather than checking
         // publication mute state, which may lag behind the actual user intent
