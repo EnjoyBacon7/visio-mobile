@@ -46,7 +46,7 @@ libpulse-binding = "2"
 libpulse-simple-binding = "2"
 v4l = "0.14"
 ashpd = { version = "0.10", optional = true }
-pipewire = { version = "0.8", optional = true }
+pipewire = { version = "0.9", optional = true }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
