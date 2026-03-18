@@ -2545,8 +2545,8 @@ export default function App() {
   const [devicesEnumerated, setDevicesEnumerated] = useState(false);
 
   useEffect(() => {
-    // Only enumerate when in settings view to avoid USB blocking on some systems
-    if (view !== "settings" || devicesEnumerated) return;
+    // Only enumerate when settings modal is open to avoid USB blocking on some systems
+    if (!showSettings || devicesEnumerated) return;
 
     const enumerate = async () => {
       try {
@@ -2593,7 +2593,7 @@ export default function App() {
     return () => {
       unlistenFn?.();
     };
-  }, [view, devicesEnumerated]);
+  }, [showSettings, devicesEnumerated]);
 
   // ---- Click outside to close device pickers ------------------------------
   useEffect(() => {
