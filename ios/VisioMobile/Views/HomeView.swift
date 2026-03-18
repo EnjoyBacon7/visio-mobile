@@ -48,8 +48,8 @@ struct HomeView: View {
                     }
                     .padding(.top, 16)
                     .background(GeometryReader { geo in
-                        Color.clear.onChange(of: geo.frame(in: .named("scroll")).minY) { _, newValue in
-                            showCompactHeader = newValue < -20
+                        Color.clear.onChange(of: geo.frame(in: .named("scroll")).minY) { value in
+                            showCompactHeader = value < -20
                         }
                     })
 
