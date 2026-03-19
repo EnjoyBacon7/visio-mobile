@@ -79,7 +79,7 @@ struct CallView: View {
     private var isDark: Bool { manager.currentTheme == "dark" }
     /// When adaptive mode is disabled in settings, force Office mode everywhere.
     private var effectiveAdaptiveMode: AdaptiveMode {
-        manager.client.isAdaptiveModeEnabled() ? effectiveAdaptiveMode : .office
+        manager.client.isAdaptiveModeEnabled() ? manager.adaptiveMode : .office
     }
     private var isAdaptiveModeEnabled: Bool { manager.client.isAdaptiveModeEnabled() }
 
