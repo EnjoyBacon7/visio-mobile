@@ -760,7 +760,22 @@ object VisioManager : VisioEventListener {
     }
 
     fun sendReaction(emoji: String) {
-        scope.launch { client.sendReaction(emoji) }
+        scope.launch {
+            try {
+                client.sendReaction(emoji)
+                // Show reaction locally (server echo is filtered out in Rust)
+                val reaction = ReactionData(
+                    id = reactionIdCounter++,
+                    participantSid = "local",
+                    participantName = client.getSettings().displayName ?: "",
+                    emoji = emoji,
+                    timestamp = System.currentTimeMillis(),
+                )
+                _reactions.value = _reactions.value + reaction
+            } catch (e: Exception) {
+                Log.e("VISIO", "sendReaction failed: ${e.message}")
+            }
+        }
     }
 
     /**

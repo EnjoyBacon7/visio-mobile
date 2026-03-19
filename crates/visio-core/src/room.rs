@@ -1651,7 +1651,10 @@ impl RoomManager {
                     }
 
                     // Handle reactions from Meet web client (no topic, reliable data)
-                    if let Ok(text) = std::str::from_utf8(&payload)
+                    // Skip our own reactions — LiveKit echoes data packets back to the sender,
+                    // and we already display the reaction locally on send.
+                    if participant.is_some()
+                        && let Ok(text) = std::str::from_utf8(&payload)
                         && let Ok(json) = serde_json::from_str::<serde_json::Value>(text)
                         && json["type"].as_str() == Some("reactionReceived")
                     {

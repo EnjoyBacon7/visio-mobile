@@ -1641,10 +1641,12 @@ fun ParticipantTile(
     ) {
         // Video surface or avatar fallback
         if (hasTrack && trackSid != null) {
-            AndroidView(
-                factory = { ctx -> VideoSurfaceView(ctx, trackSid) },
-                modifier = Modifier.fillMaxSize(),
-            )
+            androidx.compose.runtime.key(trackSid) {
+                AndroidView(
+                    factory = { ctx -> VideoSurfaceView(ctx, trackSid) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
             Box(
                 modifier =

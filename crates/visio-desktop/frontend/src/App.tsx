@@ -1478,6 +1478,15 @@ function CallView({
   const handleSendReaction = async (emojiId: string) => {
     try {
       await invoke("send_reaction", { emoji: emojiId });
+      // Show reaction locally (the echo from the server is filtered out)
+      const id = ++reactionIdCounter.current;
+      setReactions((prev) => [...prev, {
+        id,
+        participantSid: localParticipant?.sid ?? "",
+        participantName: localParticipant?.name ?? "",
+        emoji: emojiId,
+        timestamp: Date.now(),
+      }]);
     } catch (e) {
       console.error("send_reaction error:", e);
     }
