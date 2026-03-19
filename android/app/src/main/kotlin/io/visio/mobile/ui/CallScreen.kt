@@ -829,7 +829,7 @@ fun CallScreen(
                         } else {
                             // Grid mode — space-filling tiles using DisplayItems
                             val count = displayItems.size
-                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            if (count > 0) BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                                 val isLandscape = maxWidth > maxHeight
                                 val columnCount =
                                     when {
@@ -838,7 +838,7 @@ fun CallScreen(
                                         count <= 2 -> 1
                                         else -> 2
                                     }
-                                val rowCount = (count + columnCount - 1) / columnCount
+                                val rowCount = maxOf(1, (count + columnCount - 1) / columnCount)
                                 val tileHeight = (maxHeight - 8.dp * (rowCount - 1)) / rowCount
 
                                 Column(

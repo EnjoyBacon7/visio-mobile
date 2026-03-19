@@ -8,7 +8,7 @@ struct SettingsView: View {
     @State private var displayName: String = ""
     @State private var micOnJoin: Bool = true
     @State private var cameraOnJoin: Bool = false
-    @State private var adaptiveModeEnabled: Bool = true
+    @State private var adaptiveModeEnabled: Bool = false
     @State private var language: String = Strings.detectSystemLang()
     @State private var theme: String = "light"
     @State private var meetInstances: [String] = ["meet.numerique.gouv.fr"]

@@ -69,7 +69,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var theme by remember { mutableStateOf("light") }
     var micOnJoin by remember { mutableStateOf(true) }
     var cameraOnJoin by remember { mutableStateOf(false) }
-    var adaptiveModeEnabled by remember { mutableStateOf(true) }
+    var adaptiveModeEnabled by remember { mutableStateOf(false) }
     var meetInstances by remember { mutableStateOf(listOf("meet.numerique.gouv.fr")) }
     var newInstance by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
