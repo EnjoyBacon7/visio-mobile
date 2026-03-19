@@ -77,10 +77,15 @@ struct CallView: View {
 
     private var lang: String { manager.currentLang }
     private var isDark: Bool { manager.currentTheme == "dark" }
+    /// When adaptive mode is disabled in settings, force Office mode everywhere.
+    private var effectiveAdaptiveMode: AdaptiveMode {
+        manager.client.isAdaptiveModeEnabled() ? effectiveAdaptiveMode : .office
+    }
+    private var isAdaptiveModeEnabled: Bool { manager.client.isAdaptiveModeEnabled() }
 
     var body: some View {
         ZStack {
-            (manager.adaptiveMode == .office
+            (effectiveAdaptiveMode == .office
                 ? VisioColors.background(dark: isDark)
                 : Color.black
             ).ignoresSafeArea()
@@ -138,10 +143,10 @@ struct CallView: View {
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if manager.adaptiveMode == .car {
+                    } else if effectiveAdaptiveMode == .car {
                         // Car mode: audio-only screen with active speaker name
                         carAudioOnlyView
-                    } else if manager.adaptiveMode == .pedestrian {
+                    } else if effectiveAdaptiveMode == .pedestrian {
                         // Pedestrian mode: single active speaker tile
                         pedestrianSingleTile
                     } else if let fi = focusedItem {
@@ -163,15 +168,15 @@ struct CallView: View {
                     VStack {
                         HStack {
                             Spacer()
-                            VStack(alignment: .trailing, spacing: 4) {
+                            if isAdaptiveModeEnabled { VStack(alignment: .trailing, spacing: 4) {
                                 Button {
                                     withAnimation(.easeInOut(duration: 0.2)) {
                                         showAdaptiveModePicker.toggle()
                                     }
                                 } label: {
                                     HStack(spacing: 4) {
-                                        Image(systemName: modeIcon(manager.adaptiveMode))
-                                        Text(modeLabel(manager.adaptiveMode))
+                                        Image(systemName: modeIcon(effectiveAdaptiveMode))
+                                        Text(modeLabel(effectiveAdaptiveMode))
                                     }
                                     .font(.caption2)
                                     .foregroundColor(.white)
@@ -222,7 +227,7 @@ struct CallView: View {
                                     .padding(.trailing, 8)
                                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing)))
                                 }
-                            }
+                            } }
                         }
                         Spacer()
                     }
@@ -328,7 +333,7 @@ struct CallView: View {
             guard !userPinned else { return }
             guard !newSpeakers.isEmpty else { return }
             // Only auto-focus in office mode (pedestrian/car have their own speaker layouts)
-            guard manager.adaptiveMode == .office else { return }
+            guard effectiveAdaptiveMode == .office else { return }
 
             // Find the first active speaker that is NOT the local participant
             let localSid = manager.participants.first?.sid
@@ -769,7 +774,7 @@ struct CallView: View {
     // MARK: - Control Bar
 
     private var isLargeButtons: Bool {
-        manager.adaptiveMode == .pedestrian || manager.adaptiveMode == .car
+        effectiveAdaptiveMode == .pedestrian || effectiveAdaptiveMode == .car
     }
 
     private var buttonSize: CGFloat { isLargeButtons ? 96 : 38 }
@@ -779,7 +784,7 @@ struct CallView: View {
     private var controlBar: some View {
         VStack(spacing: 4) {
             // Reaction picker row (above control bar) — office only
-            if showReactionPicker && manager.adaptiveMode == .office {
+            if showReactionPicker && effectiveAdaptiveMode == .office {
                 HStack(spacing: 0) {
                     ForEach(Self.reactionEmojis, id: \.id) { item in
                         Button {
@@ -802,7 +807,7 @@ struct CallView: View {
             }
 
             // Overflow menu row (above control bar) — office only
-            if showOverflow && manager.adaptiveMode == .office {
+            if showOverflow && effectiveAdaptiveMode == .office {
                 HStack(spacing: 0) {
                     Spacer()
 
@@ -934,7 +939,7 @@ struct CallView: View {
                 }
 
                 // Camera toggle — office and pedestrian only
-                if manager.adaptiveMode != .car {
+                if effectiveAdaptiveMode != .car {
                     Button {
                         manager.toggleCamera()
                     } label: {
@@ -949,7 +954,7 @@ struct CallView: View {
                 }
 
                 // Participants with count badge — office only
-                if manager.adaptiveMode == .office {
+                if effectiveAdaptiveMode == .office {
                     Button {
                         showParticipantList = true
                     } label: {
@@ -975,7 +980,7 @@ struct CallView: View {
                 }
 
                 // Chat with unread badge — office only
-                if manager.adaptiveMode == .office {
+                if effectiveAdaptiveMode == .office {
                     Button {
                         showChat = true
                     } label: {
@@ -1003,7 +1008,7 @@ struct CallView: View {
                 }
 
                 // More (overflow) button — office only
-                if manager.adaptiveMode == .office {
+                if effectiveAdaptiveMode == .office {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showOverflow.toggle()
@@ -1039,7 +1044,7 @@ struct CallView: View {
                 .accessibilityLabel(Strings.t("control.leave", lang: lang))
             }
             .padding(isLargeButtons ? 12 : 8)
-            .background(manager.adaptiveMode == .office
+            .background(effectiveAdaptiveMode == .office
                 ? VisioColors.surface(dark: isDark)
                 : Color.black.opacity(0.6)
             )

@@ -181,6 +181,7 @@ fun CallScreen(
     val lobbyNotification by VisioManager.lobbyNotification.collectAsState()
     val waitingParticipants by VisioManager.waitingParticipants.collectAsState()
     val adaptiveMode by VisioManager.adaptiveMode.collectAsState()
+    val isAdaptiveModeEnabled = try { VisioManager.client.isAdaptiveModeEnabled() } catch (_: Exception) { false }
 
     val context = LocalContext.current
     val lang = VisioManager.currentLang
@@ -597,7 +598,9 @@ fun CallScreen(
     }
 
     // Main call layout
-    val callBackground = if (adaptiveMode == AdaptiveMode.OFFICE) VisioColors.PrimaryDark50 else Color.Black
+    // When adaptive mode is disabled, always use Office layout
+    val effectiveAdaptiveMode = if (isAdaptiveModeEnabled) adaptiveMode else AdaptiveMode.OFFICE
+    val callBackground = if (effectiveAdaptiveMode == AdaptiveMode.OFFICE) VisioColors.PrimaryDark50 else Color.Black
     Box(
         modifier =
             Modifier
@@ -617,7 +620,7 @@ fun CallScreen(
                         .fillMaxWidth()
                         .padding(if (isFullscreenFocus) 0.dp else 8.dp),
             ) {
-                when (adaptiveMode) {
+                when (effectiveAdaptiveMode) {
                     AdaptiveMode.CAR -> {
                         // Car mode: audio-only view with active speaker name
                         val activeSpeakerSid = activeSpeakers.firstOrNull()
@@ -913,8 +916,8 @@ fun CallScreen(
                 // Reaction overlay on top of video grid
                 ReactionOverlay(reactions = reactions)
 
-                // Persistent adaptive mode indicator (on top of everything) — hidden in fullscreen focus
-                if (!isFullscreenFocus)
+                // Persistent adaptive mode indicator (on top of everything) — hidden when disabled or in fullscreen focus
+                if (isAdaptiveModeEnabled && !isFullscreenFocus)
                 Row(
                     modifier =
                         Modifier
@@ -951,7 +954,8 @@ fun CallScreen(
                 unreadCount = unreadCount,
                 participantCount = participants.size,
                 showReactionPicker = showReactionPicker,
-                adaptiveMode = adaptiveMode,
+                adaptiveMode = effectiveAdaptiveMode,
+                isAdaptiveModeEnabled = isAdaptiveModeEnabled,
                 lang = lang,
                 onToggleMic = {
                     val newState = !micEnabled
@@ -1163,6 +1167,7 @@ private fun ControlBar(
     participantCount: Int,
     showReactionPicker: Boolean,
     adaptiveMode: AdaptiveMode,
+    isAdaptiveModeEnabled: Boolean,
     lang: String,
     onToggleMic: () -> Unit,
     onAudioPicker: () -> Unit,
@@ -1335,8 +1340,8 @@ private fun ControlBar(
                 }
             }
 
-            // Adaptive mode override
-            Column(
+            // Adaptive mode override — only shown when adaptive mode is enabled
+            if (isAdaptiveModeEnabled) Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -1387,8 +1392,9 @@ private fun ControlBar(
             }
         }
 
-        // Main control bar — button sizes adapt to mode
-        val isLargeButtons = adaptiveMode != AdaptiveMode.OFFICE
+        // Main control bar — button sizes adapt to mode (always Office when adaptive mode disabled)
+        val effectiveMode = if (isAdaptiveModeEnabled) adaptiveMode else AdaptiveMode.OFFICE
+        val isLargeButtons = effectiveMode != AdaptiveMode.OFFICE
         val btnSize = if (isLargeButtons) 96.dp else 38.dp
         val iconSize = if (isLargeButtons) 48.dp else 20.dp
         val cornerRadius = if (isLargeButtons) 16.dp else 8.dp
