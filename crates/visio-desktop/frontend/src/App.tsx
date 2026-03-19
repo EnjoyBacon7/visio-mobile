@@ -140,14 +140,12 @@ interface ReactionData {
 }
 
 const REACTION_EMOJIS: [string, string][] = [
-  ["thumbs-up", "\u{1F44D}"],
-  ["thumbs-down", "\u{1F44E}"],
-  ["clapping-hands", "\u{1F44F}"],
-  ["red-heart", "\u2764\uFE0F"],
-  ["face-with-tears-of-joy", "\u{1F602}"],
-  ["face-with-open-mouth", "\u{1F62E}"],
-  ["party-popper", "\u{1F389}"],
-  ["folded-hands", "\u{1F64F}"],
+  ["thumbsUp", "\u{1F44D}"],
+  ["clap", "\u{1F44F}"],
+  ["joy", "\u{1F602}"],
+  ["openMouth", "\u{1F62E}"],
+  ["tada", "\u{1F389}"],
+  ["heart", "\u2764\uFE0F"],
 ];
 
 // ---------------------------------------------------------------------------
