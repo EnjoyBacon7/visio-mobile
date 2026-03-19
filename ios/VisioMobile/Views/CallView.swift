@@ -761,14 +761,12 @@ struct CallView: View {
     // MARK: - Reaction Emojis
 
     private static let reactionEmojis: [(id: String, emoji: String)] = [
-        ("thumbs-up", "\u{1F44D}"),
-        ("thumbs-down", "\u{1F44E}"),
-        ("clapping-hands", "\u{1F44F}"),
-        ("red-heart", "\u{2764}\u{FE0F}"),
-        ("face-with-tears-of-joy", "\u{1F602}"),
-        ("face-with-open-mouth", "\u{1F62E}"),
-        ("party-popper", "\u{1F389}"),
-        ("folded-hands", "\u{1F64F}"),
+        ("thumbsUp", "\u{1F44D}"),
+        ("clap", "\u{1F44F}"),
+        ("joy", "\u{1F602}"),
+        ("openMouth", "\u{1F62E}"),
+        ("tada", "\u{1F389}"),
+        ("heart", "\u{2764}\u{FE0F}"),
     ]
 
     // MARK: - Control Bar
@@ -1376,14 +1374,12 @@ struct ReactionOverlay: View {
     let reactions: [ReactionData]
 
     private static let reactionEmojis: [(id: String, emoji: String)] = [
-        ("thumbs-up", "\u{1F44D}"),
-        ("thumbs-down", "\u{1F44E}"),
-        ("clapping-hands", "\u{1F44F}"),
-        ("red-heart", "\u{2764}\u{FE0F}"),
-        ("face-with-tears-of-joy", "\u{1F602}"),
-        ("face-with-open-mouth", "\u{1F62E}"),
-        ("party-popper", "\u{1F389}"),
-        ("folded-hands", "\u{1F64F}"),
+        ("thumbsUp", "\u{1F44D}"),
+        ("clap", "\u{1F44F}"),
+        ("joy", "\u{1F602}"),
+        ("openMouth", "\u{1F62E}"),
+        ("tada", "\u{1F389}"),
+        ("heart", "\u{2764}\u{FE0F}"),
     ]
 
     var body: some View {

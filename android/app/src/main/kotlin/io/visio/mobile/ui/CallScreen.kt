@@ -145,14 +145,12 @@ fun buildDisplayItems(participants: List<ParticipantInfo>): List<DisplayItem> {
 
 private val REACTION_EMOJIS =
     listOf(
-        "thumbs-up" to "\uD83D\uDC4D",
-        "thumbs-down" to "\uD83D\uDC4E",
-        "clapping-hands" to "\uD83D\uDC4F",
-        "red-heart" to "\u2764\uFE0F",
-        "face-with-tears-of-joy" to "\uD83D\uDE02",
-        "face-with-open-mouth" to "\uD83D\uDE2E",
-        "party-popper" to "\uD83C\uDF89",
-        "folded-hands" to "\uD83D\uDE4F",
+        "thumbsUp" to "\uD83D\uDC4D",
+        "clap" to "\uD83D\uDC4F",
+        "joy" to "\uD83D\uDE02",
+        "openMouth" to "\uD83D\uDE2E",
+        "tada" to "\uD83C\uDF89",
+        "heart" to "\u2764\uFE0F",
     )
 
 fun Context.findActivity(): Activity? {
