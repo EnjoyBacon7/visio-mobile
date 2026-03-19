@@ -428,15 +428,16 @@ struct CallView: View {
     private var gridLayout: some View {
         let displayItems = buildDisplayItems(manager.participants)
         let count = displayItems.count
+        guard count > 0 else { return AnyView(Color.clear) }
 
-        return GeometryReader { geo in
+        return AnyView(GeometryReader { geo in
             let isLandscape = geo.size.width > geo.size.height
             let columnCount: Int = {
                 if count == 1 { return 1 }
                 if isLandscape { return min(count, 3) }
                 return count <= 2 ? 1 : 2
             }()
-            let rowCount = (count + columnCount - 1) / columnCount
+            let rowCount = max(1, (count + columnCount - 1) / columnCount)
             let tileHeight = (geo.size.height - 16 - CGFloat(rowCount - 1) * 8) / CGFloat(rowCount)
 
             VStack(spacing: 8) {
@@ -508,7 +509,7 @@ struct CallView: View {
                 }
             }
             .padding(8)
-        }
+        })
     }
 
     // MARK: - Focus Layout
