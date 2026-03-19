@@ -456,6 +456,18 @@ class VisioManager: ObservableObject {
             guard let self else { return }
             do {
                 try self.client.sendReaction(emoji: emoji)
+                // Show reaction locally (server echo is filtered out in Rust)
+                DispatchQueue.main.async {
+                    let reaction = ReactionData(
+                        id: self.reactionIdCounter,
+                        participantSid: "local",
+                        participantName: self.client.getSettings().displayName ?? "",
+                        emoji: emoji,
+                        timestamp: Date()
+                    )
+                    self.reactionIdCounter += 1
+                    self.reactions.append(reaction)
+                }
             } catch {
                 DispatchQueue.main.async {
                     self.errorMessage = "Reaction failed: \(error.localizedDescription)"
