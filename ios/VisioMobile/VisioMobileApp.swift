@@ -40,7 +40,16 @@ struct VisioMobileApp: App {
 
                 let instances = manager.client.getMeetInstances()
                 if instances.contains(host) {
-                    manager.pendingDeepLink = "https://\(host)/\(slug)"
+                    var components = URLComponents()
+                    components.scheme = "https"
+                    components.host = host
+                    components.path = "/\(slug)"
+                    if let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                        .queryItems?.first(where: { $0.name == "name" })?.value,
+                       !name.isEmpty {
+                        components.queryItems = [URLQueryItem(name: "name", value: name)]
+                    }
+                    manager.pendingDeepLink = components.string ?? "https://\(host)/\(slug)"
                 }
             }
             .onChange(of: scenePhase) { phase in

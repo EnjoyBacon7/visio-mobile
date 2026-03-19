@@ -24,6 +24,23 @@ struct HomeView: View {
 
     private static let slugPattern = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/
 
+    /// Extracts the `?name=` query parameter from a room URL.
+    private static func meetingName(from url: String) -> String? {
+        guard let components = URLComponents(string: url),
+              let name = components.queryItems?.first(where: { $0.name == "name" })?.value,
+              !name.isEmpty
+        else { return nil }
+        return name
+    }
+
+    /// Returns the URL with the `?name=` parameter stripped (for server calls).
+    private static func stripName(from url: String) -> String {
+        guard var components = URLComponents(string: url) else { return url }
+        components.queryItems = components.queryItems?.filter { $0.name != "name" }
+        if components.queryItems?.isEmpty == true { components.queryItems = nil }
+        return components.string ?? url
+    }
+
     private func extractSlug(_ input: String) -> String? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -115,20 +132,24 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 32)
                 .task(id: roomURL) {
-                    let trimmed = roomURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let isSlug = trimmed.wholeMatch(of: Self.slugPattern) != nil
+                    // Strip ?name= for validation — the server doesn't understand it.
+                    var bare = Self.stripName(from: roomURL.trimmingCharacters(in: .whitespacesAndNewlines))
+                    // Normalize: add https:// if missing
+                    if !bare.hasPrefix("https://") && !bare.hasPrefix("http://") && !bare.isEmpty {
+                        bare = "https://\(bare)"
+                    }
+                    let isSlug = bare.wholeMatch(of: Self.slugPattern) != nil
 
-                    // Build list of URLs to try
                     let urlsToTry: [String]
                     if isSlug, !meetInstances.isEmpty {
-                        urlsToTry = meetInstances.map { "https://\($0)/\(trimmed)" }
+                        urlsToTry = meetInstances.map { "https://\($0)/\(bare)" }
                     } else {
-                        guard extractSlug(trimmed) != nil else {
+                        guard extractSlug(bare) != nil else {
                             roomStatus = "idle"
-                            resolvedRoomURL = trimmed
+                            resolvedRoomURL = roomURL.trimmingCharacters(in: .whitespacesAndNewlines)
                             return
                         }
-                        urlsToTry = [trimmed]
+                        urlsToTry = [bare]
                     }
 
                     roomStatus = "checking"
@@ -138,20 +159,28 @@ struct HomeView: View {
                     let uname = displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? nil : displayName.trimmingCharacters(in: .whitespacesAndNewlines)
 
+                    let nameParam = Self.meetingName(from: roomURL)
+
                     var foundValid = false
                     for url in urlsToTry {
                         guard !Task.isCancelled else { return }
                         let result = manager.client.validateRoom(url: url, username: uname)
                         if case .valid = result {
                             roomStatus = "valid"
-                            resolvedRoomURL = url
+                            if let name = nameParam,
+                               var components = URLComponents(string: url) {
+                                components.queryItems = [URLQueryItem(name: "name", value: name)]
+                                resolvedRoomURL = components.string ?? url
+                            } else {
+                                resolvedRoomURL = url
+                            }
                             foundValid = true
                             break
                         }
                     }
                     if !foundValid {
                         roomStatus = "not_found"
-                        resolvedRoomURL = urlsToTry.first ?? trimmed
+                        resolvedRoomURL = urlsToTry.first ?? bare
                     }
                 }
 
@@ -192,13 +221,14 @@ struct HomeView: View {
                             .foregroundStyle(VisioColors.secondaryText(dark: isDark))
 
                         ForEach(Array(roomHistory.enumerated()), id: \.offset) { index, url in
-                            let slug = url.contains("/") ? String(url.split(separator: "/").last ?? "") : url
-                            let host = URL(string: url)?.host ?? ""
+                            let name = Self.meetingName(from: url)
+                            let bareUrl = Self.stripName(from: url)
+                            let slug = bareUrl.contains("/") ? String(bareUrl.split(separator: "/").last ?? "") : bareUrl
+                            let host = URL(string: bareUrl)?.host ?? ""
 
                             Button {
                                 roomURL = url
                                 resolvedRoomURL = url
-                                // If already validated, navigate immediately
                                 if roomStatus == "valid" {
                                     navigateToCall = true
                                 } else {
@@ -217,12 +247,12 @@ struct HomeView: View {
                                     }
 
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(slug)
+                                        Text(name ?? slug)
                                             .font(.body)
                                             .fontWeight(.medium)
                                             .foregroundStyle(VisioColors.onBackground(dark: isDark))
                                         if !host.isEmpty {
-                                            Text(host)
+                                            Text(name != nil ? "\(slug) · \(host)" : host)
                                                 .font(.caption)
                                                 .foregroundStyle(VisioColors.secondaryText(dark: isDark))
                                         }

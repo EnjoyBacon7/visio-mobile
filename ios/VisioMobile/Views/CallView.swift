@@ -61,6 +61,24 @@ struct CallView: View {
     let roomURL: String
     let displayName: String
 
+    private static func stripName(from url: String) -> String {
+        guard var components = URLComponents(string: url) else { return url }
+        components.queryItems = components.queryItems?.filter { $0.name != "name" }
+        if components.queryItems?.isEmpty == true { components.queryItems = nil }
+        return components.string ?? url
+    }
+
+    private var meetingTitle: String {
+        if let components = URLComponents(string: roomURL),
+           let name = components.queryItems?.first(where: { $0.name == "name" })?.value,
+           !name.isEmpty {
+            return name
+        }
+        // Fall back to slug
+        let bare = Self.stripName(from: roomURL)
+        return bare.contains("/") ? String(bare.split(separator: "/").last ?? "") : bare
+    }
+
     @State private var showChat: Bool = false
     @State private var showAudioDevices: Bool = false
     @State private var showInCallSettings: Bool = false
@@ -241,7 +259,7 @@ struct CallView: View {
                 }
             }
         }
-        .navigationTitle(Strings.t("call.title", lang: lang))
+        .navigationTitle(meetingTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbarColorScheme(isDark ? .dark : .light, for: .navigationBar)
@@ -272,11 +290,18 @@ struct CallView: View {
         }
         .onAppear {
             let name = displayName.isEmpty ? nil : displayName
-            manager.connect(url: roomURL, username: name)
-            // Audio playout is now started automatically after connection succeeds (in VisioManager)
-            CallKitManager.shared.reportCallStarted(roomName: roomURL)
+            // Strip ?name= before connecting — the server doesn't understand it.
+            let connectUrl = Self.stripName(from: roomURL)
+            manager.connect(url: connectUrl, username: name)
+            CallKitManager.shared.reportCallStarted(roomName: meetingTitle)
             UIApplication.shared.isIdleTimerDisabled = true
             PiPManager.shared.setup()
+        }
+        .onChange(of: manager.connectionState) { state in
+            // Once connected, re-add the URL with ?name= so history preserves the name.
+            if case .connected = state, roomURL.contains("?name=") {
+                manager.client.addRoomToHistory(url: roomURL)
+            }
         }
         .onDisappear {
             manager.stopAudioPlayout()

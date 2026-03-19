@@ -226,8 +226,14 @@ impl SettingsStore {
     }
 
     pub fn add_room_to_history(&self, url: String) {
+        // Strip ?name= for deduplication so a named and unnamed entry for the
+        // same room are treated as the same slot.
+        let bare = url.split_once('?').map(|(base, _)| base).unwrap_or(&url);
         let mut s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
-        s.room_history.retain(|u| u != &url);
+        s.room_history.retain(|u| {
+            let u_bare = u.split_once('?').map(|(base, _)| base).unwrap_or(u);
+            u_bare != bare
+        });
         s.room_history.insert(0, url);
         s.room_history.truncate(10);
         drop(s);
